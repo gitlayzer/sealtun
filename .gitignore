@@ -15,7 +15,7 @@ kubeconfig
 
 # Go
 vendor/
-go.sum
+
 
 # OS generated files
 .DS_Store
