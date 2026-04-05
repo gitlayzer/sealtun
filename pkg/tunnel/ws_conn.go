@@ -12,6 +12,7 @@ import (
 type wsConn struct {
 	*websocket.Conn
 	reader io.Reader
+	closed bool
 }
 
 func NewWSConn(c *websocket.Conn) net.Conn {
@@ -19,6 +20,9 @@ func NewWSConn(c *websocket.Conn) net.Conn {
 }
 
 func (c *wsConn) Read(b []byte) (int, error) {
+	if c.closed {
+		return 0, io.EOF
+	}
 	if c.reader == nil {
 		_, reader, err := c.Conn.NextReader()
 		if err != nil {
@@ -41,11 +45,22 @@ func (c *wsConn) Read(b []byte) (int, error) {
 }
 
 func (c *wsConn) Write(b []byte) (int, error) {
+	if c.closed {
+		return 0, io.ErrClosedPipe
+	}
 	err := c.Conn.WriteMessage(websocket.BinaryMessage, b)
 	if err != nil {
 		return 0, err
 	}
 	return len(b), nil
+}
+
+func (c *wsConn) Close() error {
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+	return c.Conn.Close()
 }
 
 func (c *wsConn) SetDeadline(t time.Time) error {

@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -29,6 +30,7 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 	if err != nil {
 		return nil, err
 	}
+	config.WarningHandler = rest.NoWarnings{}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -45,8 +47,8 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 		}
 	}
 
-	// Infer domain from region URL (e.g. https://cloud.sealos.io -> cloud.sealos.io)
-	domain := "cloud.sealos.io"
+	// Infer domain from region URL (e.g. https://cloud.sealos.io -> cloud.sealos.app)
+	domain := "cloud.sealos.app"
 	if authData != nil && authData.Region != "" {
 		if u, err := url.Parse(authData.Region); err == nil {
 			domain = u.Host
@@ -54,6 +56,7 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 			if strings.Contains(domain, ":") {
 				domain = strings.Split(domain, ":")[0]
 			}
+			domain = strings.ReplaceAll(domain, ".sealos.io", ".sealos.app")
 		}
 	}
 
@@ -90,6 +93,10 @@ func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret strin
 func (c *Client) ensureDeployment(ctx context.Context, name, secret string) error {
 	replicas := int32(1)
 	labels := map[string]string{"app": name, "cloud.sealos.io/app-deploy-manager": name}
+	
+	f := false
+	t := true
+	u := int64(1001)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -103,14 +110,26 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
+					AutomountServiceAccountToken: &f,
 					Containers: []corev1.Container{
 						{
 							Name:            name,
 							Image:           "ghcr.io/gitlayzer/sealtun:latest", // Assumed image name
 							ImagePullPolicy: corev1.PullAlways,
-							Command:         []string{"sealtun", "server", "--secret", secret, "--port", "8080"},
+							Args:            []string{"server", "--secret", secret, "--port", "8080"},
 							Ports: []corev1.ContainerPort{
 								{ContainerPort: 8080},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: &f,
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+								RunAsNonRoot: &t,
+								RunAsUser:    &u,
+								SeccompProfile: &corev1.SeccompProfile{
+									Type: corev1.SeccompProfileTypeRuntimeDefault,
+								},
 							},
 						},
 					},
@@ -120,10 +139,11 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 	}
 
 	deployClient := c.clientset.AppsV1().Deployments(c.namespace)
-	_, err := deployClient.Get(ctx, name, metav1.GetOptions{})
+	existing, err := deployClient.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		_, err = deployClient.Create(ctx, deployment, metav1.CreateOptions{})
 	} else {
+		deployment.ResourceVersion = existing.ResourceVersion
 		_, err = deployClient.Update(ctx, deployment, metav1.UpdateOptions{})
 	}
 	return err
@@ -158,18 +178,18 @@ func (c *Client) ensureService(ctx context.Context, name string) error {
 }
 
 func (c *Client) ensureIngress(ctx context.Context, name string) (string, error) {
-	// e.g. sealtun-abc.ns-user.cloud.sealos.io
-	host := fmt.Sprintf("%s.%s.%s", name, c.namespace, c.domain)
+	// e.g. sealtun-abc-ns-user.cloud.sealos.app
+	host := fmt.Sprintf("%s-%s.%s", name, c.namespace, c.domain)
 	labels := map[string]string{"app": name, "cloud.sealos.io/app-deploy-manager": name}
 	
 	pathType := netv1.PathTypePrefix
+	ingressClass := "nginx"
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: c.namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"kubernetes.io/ingress.class":                  "nginx",
 				"nginx.ingress.kubernetes.io/ssl-redirect":     "true",
 				"nginx.ingress.kubernetes.io/backend-protocol": "HTTP",
 				"nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
@@ -177,6 +197,7 @@ func (c *Client) ensureIngress(ctx context.Context, name string) (string, error)
 			},
 		},
 		Spec: netv1.IngressSpec{
+			IngressClassName: &ingressClass,
 			Rules: []netv1.IngressRule{
 				{
 					Host: host,
@@ -201,7 +222,7 @@ func (c *Client) ensureIngress(ctx context.Context, name string) (string, error)
 			TLS: []netv1.IngressTLS{
 				{
 					Hosts:      []string{host},
-					SecretName: fmt.Sprintf("%s-cert", name),
+					SecretName: "wildcard-cert",
 				},
 			},
 		},

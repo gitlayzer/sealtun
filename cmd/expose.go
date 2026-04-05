@@ -22,7 +22,8 @@ var exposeCmd = &cobra.Command{
 	Long: `Expose a local port to the internet via Sealos Cloud.
 This command automatically deploys a tunnel server on Sealos, obtains a public URL,
 and establishes a secure connection to forward traffic to your local port.`,
-	Args:  cobra.ExactArgs(1),
+	SilenceUsage: true,
+	Args:         cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		localPort := args[0]
 		
@@ -62,16 +63,15 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return fmt.Errorf("timed out waiting for tunnel server: %w", err)
 		}
 
-		// Prepare graceful cleanup on exit
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-c
-			fmt.Println("\nCleaning up resources on Sealos...")
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Prepare graceful cleanup on normal exit or interrupt
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		defer func() {
+			fmt.Printf("\r[+] Disconnected. Cleaning up tunnel resources remotely...\n")
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_ = k8sClient.Cleanup(cleanupCtx, tunnelID)
-			os.Exit(0)
 		}()
 
 		// 4 & 5. Connect via WebSocket

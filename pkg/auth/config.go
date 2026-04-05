@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -24,6 +25,14 @@ func GetSealtunDir() (string, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
+
+	// Verify directory is writable
+	testFile := filepath.Join(dir, ".write_test")
+	if err := os.WriteFile(testFile, []byte("ok"), 0600); err != nil {
+		return "", fmt.Errorf("config directory %s is not writable: %w", dir, err)
+	}
+	_ = os.Remove(testFile)
+
 	return dir, nil
 }
 

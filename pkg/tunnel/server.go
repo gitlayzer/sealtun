@@ -103,7 +103,11 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 	netConn := NewWSConn(conn)
 
 	// Since we OPEN streams to the client, we act as the Yamux Client!
-	session, err := yamux.Client(netConn, yamux.DefaultConfig())
+	yamuxConfig := yamux.DefaultConfig()
+	yamuxConfig.EnableKeepAlive = true
+	yamuxConfig.KeepAliveInterval = 10 * time.Second
+
+	session, err := yamux.Client(netConn, yamuxConfig)
 	if err != nil {
 		fmt.Printf("yamux client setup error: %v\n", err)
 		netConn.Close()
