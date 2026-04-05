@@ -68,7 +68,7 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 }
 
 // EnsureTunnel deploys the server module in kubernetes
-func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret string) (string, error) {
+func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret string, protocol string) (string, error) {
 	name := fmt.Sprintf("sealtun-%s", tunnelID)
 	
 	// Create or Update Deployment
@@ -82,7 +82,7 @@ func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret strin
 	}
 
 	// Create or Update Ingress
-	host, err := c.ensureIngress(ctx, name)
+	host, err := c.ensureIngress(ctx, name, protocol)
 	if err != nil {
 		return "", fmt.Errorf("failed to ensure ingress: %w", err)
 	}
@@ -186,11 +186,24 @@ func (c *Client) ensureService(ctx context.Context, name string) error {
 	return err
 }
 
-func (c *Client) ensureIngress(ctx context.Context, name string) (string, error) {
+func (c *Client) ensureIngress(ctx context.Context, name string, protocol string) (string, error) {
 	// e.g. sealtun-abc-ns-user.cloud.sealos.app
 	host := fmt.Sprintf("%s-%s.%s", name, c.namespace, c.domain)
 	pathType := netv1.PathTypePrefix
 	ingressClass := "nginx"
+
+	// Match backend protocol for Higress / Nginx
+	backendProtocol := "WS"
+	switch strings.ToLower(protocol) {
+	case "grpc", "grpcs":
+		backendProtocol = "GRPC"
+	case "tcp":
+		fmt.Printf("⚠️  Note: Protocol 'tcp' will be mapped to 'WS' on Higress Ingress.\n")
+		backendProtocol = "WS"
+	default:
+		backendProtocol = "WS"
+	}
+
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -204,7 +217,7 @@ func (c *Client) ensureIngress(ctx context.Context, name string) (string, error)
 				"kubernetes.io/ingress.class":                  "nginx",
 				"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
 				"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
-				"nginx.ingress.kubernetes.io/backend-protocol":    "WS",
+				"nginx.ingress.kubernetes.io/backend-protocol":    backendProtocol,
 				"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
 				"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
 			},

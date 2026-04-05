@@ -51,7 +51,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 		}
 
 		ctx := cmd.Context()
-		host, err := k8sClient.EnsureTunnel(ctx, tunnelID, secret)
+		host, err := k8sClient.EnsureTunnel(ctx, tunnelID, secret, protocol)
 		if err != nil {
 			return fmt.Errorf("failed to provision tunnel on Sealos: %w", err)
 		}
@@ -84,5 +84,5 @@ var protocol string
 
 func init() {
 	rootCmd.AddCommand(exposeCmd)
-	exposeCmd.Flags().StringVar(&protocol, "protocol", "http", "Protocol to tunnel (http, tcp)")
+	exposeCmd.Flags().StringVar(&protocol, "protocol", "https", "Protocol to tunnel (https, grpcs)")
 }
