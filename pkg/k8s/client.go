@@ -131,6 +131,15 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 									Type: corev1.SeccompProfileTypeRuntimeDefault,
 								},
 							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(8080),
+									},
+								},
+								InitialDelaySeconds: 1,
+								PeriodSeconds:       2,
+							},
 						},
 					},
 				},
@@ -180,20 +189,24 @@ func (c *Client) ensureService(ctx context.Context, name string) error {
 func (c *Client) ensureIngress(ctx context.Context, name string) (string, error) {
 	// e.g. sealtun-abc-ns-user.cloud.sealos.app
 	host := fmt.Sprintf("%s-%s.%s", name, c.namespace, c.domain)
-	labels := map[string]string{"app": name, "cloud.sealos.io/app-deploy-manager": name}
-	
 	pathType := netv1.PathTypePrefix
 	ingressClass := "nginx"
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: c.namespace,
-			Labels:    labels,
+			Labels: map[string]string{
+				"app":                                       name,
+				"cloud.sealos.io/app-deploy-manager":        name,
+				"cloud.sealos.io/app-deploy-manager-domain": strings.Split(host, ".")[0],
+			},
 			Annotations: map[string]string{
-				"nginx.ingress.kubernetes.io/ssl-redirect":     "true",
-				"nginx.ingress.kubernetes.io/backend-protocol": "HTTP",
-				"nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
-				"nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
+				"kubernetes.io/ingress.class":                  "nginx",
+				"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
+				"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
+				"nginx.ingress.kubernetes.io/backend-protocol":    "WS",
+				"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
+				"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
 			},
 		},
 		Spec: netv1.IngressSpec{
