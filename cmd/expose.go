@@ -33,7 +33,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return fmt.Errorf("not logged in. Please run 'sealtun login' first: %w", err)
 		}
 
-		sealtunDir, err := auth.GetSealtunDir()
+		sealtunDir, err := auth.GetSealosDir()
 		if err != nil {
 			return err
 		}

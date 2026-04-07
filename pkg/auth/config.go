@@ -7,21 +7,28 @@ import (
 	"path/filepath"
 )
 
-type AuthData struct {
-	Region          string    `json:"region"`
-	AccessToken     string    `json:"access_token"`
-	RegionalToken   string    `json:"regional_token"`
-	AuthenticatedAt string    `json:"authenticated_at"`
-	AuthMethod      string    `json:"auth_method"`
+type Workspace struct {
+	UID      string `json:"uid"`
+	ID       string `json:"id"`
+	TeamName string `json:"teamName"`
 }
 
-// GetSealtunDir returns the path to ~/.sealtun
-func GetSealtunDir() (string, error) {
+type AuthData struct {
+	Region           string     `json:"region"`
+	AccessToken      string     `json:"access_token"`
+	RegionalToken    string     `json:"regional_token"`
+	AuthenticatedAt  string     `json:"authenticated_at"`
+	AuthMethod       string     `json:"auth_method"`
+	CurrentWorkspace *Workspace `json:"current_workspace,omitempty"`
+}
+
+// GetSealosDir returns the path to ~/.sealos
+func GetSealosDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".sealtun")
+	dir := filepath.Join(home, ".sealos")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
@@ -38,7 +45,7 @@ func GetSealtunDir() (string, error) {
 
 // SaveAuthData saves auth and kubeconfig
 func SaveAuthData(authData AuthData, kubeconfig string) error {
-	dir, err := GetSealtunDir()
+	dir, err := GetSealosDir()
 	if err != nil {
 		return err
 	}
@@ -62,7 +69,7 @@ func SaveAuthData(authData AuthData, kubeconfig string) error {
 
 // LoadAuthData reads the saved auth data
 func LoadAuthData() (*AuthData, error) {
-	dir, err := GetSealtunDir()
+	dir, err := GetSealosDir()
 	if err != nil {
 		return nil, err
 	}

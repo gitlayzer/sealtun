@@ -52,11 +52,12 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 	if authData != nil && authData.Region != "" {
 		if u, err := url.Parse(authData.Region); err == nil {
 			domain = u.Host
-			// Handle custom ports in region
 			if strings.Contains(domain, ":") {
 				domain = strings.Split(domain, ":")[0]
 			}
-			domain = strings.ReplaceAll(domain, ".sealos.io", ".sealos.app")
+			if strings.Contains(domain, ".sealos.io") || strings.Contains(domain, ".sealos.run") {
+				domain = "sealosgzg.site"
+			}
 		}
 	}
 
@@ -193,14 +194,12 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 	ingressClass := "nginx"
 
 	// Match backend protocol for Higress / Nginx
-	backendProtocol := "WS"
+	backendProtocol := ""
 	switch strings.ToLower(protocol) {
 	case "grpc", "grpcs":
 		backendProtocol = "GRPC"
-	case "tcp":
-		fmt.Printf("⚠️  Note: Protocol 'tcp' will be mapped to 'WS' on Higress Ingress.\n")
-		backendProtocol = "WS"
-	default:
+	case "tcp", "ws", "wss":
+		fmt.Printf("⚠️  Note: Protocol '%s' will be mapped to 'WS' on Higress Ingress.\n", protocol)
 		backendProtocol = "WS"
 	}
 
@@ -217,27 +216,31 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 				"kubernetes.io/ingress.class":                  "nginx",
 				"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
 				"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
-				"nginx.ingress.kubernetes.io/backend-protocol":    backendProtocol,
 				"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
 				"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
 			},
 		},
-		Spec: netv1.IngressSpec{
-			IngressClassName: &ingressClass,
-			Rules: []netv1.IngressRule{
-				{
-					Host: host,
-					IngressRuleValue: netv1.IngressRuleValue{
-						HTTP: &netv1.HTTPIngressRuleValue{
-							Paths: []netv1.HTTPIngressPath{
-								{
-									Path:     "/",
-									PathType: &pathType,
-									Backend: netv1.IngressBackend{
-										Service: &netv1.IngressServiceBackend{
-											Name: name,
-											Port: netv1.ServiceBackendPort{Number: 80},
-										},
+	}
+
+	if backendProtocol != "" {
+		ingress.Annotations["nginx.ingress.kubernetes.io/backend-protocol"] = backendProtocol
+	}
+
+	ingress.Spec = netv1.IngressSpec{
+		IngressClassName: &ingressClass,
+		Rules: []netv1.IngressRule{
+			{
+				Host: host,
+				IngressRuleValue: netv1.IngressRuleValue{
+					HTTP: &netv1.HTTPIngressRuleValue{
+						Paths: []netv1.HTTPIngressPath{
+							{
+								Path:     "/",
+								PathType: &pathType,
+								Backend: netv1.IngressBackend{
+									Service: &netv1.IngressServiceBackend{
+										Name: name,
+										Port: netv1.ServiceBackendPort{Number: 80},
 									},
 								},
 							},
@@ -245,11 +248,11 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 					},
 				},
 			},
-			TLS: []netv1.IngressTLS{
-				{
-					Hosts:      []string{host},
-					SecretName: "wildcard-cert",
-				},
+		},
+		TLS: []netv1.IngressTLS{
+			{
+				Hosts:      []string{host},
+				SecretName: "wildcard-cert",
 			},
 		},
 	}

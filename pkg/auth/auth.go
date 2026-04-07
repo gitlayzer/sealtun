@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	DefaultRegion = "https://cloud.sealos.io"
+	DefaultRegion = "https://gzg.sealos.run"
 	// ClientID from seakills for oauth2 device flow
-	ClientID = "9vjofg2q7c8u1lxp4zrw3hyk5e0bam6" 
+	ClientID = "af993c98-d19d-4bdc-b338-79b80dc4f8bf"
 )
 
 type DeviceAuthResponse struct {
@@ -34,6 +34,20 @@ type TokenResponse struct {
 type ErrorResponse struct {
 	Error            string `json:"error"`
 	ErrorDescription string `json:"error_description"`
+}
+
+type Namespace struct {
+	UID      string `json:"uid"`
+	ID       string `json:"id"`
+	TeamName string `json:"teamName"`
+	Role     string      `json:"role"`
+	NSType   interface{} `json:"nstype"`
+}
+
+type NamespaceListResponse struct {
+	Data struct {
+		Namespaces []Namespace `json:"namespaces"`
+	} `json:"data"`
 }
 
 // RequestDeviceAuthorization requests the device code from the region
@@ -165,6 +179,34 @@ func GetRegionToken(region, accessToken string) (*RegionTokenResponse, error) {
 	}
 
 	var res RegionTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// ListWorkspaces returns the list of namespaces/workspaces for the user
+func ListWorkspaces(region, regionalToken string) (*NamespaceListResponse, error) {
+	apiURL := fmt.Sprintf("%s/api/auth/namespace/list", strings.TrimRight(region, "/"))
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", regionalToken)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("list workspaces failed: %s", string(body))
+	}
+
+	var res NamespaceListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return nil, err
 	}
