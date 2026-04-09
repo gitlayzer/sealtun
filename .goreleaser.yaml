@@ -17,6 +17,8 @@ builds:
       - arm64
     main: ./main.go
     binary: sealtun
+    ldflags:
+      - -s -w -X github.com/labring/sealtun/pkg/version.Version={{.Version}}
 
 archives:
   - formats: ["tar.gz"]

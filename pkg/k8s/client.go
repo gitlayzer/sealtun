@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labring/sealtun/pkg/auth"
+	"github.com/labring/sealtun/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -114,8 +115,13 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 					AutomountServiceAccountToken: &f,
 					Containers: []corev1.Container{
 						{
-							Name:            name,
-							Image:           "ghcr.io/gitlayzer/sealtun:latest", // Assumed image name
+							Name:  name,
+							Image: fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", func() string {
+								if version.Version == "dev" {
+									return "latest"
+								}
+								return strings.TrimPrefix(version.Version, "v")
+							}()),
 							ImagePullPolicy: corev1.PullAlways,
 							Args:            []string{"server", "--secret", secret, "--port", "8080"},
 							Ports: []corev1.ContainerPort{
