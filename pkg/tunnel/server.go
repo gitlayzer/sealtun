@@ -11,6 +11,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/hashicorp/yamux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Server struct {
@@ -131,6 +133,8 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
-	fmt.Printf("Server listening on %s\n", addr)
-	return http.ListenAndServe(addr, s)
+	fmt.Printf("Server listening on %s (H2C enabled)\n", addr)
+	
+	h2s := &http2.Server{}
+	return http.ListenAndServe(addr, h2c.NewHandler(s, h2s))
 }

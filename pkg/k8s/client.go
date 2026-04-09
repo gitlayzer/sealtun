@@ -188,59 +188,84 @@ func (c *Client) ensureService(ctx context.Context, name string) error {
 }
 
 func (c *Client) ensureIngress(ctx context.Context, name string, protocol string) (string, error) {
-	// e.g. sealtun-abc-ns-user.cloud.sealos.app
 	host := fmt.Sprintf("%s-%s.%s", name, c.namespace, c.domain)
 	pathType := netv1.PathTypePrefix
 	ingressClass := "nginx"
 
-	// Match backend protocol for Higress / Nginx
+	// 1. Ensure Tunnel Ingress (Always standard HTTP for WebSocket handshake)
+	tunnelIngress := c.generateIngress(name, host, "/_sealtun/ws", &pathType, &ingressClass, "")
+	if err := c.applyIngress(ctx, tunnelIngress); err != nil {
+		return "", fmt.Errorf("failed to apply tunnel ingress: %w", err)
+	}
+
+	// 2. Ensure App Ingress (Handles the actual traffic)
 	backendProtocol := ""
+	isGRPC := false
 	switch strings.ToLower(protocol) {
 	case "grpc", "grpcs":
 		backendProtocol = "GRPC"
+		isGRPC = true
 	case "tcp", "ws", "wss":
-		fmt.Printf("⚠️  Note: Protocol '%s' will be mapped to 'WS' on Higress Ingress.\n", protocol)
 		backendProtocol = "WS"
 	}
 
-	ingress := &netv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: c.namespace,
-			Labels: map[string]string{
-				"app":                                       name,
-				"cloud.sealos.io/app-deploy-manager":        name,
-				"cloud.sealos.io/app-deploy-manager-domain": strings.Split(host, ".")[0],
-			},
-			Annotations: map[string]string{
-				"kubernetes.io/ingress.class":                  "nginx",
-				"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
-				"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
-				"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
-				"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
-			},
-		},
+	appIngressName := name
+	if isGRPC {
+		// For gRPC, we MUST use a separate Ingress object to apply the GRPC annotation 
+		// without breaking the WebSocket handshake on the tunnel path.
+		appIngressName = name + "-app"
+	}
+
+	appIngress := c.generateIngress(appIngressName, host, "/", &pathType, &ingressClass, backendProtocol)
+	if err := c.applyIngress(ctx, appIngress); err != nil {
+		return "", fmt.Errorf("failed to apply app ingress: %w", err)
+	}
+
+	return host, nil
+}
+
+func (c *Client) generateIngress(name, host, path string, pathType *netv1.PathType, ingressClass *string, backendProtocol string) *netv1.Ingress {
+	labels := map[string]string{
+		"app":                                       name,
+		"cloud.sealos.io/app-deploy-manager":        strings.TrimSuffix(name, "-app"),
+		"cloud.sealos.io/app-deploy-manager-domain": strings.Split(host, ".")[0],
+	}
+
+	annotations := map[string]string{
+		"kubernetes.io/ingress.class":                  "nginx",
+		"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
+		"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
+		"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
+		"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
 	}
 
 	if backendProtocol != "" {
-		ingress.Annotations["nginx.ingress.kubernetes.io/backend-protocol"] = backendProtocol
+		annotations["nginx.ingress.kubernetes.io/backend-protocol"] = backendProtocol
 	}
 
-	ingress.Spec = netv1.IngressSpec{
-		IngressClassName: &ingressClass,
-		Rules: []netv1.IngressRule{
-			{
-				Host: host,
-				IngressRuleValue: netv1.IngressRuleValue{
-					HTTP: &netv1.HTTPIngressRuleValue{
-						Paths: []netv1.HTTPIngressPath{
-							{
-								Path:     "/",
-								PathType: &pathType,
-								Backend: netv1.IngressBackend{
-									Service: &netv1.IngressServiceBackend{
-										Name: name,
-										Port: netv1.ServiceBackendPort{Number: 80},
+	return &netv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   c.namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: netv1.IngressSpec{
+			IngressClassName: ingressClass,
+			Rules: []netv1.IngressRule{
+				{
+					Host: host,
+					IngressRuleValue: netv1.IngressRuleValue{
+						HTTP: &netv1.HTTPIngressRuleValue{
+							Paths: []netv1.HTTPIngressPath{
+								{
+									Path:     path,
+									PathType: pathType,
+									Backend: netv1.IngressBackend{
+										Service: &netv1.IngressServiceBackend{
+											Name: strings.TrimSuffix(name, "-app"),
+											Port: netv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
 							},
@@ -248,24 +273,26 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 					},
 				},
 			},
-		},
-		TLS: []netv1.IngressTLS{
-			{
-				Hosts:      []string{host},
-				SecretName: "wildcard-cert",
+			TLS: []netv1.IngressTLS{
+				{
+					Hosts:      []string{host},
+					SecretName: "wildcard-cert",
+				},
 			},
 		},
 	}
+}
 
+func (c *Client) applyIngress(ctx context.Context, ingress *netv1.Ingress) error {
 	ingClient := c.clientset.NetworkingV1().Ingresses(c.namespace)
-	existing, err := ingClient.Get(ctx, name, metav1.GetOptions{})
+	existing, err := ingClient.Get(ctx, ingress.Name, metav1.GetOptions{})
 	if err != nil {
 		_, err = ingClient.Create(ctx, ingress, metav1.CreateOptions{})
 	} else {
 		ingress.ResourceVersion = existing.ResourceVersion
 		_, err = ingClient.Update(ctx, ingress, metav1.UpdateOptions{})
 	}
-	return host, err
+	return err
 }
 
 // Cleanup resources
@@ -274,7 +301,10 @@ func (c *Client) Cleanup(ctx context.Context, tunnelID string) error {
 	
 	_ = c.clientset.AppsV1().Deployments(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	_ = c.clientset.CoreV1().Services(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	
+	// Delete both potential Ingress resources
 	_ = c.clientset.NetworkingV1().Ingresses(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	_ = c.clientset.NetworkingV1().Ingresses(c.namespace).Delete(ctx, name+"-app", metav1.DeleteOptions{})
 
 	return nil
 }
