@@ -118,12 +118,11 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 							Name:  name,
 							Image: fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", func() string {
 								v := version.Version
-								// If it's a development build or has a suffix (like -dirty or -next), 
-								// fallback to latest to ensure it can be pulled from registry.
-								if v == "dev" || strings.Contains(v, "-") {
+								if v == "dev" {
 									return "latest"
 								}
-								return strings.TrimPrefix(v, "v")
+								// Align with GitHub Action's metadata-action sha tag: sha-<short-hash>
+								return "sha-" + strings.TrimPrefix(v, "v")
 							}()),
 							ImagePullPolicy: corev1.PullAlways,
 							Args:            []string{"server", "--secret", secret, "--port", "8080"},

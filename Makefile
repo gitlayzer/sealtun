@@ -6,8 +6,8 @@ GO ?= go
 # Binary name
 BINARY_NAME=sealtun
 
-# Get version from git
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
+# Get version from git (Pure Git Hash mode)
+VERSION ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 
 # Build flags
 LDFLAGS=-ldflags "-s -w -X github.com/labring/sealtun/pkg/version.Version=$(VERSION)"
