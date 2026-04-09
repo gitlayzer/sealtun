@@ -3,6 +3,9 @@
 # Go binary
 GO ?= go
 
+# Binary name
+BINARY_NAME=sealtun
+
 # Get version from git
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
 

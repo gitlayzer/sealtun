@@ -117,10 +117,13 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 						{
 							Name:  name,
 							Image: fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", func() string {
-								if version.Version == "dev" {
+								v := version.Version
+								// If it's a development build or has a suffix (like -dirty or -next), 
+								// fallback to latest to ensure it can be pulled from registry.
+								if v == "dev" || strings.Contains(v, "-") {
 									return "latest"
 								}
-								return strings.TrimPrefix(version.Version, "v")
+								return strings.TrimPrefix(v, "v")
 							}()),
 							ImagePullPolicy: corev1.PullAlways,
 							Args:            []string{"server", "--secret", secret, "--port", "8080"},
