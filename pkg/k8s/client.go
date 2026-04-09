@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -121,8 +122,12 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 								if v == "dev" {
 									return "latest"
 								}
-								// Align with GitHub Action's metadata-action sha tag: sha-<short-hash>
-								return "sha-" + strings.TrimPrefix(v, "v")
+								// Detect if it is a 7-character git hash
+								if match, _ := regexp.MatchString("^[0-9a-f]{7}$", v); match {
+									return "sha-" + v
+								}
+								// Otherwise, assume it's a version tag (e.g., 0.1.0)
+								return strings.TrimPrefix(v, "v")
 							}()),
 							ImagePullPolicy: corev1.PullAlways,
 							Args:            []string{"server", "--secret", secret, "--port", "8080"},
