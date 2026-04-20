@@ -54,6 +54,12 @@ Sealtun will:
 - **Sealos Resources**: When you trigger `sealtun expose`, it creates `sealtun-*` variants of `Deployment`, `Service`, and `Ingress` in the active cluster context.
 - **Images**: Relies on a single Docker image built natively targeting `ghcr.io/gitlayzer/sealtun`.
 
+## Hardening Notes
+
+- `expose` now validates port and protocol inputs before provisioning remote resources.
+- Tunnel pod readiness now has a default `90s` timeout, configurable via `--ready-timeout`.
+- Configuration is stored in `~/.sealtun`, with automatic migration from the legacy `~/.sealos` path.
+
 ## License
 
 MIT License.

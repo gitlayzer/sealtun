@@ -37,7 +37,7 @@ func DialServerAndServe(ctx context.Context, wsURL, secret, localPort string) er
 
 	netConn := NewWSConn(conn)
 
-	// Since the Remote Server will OPEN streams to send traffic to us, 
+	// Since the Remote Server will OPEN streams to send traffic to us,
 	// the Local Client must act as the Yamux Server to ACCEPT those streams.
 	yamuxConfig := yamux.DefaultConfig()
 	yamuxConfig.EnableKeepAlive = true
@@ -83,19 +83,8 @@ func handleLocalForwarding(stream net.Conn, localPort string) {
 			lastWarning = time.Now()
 		}
 		warningMu.Unlock()
-		
-		io.WriteString(stream, "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" +
-			"<html><head><title>502 Bad Gateway - Sealtun</title><style>" +
-			"body { font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f9fafb; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #1f2937; }" +
-			".card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 400px; width: 100%; border-top: 4px solid #ef4444; }" +
-			"h1 { font-size: 1.5rem; margin-top: 0; color: #111827; }" +
-			"p { line-height: 1.5; font-size: 0.95rem; color: #4b5563; }" +
-			".hint { background: #fee2e2; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #991b1b; margin-top: 1rem; border-left: 3px solid #f87171; }" +
-			"</style></head><body><div class='card'>" +
-			"<h1>👋 Local service is down</h1>" +
-			"p>Sealtun has established the tunnel correctly, but it cannot connect to your local application.</p>" +
-			"<div class='hint'><strong>Action required:</strong> Make sure your application is running on port <strong>" + localPort + "</strong> and matching the protocol.</div>" +
-			"</div></body></html>")
+
+		_, _ = io.WriteString(stream, unavailableResponse(localPort))
 		return
 	}
 	defer localConn.Close()
@@ -113,4 +102,39 @@ func handleLocalForwarding(stream net.Conn, localPort string) {
 	}()
 
 	<-errc
+}
+
+func unavailableResponse(localPort string) string {
+	body := "<html><head><title>502 Bad Gateway - Sealtun</title><style>" +
+		"body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: radial-gradient(circle at top, #15325b 0%, #08111f 55%, #030712 100%); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; color: #e5eefb; padding: 24px; box-sizing: border-box; }" +
+		".shell { width: 100%; max-width: 760px; background: rgba(9, 17, 31, 0.88); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 24px; box-shadow: 0 30px 80px rgba(0,0,0,0.45); overflow: hidden; }" +
+		".topbar { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid rgba(148, 163, 184, 0.14); }" +
+		".dot { width: 10px; height: 10px; border-radius: 999px; background: #fb7185; box-shadow: 22px 0 0 #fbbf24, 44px 0 0 #34d399; margin-right: 44px; }" +
+		".brand { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #93c5fd; }" +
+		".content { padding: 32px; display: grid; gap: 20px; }" +
+		".badge { display: inline-flex; width: fit-content; padding: 6px 10px; border-radius: 999px; background: rgba(248, 113, 113, 0.14); color: #fca5a5; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }" +
+		"h1 { font-size: 34px; line-height: 1.1; margin: 0; color: #f8fafc; }" +
+		"p { margin: 0; line-height: 1.7; color: #cbd5e1; font-size: 16px; }" +
+		".panel { display: grid; gap: 12px; background: rgba(15, 23, 42, 0.86); border: 1px solid rgba(96, 165, 250, 0.18); border-radius: 18px; padding: 18px; }" +
+		".label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #7dd3fc; }" +
+		".value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; color: #f8fafc; }" +
+		".list { margin: 0; padding-left: 18px; color: #cbd5e1; }" +
+		".list li { margin: 6px 0; }" +
+		"</style></head><body><div class='shell'><div class='topbar'><div class='dot'></div><div class='brand'>Sealtun Tunnel Status</div></div><div class='content'>" +
+		"<div class='badge'>Local Port Offline</div>" +
+		"<h1>Your public tunnel is online, but the local app is not listening yet.</h1>" +
+		"<p>Sealtun has received this request successfully. The remote ingress and tunnel server are working, but the client machine is not serving traffic on the configured local port.</p>" +
+		"<div class='panel'><div class='label'>Expected local target</div><div class='value'>localhost:" + localPort + "</div></div>" +
+		"<div class='panel'><div class='label'>What to do next</div><ul class='list'>" +
+		"<li>Start your local application on port <strong>" + localPort + "</strong>.</li>" +
+		"<li>Keep the <code>sealtun expose " + localPort + "</code> process running.</li>" +
+		"<li>Refresh this page after the local service is ready.</li>" +
+		"</ul></div>" +
+		"</div></div></body></html>"
+
+	return fmt.Sprintf(
+		"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
+		len(body),
+		body,
+	)
 }

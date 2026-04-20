@@ -54,6 +54,12 @@ Sealtun 会自动执行以下操作：
 - **Sealos 资源**：触发 `sealtun expose` 时，会在集群中创建以 `sealtun-*` 命名的 `Deployment`、`Service` 和 `Ingress`。
 - **镜像来源**：依赖于 `ghcr.io/gitlayzer/sealtun` 的原生镜像。
 
+## 🔧 当前已补强
+
+- `expose` 现在会校验端口与协议参数，非法输入会在本地直接报错。
+- 远端隧道 Pod 等待阶段增加了默认 `90s` 超时，可通过 `--ready-timeout` 调整。
+- 配置目录统一为 `~/.sealtun`，并会自动迁移旧的 `~/.sealos` 数据。
+
 ## 📄 许可证
 
 MIT License.

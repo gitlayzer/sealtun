@@ -22,13 +22,29 @@ type AuthData struct {
 	CurrentWorkspace *Workspace `json:"current_workspace,omitempty"`
 }
 
-// GetSealosDir returns the path to ~/.sealos
+const (
+	currentConfigDir = ".sealtun"
+	legacyConfigDir  = ".sealos"
+)
+
+// GetSealosDir returns the config directory, migrating from the legacy path when needed.
 func GetSealosDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".sealos")
+
+	dir := filepath.Join(home, currentConfigDir)
+	legacyDir := filepath.Join(home, legacyConfigDir)
+
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if info, legacyErr := os.Stat(legacyDir); legacyErr == nil && info.IsDir() {
+			if err := os.Rename(legacyDir, dir); err != nil && !os.IsExist(err) {
+				return "", fmt.Errorf("migrate config directory from %s to %s: %w", legacyDir, dir, err)
+			}
+		}
+	}
+
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
@@ -83,4 +99,21 @@ func LoadAuthData() (*AuthData, error) {
 		return nil, err
 	}
 	return &data, nil
+}
+
+// ClearAuthData removes the persisted auth session and kubeconfig files.
+func ClearAuthData() error {
+	dir, err := GetSealosDir()
+	if err != nil {
+		return err
+	}
+
+	for _, name := range []string{"auth.json", "kubeconfig"} {
+		path := filepath.Join(dir, name)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	return nil
 }

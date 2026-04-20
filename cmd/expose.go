@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -26,7 +27,13 @@ and establishes a secure connection to forward traffic to your local port.`,
 	Args:         cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		localPort := args[0]
-		
+		if err := validateLocalPort(localPort); err != nil {
+			return err
+		}
+		if err := validateProtocol(protocol); err != nil {
+			return err
+		}
+
 		// 1. Check if logged in.
 		authData, err := auth.LoadAuthData()
 		if err != nil {
@@ -55,11 +62,13 @@ and establishes a secure connection to forward traffic to your local port.`,
 		if err != nil {
 			return fmt.Errorf("failed to provision tunnel on Sealos: %w", err)
 		}
-		
+
 		fmt.Printf("[+] Public URL will be: https://%s\n", host)
 		fmt.Printf("[+] Waiting for tunnel server pod to be ready...\n")
-		
-		if err := k8sClient.WaitForReady(ctx, tunnelID); err != nil {
+
+		readyCtx, cancelReady := context.WithTimeout(ctx, readyTimeout)
+		defer cancelReady()
+		if err := k8sClient.WaitForReady(readyCtx, tunnelID); err != nil {
 			return fmt.Errorf("timed out waiting for tunnel server: %w", err)
 		}
 
@@ -81,8 +90,30 @@ and establishes a secure connection to forward traffic to your local port.`,
 }
 
 var protocol string
+var readyTimeout time.Duration
 
 func init() {
 	rootCmd.AddCommand(exposeCmd)
 	exposeCmd.Flags().StringVar(&protocol, "protocol", "https", "Protocol to tunnel (https, grpcs)")
+	exposeCmd.Flags().DurationVar(&readyTimeout, "ready-timeout", 90*time.Second, "Maximum time to wait for the remote tunnel pod to become ready")
+}
+
+func validateLocalPort(port string) error {
+	value, err := strconv.Atoi(port)
+	if err != nil {
+		return fmt.Errorf("invalid port %q: must be a number between 1 and 65535", port)
+	}
+	if value < 1 || value > 65535 {
+		return fmt.Errorf("invalid port %q: must be between 1 and 65535", port)
+	}
+	return nil
+}
+
+func validateProtocol(protocol string) error {
+	switch protocol {
+	case "https", "grpcs", "grpc", "tcp", "ws", "wss":
+		return nil
+	default:
+		return fmt.Errorf("unsupported protocol %q: must be one of https, grpcs, grpc, tcp, ws, wss", protocol)
+	}
 }

@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -73,7 +74,7 @@ func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) 
 // EnsureTunnel deploys the server module in kubernetes
 func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret string, protocol string) (string, error) {
 	name := fmt.Sprintf("sealtun-%s", tunnelID)
-	
+
 	// Create or Update Deployment
 	if err := c.ensureDeployment(ctx, name, secret); err != nil {
 		return "", fmt.Errorf("failed to ensure deployment: %w", err)
@@ -96,7 +97,7 @@ func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret strin
 func (c *Client) ensureDeployment(ctx context.Context, name, secret string) error {
 	replicas := int32(1)
 	labels := map[string]string{"app": name, "cloud.sealos.io/app-deploy-manager": name}
-	
+
 	f := false
 	t := true
 	u := int64(1001)
@@ -116,7 +117,7 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 					AutomountServiceAccountToken: &f,
 					Containers: []corev1.Container{
 						{
-							Name:  name,
+							Name: name,
 							Image: fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", func() string {
 								v := version.Version
 								if v == "dev" {
@@ -163,9 +164,9 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret string) erro
 
 	deployClient := c.clientset.AppsV1().Deployments(c.namespace)
 	existing, err := deployClient.Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
+	if apierrors.IsNotFound(err) {
 		_, err = deployClient.Create(ctx, deployment, metav1.CreateOptions{})
-	} else {
+	} else if err == nil {
 		deployment.ResourceVersion = existing.ResourceVersion
 		_, err = deployClient.Update(ctx, deployment, metav1.UpdateOptions{})
 	}
@@ -190,11 +191,17 @@ func (c *Client) ensureService(ctx context.Context, name string) error {
 
 	svcClient := c.clientset.CoreV1().Services(c.namespace)
 	existing, err := svcClient.Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
+	if apierrors.IsNotFound(err) {
 		_, err = svcClient.Create(ctx, service, metav1.CreateOptions{})
-	} else {
+	} else if err == nil {
 		service.ResourceVersion = existing.ResourceVersion
 		service.Spec.ClusterIP = existing.Spec.ClusterIP // immutable
+		service.Spec.ClusterIPs = existing.Spec.ClusterIPs
+		service.Spec.IPFamilies = existing.Spec.IPFamilies
+		service.Spec.IPFamilyPolicy = existing.Spec.IPFamilyPolicy
+		service.Spec.HealthCheckNodePort = existing.Spec.HealthCheckNodePort
+		service.Spec.InternalTrafficPolicy = existing.Spec.InternalTrafficPolicy
+		service.Spec.TrafficDistribution = existing.Spec.TrafficDistribution
 		_, err = svcClient.Update(ctx, service, metav1.UpdateOptions{})
 	}
 	return err
@@ -224,7 +231,7 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 
 	appIngressName := name
 	if isGRPC {
-		// For gRPC, we MUST use a separate Ingress object to apply the GRPC annotation 
+		// For gRPC, we MUST use a separate Ingress object to apply the GRPC annotation
 		// without breaking the WebSocket handshake on the tunnel path.
 		appIngressName = name + "-app"
 	}
@@ -239,17 +246,17 @@ func (c *Client) ensureIngress(ctx context.Context, name string, protocol string
 
 func (c *Client) generateIngress(name, host, path string, pathType *netv1.PathType, ingressClass *string, backendProtocol string) *netv1.Ingress {
 	labels := map[string]string{
-		"app":                                       name,
-		"cloud.sealos.io/app-deploy-manager":        strings.TrimSuffix(name, "-app"),
+		"app":                                name,
+		"cloud.sealos.io/app-deploy-manager": strings.TrimSuffix(name, "-app"),
 		"cloud.sealos.io/app-deploy-manager-domain": strings.Split(host, ".")[0],
 	}
 
 	annotations := map[string]string{
-		"kubernetes.io/ingress.class":                  "nginx",
-		"nginx.ingress.kubernetes.io/proxy-body-size":     "32m",
-		"nginx.ingress.kubernetes.io/ssl-redirect":        "false",
-		"nginx.ingress.kubernetes.io/proxy-read-timeout":  "3600",
-		"nginx.ingress.kubernetes.io/proxy-send-timeout":  "3600",
+		"kubernetes.io/ingress.class":                    "nginx",
+		"nginx.ingress.kubernetes.io/proxy-body-size":    "32m",
+		"nginx.ingress.kubernetes.io/ssl-redirect":       "false",
+		"nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
+		"nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
 	}
 
 	if backendProtocol != "" {
@@ -299,9 +306,9 @@ func (c *Client) generateIngress(name, host, path string, pathType *netv1.PathTy
 func (c *Client) applyIngress(ctx context.Context, ingress *netv1.Ingress) error {
 	ingClient := c.clientset.NetworkingV1().Ingresses(c.namespace)
 	existing, err := ingClient.Get(ctx, ingress.Name, metav1.GetOptions{})
-	if err != nil {
+	if apierrors.IsNotFound(err) {
 		_, err = ingClient.Create(ctx, ingress, metav1.CreateOptions{})
-	} else {
+	} else if err == nil {
 		ingress.ResourceVersion = existing.ResourceVersion
 		_, err = ingClient.Update(ctx, ingress, metav1.UpdateOptions{})
 	}
@@ -311,10 +318,10 @@ func (c *Client) applyIngress(ctx context.Context, ingress *netv1.Ingress) error
 // Cleanup resources
 func (c *Client) Cleanup(ctx context.Context, tunnelID string) error {
 	name := fmt.Sprintf("sealtun-%s", tunnelID)
-	
+
 	_ = c.clientset.AppsV1().Deployments(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	_ = c.clientset.CoreV1().Services(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
-	
+
 	// Delete both potential Ingress resources
 	_ = c.clientset.NetworkingV1().Ingresses(c.namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	_ = c.clientset.NetworkingV1().Ingresses(c.namespace).Delete(ctx, name+"-app", metav1.DeleteOptions{})
@@ -326,7 +333,7 @@ func (c *Client) Cleanup(ctx context.Context, tunnelID string) error {
 func (c *Client) WaitForReady(ctx context.Context, tunnelID string) error {
 	name := fmt.Sprintf("sealtun-%s", tunnelID)
 	deployClient := c.clientset.AppsV1().Deployments(c.namespace)
-	
+
 	for {
 		select {
 		case <-ctx.Done():
