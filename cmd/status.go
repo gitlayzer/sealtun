@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labring/sealtun/pkg/auth"
+	daemonstate "github.com/labring/sealtun/pkg/daemon"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -33,6 +34,7 @@ type statusPayload struct {
 	AuthenticatedAt string           `json:"authenticatedAt,omitempty"`
 	WorkspaceID     string           `json:"workspaceId,omitempty"`
 	WorkspaceName   string           `json:"workspaceName,omitempty"`
+	DaemonRunning   bool             `json:"daemonRunning"`
 	ConfigDir       string           `json:"configDir"`
 	AuthFile        fileStatus       `json:"authFile"`
 	Kubeconfig      kubeconfigStatus `json:"kubeconfig"`
@@ -76,7 +78,8 @@ func collectStatus() (*statusPayload, error) {
 	kubeconfigPath := filepath.Join(dir, "kubeconfig")
 
 	status := &statusPayload{
-		ConfigDir: dir,
+		DaemonRunning: daemonstate.Alive(),
+		ConfigDir:     dir,
 		AuthFile: fileStatus{
 			Path:    authPath,
 			Present: fileExists(authPath),
@@ -152,6 +155,10 @@ func printHumanStatus(cmd *cobra.Command, status *statusPayload) {
 	} else {
 		fmt.Fprintln(out, "  No active login session.")
 	}
+
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "Daemon")
+	fmt.Fprintf(out, "  Running: %s\n", yesNo(status.DaemonRunning))
 
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "Kubernetes")

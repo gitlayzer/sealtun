@@ -7,12 +7,13 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/labring/sealtun/pkg/auth"
 	"github.com/labring/sealtun/pkg/k8s"
+	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
+	"github.com/labring/sealtun/pkg/session"
 	"github.com/labring/sealtun/pkg/tunnel"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 		if err := validateProtocol(protocol); err != nil {
 			return err
 		}
+		protocol = tunnelprotocol.Normalize(protocol)
 
 		// 1. Check if logged in.
 		authData, err := auth.LoadAuthData()
@@ -45,6 +47,10 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return err
 		}
 		kcPath := filepath.Join(sealtunDir, "kubeconfig")
+		kubeconfigBytes, err := os.ReadFile(kcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read kubeconfig: %w", err)
+		}
 
 		// 2. Generate tunnel ID & secret.
 		tunnelID := uuid.New().String()[:8]
@@ -58,9 +64,43 @@ and establishes a secure connection to forward traffic to your local port.`,
 		}
 
 		ctx := cmd.Context()
-		host, err := k8sClient.EnsureTunnel(ctx, tunnelID, secret, protocol)
+		if err := recoverStaleSessions(ctx); err != nil {
+			return err
+		}
+
+		host, err := k8sClient.EnsureTunnel(ctx, tunnelID, secret, protocol, localPort)
 		if err != nil {
 			return fmt.Errorf("failed to provision tunnel on Sealos: %w", err)
+		}
+		cleanupTarget := k8sClient.WithNamespace(k8sClient.Namespace())
+		rollback := true
+		defer func() {
+			if rollback {
+				cleanupTunnel(cleanupTarget, tunnelID)
+			}
+		}()
+
+		sessionRecord := session.TunnelSession{
+			TunnelID:        tunnelID,
+			Region:          authData.Region,
+			Namespace:       k8sClient.Namespace(),
+			Kubeconfig:      string(kubeconfigBytes),
+			Protocol:        protocol,
+			Host:            host,
+			LocalPort:       localPort,
+			Secret:          secret,
+			Mode:            "foreground",
+			PID:             os.Getpid(),
+			ConnectionState: session.ConnectionStatePending,
+			Resources: []string{
+				fmt.Sprintf("sealtun-%s", tunnelID),
+			},
+		}
+		if err := session.Save(sessionRecord); err != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = k8sClient.Cleanup(cleanupCtx, tunnelID)
+			return fmt.Errorf("failed to persist tunnel session: %w", err)
 		}
 
 		fmt.Printf("[+] Public URL will be: https://%s\n", host)
@@ -72,30 +112,58 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return fmt.Errorf("timed out waiting for tunnel server: %w", err)
 		}
 
-		// Prepare graceful cleanup on normal exit or interrupt
-		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-		defer stop()
+		if !foreground {
+			sessionRecord.Mode = "daemon"
+			sessionRecord.PID = 0
+			sessionRecord.ConnectionState = session.ConnectionStatePending
+			if err := session.Update(sessionRecord); err != nil {
+				return fmt.Errorf("failed to update tunnel session for daemon mode: %w", err)
+			}
+			if err := ensureDaemonRunning(); err != nil {
+				return fmt.Errorf("failed to start local daemon: %w", err)
+			}
+			if err := waitForDaemonSession(tunnelID, daemonConnectTimeout); err != nil {
+				return err
+			}
 
-		defer func() {
-			fmt.Printf("\r[+] Disconnected. Cleaning up tunnel resources remotely...\n")
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = k8sClient.Cleanup(cleanupCtx, tunnelID)
-		}()
+			rollback = false
+			fmt.Printf("[+] Tunnel is running in the background via the local daemon.\n")
+			fmt.Printf("[+] Use `sealtun list` or `sealtun inspect %s` to view it later.\n", tunnelID)
+			return nil
+		}
+
+		ctx, stop := signal.NotifyContext(ctx, signalCleanupSignals()...)
+		defer stop()
+		rollback = false
+		defer cleanupTunnel(cleanupTarget, tunnelID)
 
 		// 4 & 5. Connect via WebSocket
 		wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", host)
-		return tunnel.DialServerAndServe(ctx, wsURL, secret, localPort)
+		return tunnel.DialServerAndServeWithOnConnected(ctx, wsURL, secret, localPort, func() {
+			current, err := session.Get(tunnelID)
+			if err != nil {
+				return
+			}
+			current.ConnectionState = session.ConnectionStateConnected
+			current.LastError = ""
+			current.LastConnectedAt = time.Now().Format(time.RFC3339)
+			_ = session.Update(*current)
+		})
 	},
 }
 
 var protocol string
 var readyTimeout time.Duration
+var foreground bool
+
+const daemonConnectTimeout = 60 * time.Second
+const daemonConnectionStability = 2 * time.Second
 
 func init() {
 	rootCmd.AddCommand(exposeCmd)
-	exposeCmd.Flags().StringVar(&protocol, "protocol", "https", "Protocol to tunnel (https, grpcs)")
+	exposeCmd.Flags().StringVar(&protocol, "protocol", "https", "Protocol to tunnel (currently only https)")
 	exposeCmd.Flags().DurationVar(&readyTimeout, "ready-timeout", 90*time.Second, "Maximum time to wait for the remote tunnel pod to become ready")
+	exposeCmd.Flags().BoolVar(&foreground, "foreground", false, "Run the tunnel in the current process instead of handing it off to the local daemon")
 }
 
 func validateLocalPort(port string) error {
@@ -110,10 +178,46 @@ func validateLocalPort(port string) error {
 }
 
 func validateProtocol(protocol string) error {
-	switch protocol {
-	case "https", "grpcs", "grpc", "tcp", "ws", "wss":
-		return nil
-	default:
-		return fmt.Errorf("unsupported protocol %q: must be one of https, grpcs, grpc, tcp, ws, wss", protocol)
+	return tunnelprotocol.ValidateExpose(protocol)
+}
+
+func recoverStaleSessions(ctx context.Context) error {
+	sessions, err := session.List()
+	if err != nil {
+		return fmt.Errorf("load tunnel sessions: %w", err)
+	}
+
+	for _, sess := range sessions {
+		if !sessionIsStale(sess, time.Minute) {
+			continue
+		}
+
+		fmt.Printf("[+] Found stale tunnel session %s in namespace %s. Cleaning up...\n", sess.TunnelID, sess.Namespace)
+		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := cleanupSessionResources(cleanupCtx, sess)
+		cancel()
+		if err != nil {
+			fmt.Printf("[!] Skipped stale tunnel %s cleanup: %v\n", sess.TunnelID, err)
+			continue
+		}
+		if err := session.Delete(sess.TunnelID); err != nil {
+			return fmt.Errorf("delete stale tunnel session %s: %w", sess.TunnelID, err)
+		}
+	}
+
+	return nil
+}
+
+func cleanupTunnel(k8sClient *k8s.Client, tunnelID string) {
+	fmt.Printf("\r[+] Disconnected. Cleaning up tunnel resources remotely...\n")
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := k8sClient.Cleanup(cleanupCtx, tunnelID); err != nil {
+		fmt.Printf("[!] Cleanup for tunnel %s did not complete: %v\n", tunnelID, err)
+		return
+	}
+	if err := session.Delete(tunnelID); err != nil {
+		fmt.Printf("[!] Failed to remove local session record for tunnel %s: %v\n", tunnelID, err)
 	}
 }

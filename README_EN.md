@@ -10,7 +10,7 @@ It connects your local development machine straight to the internet by dynamical
 
 - 🔑 **Password-less OAuth2 Login**: Connect easily with `sealtun login` using the Device Authorization Grant flow.
 - 🚀 **One-Command Expose**: Execute `sealtun expose 8080`, and get a fully trusted HTTPS URL for your localhost securely routed.
-- 🌐 **Optimized for Higress & Sealos**: Native support for Sealos Cloud domain suffixes (`.app`) and Higress gateway protocols (WS/GRPC).
+- 🌐 **Optimized for Sealos**: Native support for Sealos Cloud domains, HTTPS traffic, and WebSocket tunnels.
 - 🐳 **All-in-One Binary**: The client and the server agent live comfortably in the exact same compact binary and Docker image.
 - ☸️ **Cloud-Native by Design**: Resources on Sealos are natively managed using standard Kubernetes API constructs.
 
@@ -39,8 +39,6 @@ For instance, to make your local Web Server running on Port `3000` accessible to
 # Default https protocol (compatible with WebSocket)
 sealtun expose 3000
 
-# Expose a gRPC service
-sealtun expose 50051 --protocol grpcs
 ```
 
 Sealtun will:
@@ -57,6 +55,8 @@ Sealtun will:
 ## Hardening Notes
 
 - `expose` now validates port and protocol inputs before provisioning remote resources.
+- `--protocol` currently supports only `https`. TCP, UDP, and gRPC are intentionally out of scope until there is a dedicated transport design for them.
+- `inspect` and `doctor` collect remote Deployment, Service, Ingress, Pod, and Event diagnostics.
 - Tunnel pod readiness now has a default `90s` timeout, configurable via `--ready-timeout`.
 - Configuration is stored in `~/.sealtun`, with automatic migration from the legacy `~/.sealos` path.
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestGetSealosDirMigratesLegacyDirectory(t *testing.T) {
+func TestGetSealosDirCopiesLegacySealtunFilesOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -17,6 +17,9 @@ func TestGetSealosDirMigratesLegacyDirectory(t *testing.T) {
 	legacyFile := filepath.Join(legacyDir, "auth.json")
 	if err := os.WriteFile(legacyFile, []byte(`{"region":"test"}`), 0o600); err != nil {
 		t.Fatalf("write legacy auth file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "unrelated.json"), []byte(`{"owner":"other"}`), 0o600); err != nil {
+		t.Fatalf("write unrelated legacy file: %v", err)
 	}
 
 	dir, err := GetSealosDir()
@@ -29,9 +32,41 @@ func TestGetSealosDirMigratesLegacyDirectory(t *testing.T) {
 		t.Fatalf("expected dir %s, got %s", expectedDir, dir)
 	}
 	if _, err := os.Stat(filepath.Join(expectedDir, "auth.json")); err != nil {
-		t.Fatalf("expected migrated auth.json to exist: %v", err)
+		t.Fatalf("expected copied auth.json to exist: %v", err)
 	}
-	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
-		t.Fatalf("expected legacy dir to be moved away, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(expectedDir, "unrelated.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected unrelated legacy file not to be copied, stat err=%v", err)
+	}
+	if _, err := os.Stat(legacyDir); err != nil {
+		t.Fatalf("expected legacy dir to remain untouched, stat err=%v", err)
+	}
+}
+
+func TestGetSealosDirDoesNotRecopyLegacyAfterCurrentDirExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	legacyDir := filepath.Join(home, legacyConfigDir)
+	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
+		t.Fatalf("create legacy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "auth.json"), []byte(`{"region":"test"}`), 0o600); err != nil {
+		t.Fatalf("write legacy auth file: %v", err)
+	}
+
+	dir, err := GetSealosDir()
+	if err != nil {
+		t.Fatalf("GetSealosDir returned error: %v", err)
+	}
+	currentAuth := filepath.Join(dir, "auth.json")
+	if err := os.Remove(currentAuth); err != nil {
+		t.Fatalf("remove current auth: %v", err)
+	}
+
+	if _, err := GetSealosDir(); err != nil {
+		t.Fatalf("GetSealosDir returned error: %v", err)
+	}
+	if _, err := os.Stat(currentAuth); !os.IsNotExist(err) {
+		t.Fatalf("expected removed current auth not to be recopied, stat err=%v", err)
 	}
 }

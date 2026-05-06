@@ -20,6 +20,7 @@ If region is not provided, it defaults to the configured default region.`,
 		if len(args) > 0 {
 			region = args[0]
 		}
+		auth.SetInsecureSkipTLSVerify(insecure)
 		fmt.Printf("login called (region: %s)\n", region)
 
 		// 1. Request device authorization

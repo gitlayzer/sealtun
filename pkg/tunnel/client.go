@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,15 @@ import (
 
 // DialServerAndServe connects to the tunnel Server and serves local requests
 func DialServerAndServe(ctx context.Context, wsURL, secret, localPort string) error {
+	return dialServerAndServe(ctx, wsURL, secret, localPort, nil)
+}
+
+// DialServerAndServeWithOnConnected invokes onConnected after the tunnel handshake succeeds.
+func DialServerAndServeWithOnConnected(ctx context.Context, wsURL, secret, localPort string, onConnected func()) error {
+	return dialServerAndServe(ctx, wsURL, secret, localPort, onConnected)
+}
+
+func dialServerAndServe(ctx context.Context, wsURL, secret, localPort string, onConnected func()) error {
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
@@ -48,6 +58,10 @@ func DialServerAndServe(ctx context.Context, wsURL, secret, localPort string) er
 		return fmt.Errorf("failed to mount yamux server: %w", err)
 	}
 	defer session.Close()
+
+	if onConnected != nil {
+		onConnected()
+	}
 
 	fmt.Printf("Tunnel established! Forwarding to localhost:%s\n", localPort)
 
@@ -105,7 +119,32 @@ func handleLocalForwarding(stream net.Conn, localPort string) {
 }
 
 func unavailableResponse(localPort string) string {
-	body := "<html><head><title>502 Bad Gateway - Sealtun</title><style>" +
+	body := unavailableHTML(localPort, "Your public tunnel is online, but the local app is not listening yet.", "Sealtun has received this request successfully. The remote ingress and tunnel server are working, but the client machine is not serving traffic on the configured local port.")
+
+	return fmt.Sprintf(
+		"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
+		len(body),
+		body,
+	)
+}
+
+// WriteUnavailablePage renders the public fallback page when the server cannot reach the local client.
+func WriteUnavailablePage(w http.ResponseWriter, localPort string, detail string) {
+	body := unavailableHTML(localPort, "Your public tunnel is online, but the local client is not connected yet.", detail)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusBadGateway)
+	_, _ = io.WriteString(w, body)
+}
+
+func unavailableHTML(localPort string, heading string, detail string) string {
+	port := html.EscapeString(localPort)
+	if port == "" {
+		port = "unknown"
+	}
+	heading = html.EscapeString(heading)
+	detail = html.EscapeString(detail)
+
+	return "<html><head><title>502 Bad Gateway - Sealtun</title><style>" +
 		"body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: radial-gradient(circle at top, #15325b 0%, #08111f 55%, #030712 100%); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; color: #e5eefb; padding: 24px; box-sizing: border-box; }" +
 		".shell { width: 100%; max-width: 760px; background: rgba(9, 17, 31, 0.88); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 24px; box-shadow: 0 30px 80px rgba(0,0,0,0.45); overflow: hidden; }" +
 		".topbar { display: flex; align-items: center; gap: 10px; padding: 16px 20px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid rgba(148, 163, 184, 0.14); }" +
@@ -122,19 +161,13 @@ func unavailableResponse(localPort string) string {
 		".list li { margin: 6px 0; }" +
 		"</style></head><body><div class='shell'><div class='topbar'><div class='dot'></div><div class='brand'>Sealtun Tunnel Status</div></div><div class='content'>" +
 		"<div class='badge'>Local Port Offline</div>" +
-		"<h1>Your public tunnel is online, but the local app is not listening yet.</h1>" +
-		"<p>Sealtun has received this request successfully. The remote ingress and tunnel server are working, but the client machine is not serving traffic on the configured local port.</p>" +
-		"<div class='panel'><div class='label'>Expected local target</div><div class='value'>localhost:" + localPort + "</div></div>" +
+		"<h1>" + heading + "</h1>" +
+		"<p>" + detail + "</p>" +
+		"<div class='panel'><div class='label'>Expected local target</div><div class='value'>localhost:" + port + "</div></div>" +
 		"<div class='panel'><div class='label'>What to do next</div><ul class='list'>" +
-		"<li>Start your local application on port <strong>" + localPort + "</strong>.</li>" +
-		"<li>Keep the <code>sealtun expose " + localPort + "</code> process running.</li>" +
+		"<li>Start your local application on port <strong>" + port + "</strong>.</li>" +
+		"<li>Keep the <code>sealtun expose " + port + "</code> process running.</li>" +
 		"<li>Refresh this page after the local service is ready.</li>" +
 		"</ul></div>" +
 		"</div></div></body></html>"
-
-	return fmt.Sprintf(
-		"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
-		len(body),
-		body,
-	)
 }

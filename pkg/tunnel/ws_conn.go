@@ -3,6 +3,7 @@ package tunnel
 import (
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -12,7 +13,7 @@ import (
 type wsConn struct {
 	*websocket.Conn
 	reader io.Reader
-	closed bool
+	closed atomic.Bool
 }
 
 func NewWSConn(c *websocket.Conn) net.Conn {
@@ -20,7 +21,7 @@ func NewWSConn(c *websocket.Conn) net.Conn {
 }
 
 func (c *wsConn) Read(b []byte) (int, error) {
-	if c.closed {
+	if c.closed.Load() {
 		return 0, io.EOF
 	}
 	if c.reader == nil {
@@ -45,7 +46,7 @@ func (c *wsConn) Read(b []byte) (int, error) {
 }
 
 func (c *wsConn) Write(b []byte) (int, error) {
-	if c.closed {
+	if c.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
 	err := c.Conn.WriteMessage(websocket.BinaryMessage, b)
@@ -56,10 +57,9 @@ func (c *wsConn) Write(b []byte) (int, error) {
 }
 
 func (c *wsConn) Close() error {
-	if c.closed {
+	if !c.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	c.closed = true
 	return c.Conn.Close()
 }
 

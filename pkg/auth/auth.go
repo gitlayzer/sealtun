@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,22 @@ const (
 	// ClientID from seakills for oauth2 device flow
 	ClientID = "af993c98-d19d-4bdc-b338-79b80dc4f8bf"
 )
+
+var insecureSkipTLSVerify bool
+
+func SetInsecureSkipTLSVerify(enabled bool) {
+	insecureSkipTLSVerify = enabled
+}
+
+func httpClient() *http.Client {
+	client := &http.Client{Timeout: 10 * time.Second}
+	if insecureSkipTLSVerify {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		}
+	}
+	return client
+}
 
 type DeviceAuthResponse struct {
 	DeviceCode              string `json:"device_code"`
@@ -37,9 +54,9 @@ type ErrorResponse struct {
 }
 
 type Namespace struct {
-	UID      string `json:"uid"`
-	ID       string `json:"id"`
-	TeamName string `json:"teamName"`
+	UID      string      `json:"uid"`
+	ID       string      `json:"id"`
+	TeamName string      `json:"teamName"`
 	Role     string      `json:"role"`
 	NSType   interface{} `json:"nstype"`
 }
@@ -63,7 +80,7 @@ func RequestDeviceAuthorization(region string) (*DeviceAuthResponse, error) {
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -85,7 +102,7 @@ func RequestDeviceAuthorization(region string) (*DeviceAuthResponse, error) {
 // PollForToken repeatedly polls the token endpoint until the user authenticates or it expires
 func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenResponse, error) {
 	apiURL := fmt.Sprintf("%s/api/auth/oauth2/token", strings.TrimRight(region, "/"))
-	
+
 	maxWait := time.Duration(expiresIn) * time.Second
 	if maxWait > 10*time.Minute {
 		maxWait = 10 * time.Minute
@@ -96,7 +113,7 @@ func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenRes
 		pollInterval = 5 * time.Second
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient()
 
 	for time.Now().Before(deadline) {
 		time.Sleep(pollInterval)
@@ -116,7 +133,7 @@ func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenRes
 		if err != nil {
 			continue // Network error, keep trying
 		}
-		
+
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
@@ -166,7 +183,7 @@ func GetRegionToken(region, accessToken string) (*RegionTokenResponse, error) {
 	req.Header.Add("Authorization", accessToken)
 	req.Header.Add("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -194,7 +211,7 @@ func ListWorkspaces(region, regionalToken string) (*NamespaceListResponse, error
 	}
 	req.Header.Add("Authorization", regionalToken)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

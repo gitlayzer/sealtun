@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,50 +17,53 @@ import (
 )
 
 type Server struct {
-	secret string
-	port   int
+	secret    string
+	port      int
+	protocol  string
+	localPort string
 
-	mu             sync.RWMutex
-	activeSession  *yamux.Session
-	upgrader       websocket.Upgrader
-	reverseProxy   *httputil.ReverseProxy
+	mu            sync.RWMutex
+	activeSession *yamux.Session
+	upgrader      websocket.Upgrader
+	reverseProxy  *httputil.ReverseProxy
+	connectedAt   atomic.Int64
 }
 
-func NewServer(secret string, port int) *Server {
+func NewServer(secret string, port int, protocol string, localPort string) *Server {
 	s := &Server{
-		secret: secret,
-		port:   port,
+		secret:    secret,
+		port:      port,
+		protocol:  protocol,
+		localPort: localPort,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
 
-	// Create reverse proxy
 	director := func(req *http.Request) {
-		// Target schema is irrelevant since we dial over yamux stream, but httputil requires it
-		req.URL.Scheme = "http" 
+		req.URL.Scheme = "http"
 		req.URL.Host = "tunnel-target"
 	}
 
-	transport := &http.Transport{
-		DialContext: s.proxyDialContext,
-		// Performance tuning
+	s.reverseProxy = &httputil.ReverseProxy{
+		Director:  director,
+		Transport: s.reverseProxyTransport(),
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			WriteUnavailablePage(w, s.localPort, fmt.Sprintf("The remote ingress is reachable, but the local Sealtun client is not connected to this tunnel yet: %v", err))
+		},
+	}
+
+	return s
+}
+
+func (s *Server) reverseProxyTransport() http.RoundTripper {
+	return &http.Transport{
+		DialContext:           s.proxyDialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-
-	s.reverseProxy = &httputil.ReverseProxy{
-		Director:  director,
-		Transport: transport,
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, "Tunnel is currently unavailable or disconnected: %v", err)
-		},
-	}
-
-	return s
 }
 
 func (s *Server) proxyDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -75,6 +79,11 @@ func (s *Server) proxyDialContext(ctx context.Context, network, addr string) (ne
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/_sealtun/healthz" {
+		s.handleHealthz(w)
+		return
+	}
+
 	// 1. Check if it's the internal tunnel negotiation endpoint
 	if r.URL.Path == "/_sealtun/ws" {
 		s.handleTunnelConnection(w, r)
@@ -83,6 +92,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 2. All other requests are public traffic -> Forward to Local Client via Reverse Proxy
 	s.reverseProxy.ServeHTTP(w, r)
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter) {
+	s.mu.RLock()
+	connected := s.activeSession != nil && !s.activeSession.IsClosed()
+	s.mu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	if !connected {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = fmt.Fprintf(w, `{"ok":false,"clientConnected":false,"protocol":%q}`, s.protocol)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(w, `{"ok":true,"clientConnected":true,"protocol":%q,"connectedAt":%q}`, s.protocol, time.Unix(s.connectedAt.Load(), 0).Format(time.RFC3339))
 }
 
 func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +125,28 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 		fmt.Printf("upgrade error: %v\n", err)
 		return
 	}
+	conn.SetReadLimit(1 << 20)
+	_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	})
+	stopPing := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					_ = conn.Close()
+					return
+				}
+			case <-stopPing:
+				return
+			}
+		}
+	}()
+	defer close(stopPing)
 
 	netConn := NewWSConn(conn)
 
@@ -122,6 +168,7 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 		s.activeSession.Close() // Disconnect old client to prevent leaks
 	}
 	s.activeSession = session
+	s.connectedAt.Store(time.Now().Unix())
 	s.mu.Unlock()
 
 	fmt.Println("Local client connected successfully to the server pod.")
@@ -134,7 +181,13 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
 	fmt.Printf("Server listening on %s (H2C enabled)\n", addr)
-	
+
 	h2s := &http2.Server{}
-	return http.ListenAndServe(addr, h2c.NewHandler(s, h2s))
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           h2c.NewHandler(s, h2s),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	return server.ListenAndServe()
 }
