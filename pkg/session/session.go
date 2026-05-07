@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 
@@ -15,6 +16,8 @@ const sessionsDirName = "sessions"
 const sessionLockFileName = "sessions.lock"
 
 const sessionLockWait = 10 * time.Second
+
+var tunnelIDPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,53}[a-z0-9])?$`)
 
 const (
 	ConnectionStatePending    = "pending"
@@ -31,6 +34,8 @@ type TunnelSession struct {
 	Kubeconfig      string   `json:"kubeconfig,omitempty"`
 	Protocol        string   `json:"protocol"`
 	Host            string   `json:"host"`
+	SealosHost      string   `json:"sealosHost,omitempty"`
+	CustomDomain    string   `json:"customDomain,omitempty"`
 	LocalPort       string   `json:"localPort"`
 	Secret          string   `json:"secret,omitempty"`
 	Mode            string   `json:"mode,omitempty"`
@@ -76,6 +81,9 @@ func Update(session TunnelSession) error {
 	if session.TunnelID == "" {
 		return fmt.Errorf("session tunnel id is required")
 	}
+	if err := validateTunnelID(session.TunnelID); err != nil {
+		return err
+	}
 
 	dir, err := SessionsDir()
 	if err != nil {
@@ -90,8 +98,8 @@ func Update(session TunnelSession) error {
 }
 
 func saveLocked(session TunnelSession) error {
-	if session.TunnelID == "" {
-		return fmt.Errorf("session tunnel id is required")
+	if err := validateTunnelID(session.TunnelID); err != nil {
+		return err
 	}
 
 	dir, err := SessionsDir()
@@ -107,7 +115,7 @@ func saveLocked(session TunnelSession) error {
 	path := filepath.Join(dir, session.TunnelID+".json")
 	preserveScrubbedCredentials(path, &session)
 
-	data, err := json.MarshalIndent(session, "", "  ")
+	data, err := json.MarshalIndent(session, "", "  ") // #nosec G117 -- tunnel secrets are intentionally persisted with 0600 permissions for daemon reconnects.
 	if err != nil {
 		return err
 	}
@@ -126,7 +134,7 @@ func acquireSessionLock() (func(), error) {
 	}
 	path := filepath.Join(root, sessionLockFileName)
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- lock path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +150,7 @@ func acquireSessionLock() (func(), error) {
 }
 
 func preserveScrubbedCredentials(path string, next *TunnelSession) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is derived from a validated tunnel ID under the session directory.
 	if err != nil {
 		return
 	}
@@ -168,6 +176,10 @@ func preserveScrubbedCredentials(path string, next *TunnelSession) {
 }
 
 func Delete(tunnelID string) error {
+	if err := validateTunnelID(tunnelID); err != nil {
+		return err
+	}
+
 	release, err := acquireSessionLock()
 	if err != nil {
 		return err
@@ -204,12 +216,12 @@ func ScrubCredentials() error {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if !isSessionJSONFile(entry) {
 			continue
 		}
 
 		path := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- entry is checked to be a regular .json file from the session directory.
 		if err != nil {
 			return err
 		}
@@ -221,13 +233,13 @@ func ScrubCredentials() error {
 			}
 			continue
 		}
-		if sess.Kubeconfig == "" && sess.Secret == "" && sess.PID == 0 && sess.ConnectionState == ConnectionStateStopped {
-			continue
-		}
-		if sess.TunnelID == "" {
+		if err := validateTunnelID(sess.TunnelID); err != nil {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
+			continue
+		}
+		if sess.Kubeconfig == "" && sess.Secret == "" && sess.PID == 0 && sess.ConnectionState == ConnectionStateStopped {
 			continue
 		}
 
@@ -245,6 +257,10 @@ func ScrubCredentials() error {
 }
 
 func Get(tunnelID string) (*TunnelSession, error) {
+	if err := validateTunnelID(tunnelID); err != nil {
+		return nil, err
+	}
+
 	sessions, err := List()
 	if err != nil {
 		return nil, err
@@ -283,11 +299,11 @@ func listLocked() ([]TunnelSession, error) {
 
 	sessions := make([]TunnelSession, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		if !isSessionJSONFile(entry) {
 			continue
 		}
 
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name())) // #nosec G304 -- entry is checked to be a regular .json file from the session directory.
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -299,7 +315,7 @@ func listLocked() ([]TunnelSession, error) {
 		if err := json.Unmarshal(data, &sess); err != nil {
 			continue
 		}
-		if sess.TunnelID == "" {
+		if err := validateTunnelID(sess.TunnelID); err != nil {
 			continue
 		}
 		sessions = append(sessions, sess)
@@ -310,6 +326,24 @@ func listLocked() ([]TunnelSession, error) {
 	})
 
 	return sessions, nil
+}
+
+func isSessionJSONFile(entry os.DirEntry) bool {
+	if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		return false
+	}
+	info, err := entry.Info()
+	return err == nil && info.Mode().IsRegular()
+}
+
+func validateTunnelID(tunnelID string) error {
+	if tunnelID == "" {
+		return fmt.Errorf("session tunnel id is required")
+	}
+	if !tunnelIDPattern.MatchString(tunnelID) {
+		return fmt.Errorf("invalid session tunnel id %q", tunnelID)
+	}
+	return nil
 }
 
 func IsStale(sess TunnelSession, gracePeriod time.Duration) bool {

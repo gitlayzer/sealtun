@@ -1,7 +1,10 @@
 # Binaries
 /bin/
-sealtun
-sealtun.exe
+/sealtun
+/sealtun.exe
+
+# Generated copyright application artifacts
+/docs/copyright/
 
 # IDE settings
 .vscode/

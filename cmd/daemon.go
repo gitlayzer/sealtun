@@ -180,7 +180,7 @@ func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
 			fmt.Printf("[!] failed to refresh session %s: %v\n", current.TunnelID, err)
 		}
 
-		wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", current.Host)
+		wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", sessionControlHost(*current))
 		err = tunnel.DialServerAndServeWithOnConnected(ctx, wsURL, current.Secret, current.LocalPort, func() {
 			latest, getErr := session.Get(sess.TunnelID)
 			if getErr != nil {

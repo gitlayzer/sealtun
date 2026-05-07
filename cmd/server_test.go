@@ -19,3 +19,25 @@ func TestServerProtocolValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveServerSecretFromEnv(t *testing.T) {
+	got, err := resolveServerSecret("flag-secret", "SEALTUN_SECRET", func(name string) string {
+		if name != "SEALTUN_SECRET" {
+			t.Fatalf("unexpected env lookup: %s", name)
+		}
+		return "env-secret"
+	})
+	if err != nil {
+		t.Fatalf("resolveServerSecret returned error: %v", err)
+	}
+	if got != "env-secret" {
+		t.Fatalf("expected env secret to win, got %q", got)
+	}
+}
+
+func TestResolveServerSecretRejectsEmptyEnv(t *testing.T) {
+	_, err := resolveServerSecret("", "SEALTUN_SECRET", func(string) string { return "" })
+	if err == nil {
+		t.Fatal("expected empty secret env to fail")
+	}
+}

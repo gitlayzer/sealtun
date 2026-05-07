@@ -143,7 +143,7 @@ func AcquireRuntimeLock() (func(), error) {
 
 func createOwnedLock(path string) (func(), error) {
 	token := fmt.Sprintf("%d:%d", os.Getpid(), time.Now().UnixNano())
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- lock path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func createOwnedLock(path string) (func(), error) {
 	}
 
 	return func() {
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- lock path is fixed under the user-owned Sealtun config directory.
 		if err == nil && string(data) == token {
 			_ = os.Remove(path)
 		}
@@ -166,7 +166,7 @@ func createOwnedLock(path string) (func(), error) {
 }
 
 func lockOwnerAlive(path string) (bool, bool) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- lock path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return false, false
 	}
@@ -187,7 +187,7 @@ func LoadState() (*State, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- daemon state path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return nil, err
 	}

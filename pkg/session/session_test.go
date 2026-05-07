@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -46,6 +47,46 @@ func TestSaveListDelete(t *testing.T) {
 	}
 }
 
+func TestRejectsUnsafeTunnelIDPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir, err := SessionsDir()
+	if err != nil {
+		t.Fatalf("SessionsDir returned error: %v", err)
+	}
+	authPath := filepath.Join(filepath.Dir(dir), "auth.json")
+	if err := os.WriteFile(authPath, []byte("auth"), 0o600); err != nil {
+		t.Fatalf("write auth file: %v", err)
+	}
+
+	for _, tt := range []struct {
+		name string
+		fn   func() error
+	}{
+		{name: "save traversal", fn: func() error { return Save(TunnelSession{TunnelID: "../auth"}) }},
+		{name: "update traversal", fn: func() error { return Update(TunnelSession{TunnelID: "../auth"}) }},
+		{name: "delete traversal", fn: func() error { return Delete("../auth") }},
+		{name: "save too long for resource name", fn: func() error {
+			return Save(TunnelSession{TunnelID: "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd"})
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.fn(); err == nil {
+				t.Fatal("expected unsafe tunnel id to be rejected")
+			}
+		})
+	}
+
+	data, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatalf("read auth file: %v", err)
+	}
+	if string(data) != "auth" {
+		t.Fatalf("auth file was modified: %q", string(data))
+	}
+}
+
 func TestUpdateDoesNotCreateMissingSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -64,6 +105,35 @@ func TestUpdateDoesNotCreateMissingSession(t *testing.T) {
 	}
 	if len(sessions) != 0 {
 		t.Fatalf("expected no session to be created, got %d", len(sessions))
+	}
+}
+
+func TestListSkipsSymlinkedSessionFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires extra privileges on Windows")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	outside := filepath.Join(home, "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"tunnelId":"outside123"}`), 0o600); err != nil {
+		t.Fatalf("write outside session: %v", err)
+	}
+	dir, err := SessionsDir()
+	if err != nil {
+		t.Fatalf("SessionsDir returned error: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "outside123.json")); err != nil {
+		t.Fatalf("create session symlink: %v", err)
+	}
+
+	sessions, err := List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("expected symlinked session to be skipped, got %d session(s)", len(sessions))
 	}
 }
 
@@ -261,6 +331,9 @@ func TestListSkipsInvalidSessionFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "broken.json"), []byte("{not-json"), 0o600); err != nil {
 		t.Fatalf("write invalid session: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "unsafe.json"), []byte(`{"tunnelId":"../auth"}`), 0o600); err != nil {
+		t.Fatalf("write unsafe session: %v", err)
+	}
 
 	sessions, err := List()
 	if err != nil {
@@ -292,5 +365,26 @@ func TestScrubCredentialsRemovesInvalidSessionFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected invalid session file to be removed, stat err=%v", err)
+	}
+}
+
+func TestScrubCredentialsRemovesUnsafeSessionFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir, err := SessionsDir()
+	if err != nil {
+		t.Fatalf("SessionsDir returned error: %v", err)
+	}
+	path := filepath.Join(dir, "unsafe.json")
+	if err := os.WriteFile(path, []byte(`{"tunnelId":"../auth"}`), 0o600); err != nil {
+		t.Fatalf("write unsafe session: %v", err)
+	}
+
+	if err := ScrubCredentials(); err != nil {
+		t.Fatalf("ScrubCredentials returned error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected unsafe session file to be removed, stat err=%v", err)
 	}
 }

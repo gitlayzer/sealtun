@@ -42,7 +42,7 @@ func dialServerAndServe(ctx context.Context, wsURL, secret, localPort string, on
 	// Intercept context cancellation to close TCP connection eagerly
 	go func() {
 		<-ctx.Done()
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	netConn := NewWSConn(conn)

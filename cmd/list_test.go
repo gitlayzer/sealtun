@@ -139,15 +139,17 @@ func TestPrintListTableEmpty(t *testing.T) {
 
 func TestListJSONShape(t *testing.T) {
 	items := []listItem{{
-		TunnelID:  "abc123",
-		Status:    "active",
-		Host:      "abc.example.com",
-		LocalPort: "3000",
-		PID:       123,
-		Mode:      "foreground",
-		Namespace: "ns-demo",
-		Protocol:  "https",
-		CreatedAt: "2026-04-23T10:00:00+08:00",
+		TunnelID:     "abc123",
+		Status:       "active",
+		Host:         "abc.example.com",
+		SealosHost:   "sealtun-abc123-ns-demo.sealosgzg.site",
+		CustomDomain: "abc.example.com",
+		LocalPort:    "3000",
+		PID:          123,
+		Mode:         "foreground",
+		Namespace:    "ns-demo",
+		Protocol:     "https",
+		CreatedAt:    "2026-04-23T10:00:00+08:00",
 	}}
 
 	data, err := json.Marshal(items)
@@ -160,6 +162,12 @@ func TestListJSONShape(t *testing.T) {
 	}
 	if !strings.Contains(jsonText, `"host":"abc.example.com"`) {
 		t.Fatalf("missing host field: %s", jsonText)
+	}
+	if !strings.Contains(jsonText, `"sealosHost":"sealtun-abc123-ns-demo.sealosgzg.site"`) {
+		t.Fatalf("missing sealosHost field: %s", jsonText)
+	}
+	if !strings.Contains(jsonText, `"customDomain":"abc.example.com"`) {
+		t.Fatalf("missing customDomain field: %s", jsonText)
 	}
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -151,6 +152,9 @@ func runDoctorRemoteDiagnostics(payload *doctorPayload, items []listItem) {
 		go func() {
 			defer wg.Done()
 			for item := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
 				sess, err := findSession(item.TunnelID)
 				if err != nil {
 					select {
@@ -161,6 +165,9 @@ func runDoctorRemoteDiagnostics(payload *doctorPayload, items []listItem) {
 				}
 				remote, err := collectRemoteDiagnosticsWithContext(ctx, *sess)
 				if err != nil {
+					if ctx.Err() != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+						return
+					}
 					select {
 					case results <- result{tunnelID: item.TunnelID, err: fmt.Errorf("remote diagnostics unavailable: %w", err)}:
 					case <-ctx.Done():
@@ -199,6 +206,9 @@ enqueue:
 			payload.RemoteChecked++
 		}
 		if result.err != nil {
+			if ctx.Err() != nil && (errors.Is(result.err, context.DeadlineExceeded) || errors.Is(result.err, context.Canceled)) {
+				continue
+			}
 			payload.RemoteIssues++
 			payload.Warnings = append(payload.Warnings, fmt.Sprintf("tunnel %s %v", result.tunnelID, result.err))
 			continue

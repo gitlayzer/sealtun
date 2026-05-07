@@ -46,12 +46,12 @@ func ensureDaemonRunning() error {
 	}
 
 	logPath := filepath.Join(root, "daemon.log")
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) // #nosec G304 -- daemon log path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return fmt.Errorf("open daemon log file: %w", err)
 	}
 
-	cmd := exec.Command(executable, "daemon")
+	cmd := exec.Command(executable, "daemon") // #nosec G204 -- executable is the current Sealtun binary and the daemon argument is fixed.
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	configureDetachedProcess(cmd)

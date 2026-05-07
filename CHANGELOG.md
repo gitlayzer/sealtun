@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [v0.0.11] - 2026-05-07
+
+### Added
+- **Custom Domains**: Added `expose --domain` plus `sealtun domain set/clear`; custom domains are attached only after CNAME ownership verification.
+- **Certificate Resources**: Custom-domain tunnels now create cert-manager `Issuer` and `Certificate` resources and keep the Sealos host as the CNAME target.
+- **Custom Domain Diagnostics**: `inspect --remote` and `sealtun domain verify` report DNS CNAME, Ingress host/TLS, and custom-domain certificate status.
+- **Domain Readiness Wait**: Added `expose --wait-domain` and `sealtun domain verify --wait` for explicit DNS, Ingress attachment, and certificate readiness waiting.
+
+### Fixed
+- **Custom Domain Safety**: Reject IP/custom domains that point at generated or reserved Sealos hosts, require verified CNAME before writing custom hosts to Ingress, validate wait timeouts, and include Ingress host/TLS plus certificate DNS names in readiness checks.
+- **Cleanup Reliability**: Tunnel cleanup now always attempts Sealtun-owned Certificate, Issuer, and TLS Secret deletion by tunnel ID, even if local custom-domain session metadata is missing.
+
 ## [v0.0.10] - 2026-05-07
 
 ### Added

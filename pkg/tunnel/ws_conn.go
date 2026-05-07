@@ -3,6 +3,7 @@ package tunnel
 import (
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,8 +13,9 @@ import (
 // wsConn wraps a *websocket.Conn up into a net.Conn.
 type wsConn struct {
 	*websocket.Conn
-	reader io.Reader
-	closed atomic.Bool
+	reader  io.Reader
+	writeMu sync.Mutex
+	closed  atomic.Bool
 }
 
 func NewWSConn(c *websocket.Conn) net.Conn {
@@ -46,6 +48,11 @@ func (c *wsConn) Read(b []byte) (int, error) {
 }
 
 func (c *wsConn) Write(b []byte) (int, error) {
+	if c.closed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	if c.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}

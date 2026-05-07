@@ -13,15 +13,17 @@ func TestCollectInspectPayload(t *testing.T) {
 	inspectRemote = false
 
 	if err := session.Save(session.TunnelSession{
-		TunnelID:  "abc123",
-		Region:    "https://gzg.sealos.run",
-		Namespace: "ns-demo",
-		Protocol:  "https",
-		Host:      "abc.example.com",
-		LocalPort: "3000",
-		PID:       0,
-		CreatedAt: time.Now().Format(time.RFC3339),
-		Resources: []string{"sealtun-abc123"},
+		TunnelID:     "abc123",
+		Region:       "https://gzg.sealos.run",
+		Namespace:    "ns-demo",
+		Protocol:     "https",
+		Host:         "abc.example.com",
+		SealosHost:   "sealtun-abc123-ns-demo.sealosgzg.site",
+		CustomDomain: "abc.example.com",
+		LocalPort:    "3000",
+		PID:          0,
+		CreatedAt:    time.Now().Format(time.RFC3339),
+		Resources:    []string{"sealtun-abc123"},
 	}); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
@@ -39,6 +41,12 @@ func TestCollectInspectPayload(t *testing.T) {
 	}
 	if len(payload.Resources) != 1 {
 		t.Fatalf("expected 1 resource, got %d", len(payload.Resources))
+	}
+	if payload.SealosHost != "sealtun-abc123-ns-demo.sealosgzg.site" {
+		t.Fatalf("unexpected sealos host: %s", payload.SealosHost)
+	}
+	if payload.CustomDomain != "abc.example.com" {
+		t.Fatalf("unexpected custom domain: %s", payload.CustomDomain)
 	}
 }
 

@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net"
 	"net/http"
@@ -114,7 +115,7 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 	authHeader := r.Header.Get("Authorization")
 	expectedAuth := fmt.Sprintf("Bearer %s", s.secret)
 
-	if authHeader != expectedAuth {
+	if subtle.ConstantTimeCompare([]byte(authHeader), []byte(expectedAuth)) != 1 {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -158,14 +159,14 @@ func (s *Server) handleTunnelConnection(w http.ResponseWriter, r *http.Request) 
 	session, err := yamux.Client(netConn, yamuxConfig)
 	if err != nil {
 		fmt.Printf("yamux client setup error: %v\n", err)
-		netConn.Close()
+		_ = netConn.Close()
 		return
 	}
 
 	// Replace active session
 	s.mu.Lock()
 	if s.activeSession != nil && !s.activeSession.IsClosed() {
-		s.activeSession.Close() // Disconnect old client to prevent leaks
+		_ = s.activeSession.Close() // Disconnect old client to prevent leaks
 	}
 	s.activeSession = session
 	s.connectedAt.Store(time.Now().Unix())

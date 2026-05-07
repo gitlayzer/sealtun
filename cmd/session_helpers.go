@@ -94,7 +94,24 @@ func cleanupSessionResources(ctx context.Context, sess session.TunnelSession) er
 		return err
 	}
 
-	return client.WithNamespace(sess.Namespace).Cleanup(ctx, sess.TunnelID)
+	return client.WithNamespace(sess.Namespace).CleanupTunnel(ctx, sess.TunnelID)
+}
+
+func sessionControlHost(sess session.TunnelSession) string {
+	if sess.SealosHost != "" {
+		return sess.SealosHost
+	}
+	return sess.Host
+}
+
+func sessionSealosHostForDomain(sess session.TunnelSession, computed string) string {
+	if sess.SealosHost != "" {
+		return sess.SealosHost
+	}
+	if sess.CustomDomain == "" && sess.Host != "" {
+		return sess.Host
+	}
+	return computed
 }
 
 func sessionOwnerAlive(sess session.TunnelSession) bool {

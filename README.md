@@ -11,19 +11,25 @@ Sealtun 是一款功能强大、设计优雅的 CLI 工具，旨在为 **Sealos 
 - 🔑 **无密码 OAuth2 登录**：使用设备授权流（Device Authorization Grant）通过 `sealtun login` 轻松连接。
 - 🌍 **区域切换**：支持查看已内置的 Sealos Cloud region，并通过 `sealtun region use` 重新登录切换区域。
 - 🚀 **一键暴露服务**：执行 `sealtun expose 8080`，即可获得一个受信任的 HTTPS URL，将流量安全地路由到本地。
+- 🌐 **自定义域名**：新建隧道时可用 `--domain` 生成 CNAME 指引，DNS 验证通过后再通过 `--wait-domain` 或 `sealtun domain set` 安全绑定。
 - 🌐 **深度适配 Sealos**：原生使用 Sealos Cloud 的 Kubernetes、Service 与 Ingress 能力，当前稳定支持 HTTPS 入口和 WebSocket 隧道。
 - 🐳 **全能二进制文件**：客户端和服务器代理共用同一个精简的二进制文件和 Docker 镜像。
 - ☸️ **云原生设计**：完全使用标准的 Kubernetes API 管理资源，无需额外的复杂中间件。
 
 ## 📦 安装
 
-你可以从源码构建 Sealtun CLI：
+推荐从 GitHub Releases 下载对应平台的 `sealtun` 二进制；远端隧道 Pod 使用同版本的 `ghcr.io/gitlayzer/sealtun` 镜像。
+
+从源码构建本地调试版本：
 
 ```bash
 git clone https://github.com/gitlayzer/sealtun.git
 cd sealtun
-go build -o sealtun main.go
+make build
+./sealtun --version
 ```
+
+`make build` 默认会把当前 Git short hash 注入到本地二进制的 version 中，用于确认本地二进制和已 push 的代码提交一致。正式 tag 发布时，GitHub Actions 会用 tag 版本构建 GitHub Release 产物和容器镜像。
 
 ## 🚀 快速上手
 
@@ -53,6 +59,38 @@ Sealtun 会自动执行以下操作：
 2. 配置 Ingress 路由规则。
 3. 建立加密 WebSocket 隧道，并将所有流量转发至 `localhost:3000`。
 
+### 3. 使用自定义域名
+新建隧道时先生成官方 Sealos 域名和 CNAME 目标：
+```bash
+sealtun expose 3000 --domain app.example.com
+
+# 如果你会在命令等待期间配置 DNS，可以等待 CNAME 验证、绑定和证书就绪
+sealtun expose 3000 --domain app.example.com --wait-domain
+```
+
+或者在 DNS 生效后对已有隧道绑定：
+```bash
+sealtun domain set <tunnel-id> app.example.com
+```
+
+Sealtun 会保留一个 Sealos 官方子域名作为隧道控制面和 CNAME 目标。只有 CNAME 已经指向该 Sealos host 后，Sealtun 才会把自定义域名写入 Ingress，并创建 cert-manager `Issuer` 与 `Certificate`。你需要在自己的 DNS 服务商处配置：
+```text
+CNAME app.example.com -> <sealos-host>
+```
+
+验证 CNAME、Ingress 与证书状态：
+```bash
+sealtun domain verify <tunnel-id>
+
+# 持续等待，直到 DNS 与证书就绪或超时
+sealtun domain verify <tunnel-id> --wait --timeout 5m
+```
+
+移除自定义域名：
+```bash
+sealtun domain clear <tunnel-id>
+```
+
 ## 🛠️ 架构详情
 
 - **底层协议**：基于 WebSocket 的 Yamux 多路复用。
@@ -66,6 +104,9 @@ Sealtun 会自动执行以下操作：
 - 远端隧道 Pod 等待阶段增加了默认 `90s` 超时，可通过 `--ready-timeout` 调整。
 - 配置目录统一为 `~/.sealtun`，首次运行只会迁移旧 `~/.sealos` 下的登录凭据和 kubeconfig，不会迁移旧 session 记录。
 - Ingress 域名优先使用 Sealos Launchpad 返回的 `SEALOS_DOMAIN`，避免按 region 猜测公网域名。
+- 自定义域名必须先通过 CNAME 归属验证，Sealtun 不会把未验证域名提前写入 Ingress，避免在共享 Ingress 中预占任意 Host。
+- 绑定后会同时保留 Sealos 官方 host 和用户域名：daemon 始终使用 Sealos host 连接控制面，用户访问域名可通过 CNAME 指向该 Sealos host。
+- `--wait-domain` 只在同时提供 `--domain` 时等待 DNS CNAME、绑定 Ingress 与 cert-manager 证书就绪；超时不会删除隧道，可稍后用 `sealtun domain set` 或 `sealtun domain verify` 复查。
 - 提供 `status`、`list`、`inspect`、`doctor`、`stop`、`cleanup`、`logout` 等本地控制命令。
 - `list` 默认只读取本地 session；需要探测本地端口健康时可使用 `list --check`。
 - `inspect` 默认展示本地状态；需要远端 Kubernetes 诊断时可使用 `inspect --remote`。

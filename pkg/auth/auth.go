@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -51,18 +52,18 @@ func ResolveRegion(input string) (string, error) {
 	return "", fmt.Errorf("unknown region %q; run `sealtun region list` to see supported regions", input)
 }
 
-var insecureSkipTLSVerify bool
+var insecureSkipTLSVerify atomic.Bool
 
 func SetInsecureSkipTLSVerify(enabled bool) {
-	insecureSkipTLSVerify = enabled
+	insecureSkipTLSVerify.Store(enabled)
 }
 
 func httpClient() *http.Client {
 	client := &http.Client{Timeout: 10 * time.Second}
-	if insecureSkipTLSVerify {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-		}
+	if insecureSkipTLSVerify.Load() {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- enabled only by the explicit --insecure CLI flag for TLS troubleshooting.
+		client.Transport = transport
 	}
 	return client
 }
@@ -148,10 +149,7 @@ func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenRes
 		maxWait = 10 * time.Minute
 	}
 	deadline := time.Now().Add(maxWait)
-	pollInterval := time.Duration(interval) * time.Second
-	if pollInterval == 0 {
-		pollInterval = 5 * time.Second
-	}
+	pollInterval := pollIntervalFromSeconds(interval)
 
 	client := httpClient()
 
@@ -175,7 +173,7 @@ func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenRes
 		}
 
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
 			var tokenRes TokenResponse
@@ -203,6 +201,13 @@ func PollForToken(region, deviceCode string, interval, expiresIn int) (*TokenRes
 	}
 
 	return nil, fmt.Errorf("authorization timed out")
+}
+
+func pollIntervalFromSeconds(interval int) time.Duration {
+	if interval <= 0 {
+		return 5 * time.Second
+	}
+	return time.Duration(interval) * time.Second
 }
 
 // RegionTokenResponse represents the response containing the region token and kubeconfig

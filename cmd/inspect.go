@@ -19,6 +19,8 @@ type inspectPayload struct {
 	Namespace          string                 `json:"namespace,omitempty"`
 	Protocol           string                 `json:"protocol,omitempty"`
 	Host               string                 `json:"host,omitempty"`
+	SealosHost         string                 `json:"sealosHost,omitempty"`
+	CustomDomain       string                 `json:"customDomain,omitempty"`
 	LocalPort          string                 `json:"localPort,omitempty"`
 	PID                int                    `json:"pid"`
 	ProcessAlive       bool                   `json:"processAlive"`
@@ -75,6 +77,8 @@ func collectInspectPayload(tunnelID string) (*inspectPayload, error) {
 		Namespace:          sess.Namespace,
 		Protocol:           sess.Protocol,
 		Host:               sess.Host,
+		SealosHost:         sess.SealosHost,
+		CustomDomain:       sess.CustomDomain,
 		LocalPort:          sess.LocalPort,
 		PID:                sess.PID,
 		ProcessAlive:       snapshot.ProcessAlive,
@@ -122,7 +126,9 @@ func collectRemoteDiagnosticsWithContext(ctx context.Context, sess session.Tunne
 	if err != nil {
 		return nil, err
 	}
-	return client.WithNamespace(sess.Namespace).DiagnoseTunnel(ctx, sess.TunnelID)
+	return client.WithNamespace(sess.Namespace).DiagnoseTunnelWithOptions(ctx, sess.TunnelID, k8s.TunnelOptions{
+		CustomDomain: sess.CustomDomain,
+	})
 }
 
 func printInspect(cmd *cobra.Command, payload *inspectPayload) {
@@ -133,6 +139,13 @@ func printInspect(cmd *cobra.Command, payload *inspectPayload) {
 	fmt.Fprintf(out, "  Status: %s\n", payload.Status)
 	fmt.Fprintf(out, "  Mode: %s\n", valueOr(payload.Mode, "unknown"))
 	fmt.Fprintf(out, "  Host: %s\n", valueOr(payload.Host, "unknown"))
+	if payload.SealosHost != "" {
+		fmt.Fprintf(out, "  Sealos host: %s\n", payload.SealosHost)
+	}
+	if payload.CustomDomain != "" {
+		fmt.Fprintf(out, "  Custom domain: %s\n", payload.CustomDomain)
+		fmt.Fprintf(out, "  DNS CNAME target: %s\n", valueOr(payload.SealosHost, payload.Host))
+	}
 	fmt.Fprintf(out, "  Local port: %s\n", valueOr(payload.LocalPort, "unknown"))
 	fmt.Fprintf(out, "  Protocol: %s\n", valueOr(payload.Protocol, "unknown"))
 	fmt.Fprintf(out, "  Namespace: %s\n", valueOr(payload.Namespace, "unknown"))
@@ -165,6 +178,13 @@ func printInspect(cmd *cobra.Command, payload *inspectPayload) {
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "  Service: %s\n", yesNo(payload.Remote.Service.Exists))
 		fmt.Fprintf(out, "  Ingress: %s\n", yesNo(payload.Remote.Ingress.Exists))
+		if payload.Remote.Certificate != nil {
+			fmt.Fprintf(out, "  Certificate: %s", yesNo(payload.Remote.Certificate.Exists))
+			if payload.Remote.Certificate.Exists {
+				fmt.Fprintf(out, " (ready=%s secret=%s)", yesNo(payload.Remote.Certificate.Ready), valueOr(payload.Remote.Certificate.SecretName, "-"))
+			}
+			fmt.Fprintln(out)
+		}
 		if len(payload.Remote.Pods) > 0 {
 			fmt.Fprintln(out, "  Pods:")
 			for _, pod := range payload.Remote.Pods {

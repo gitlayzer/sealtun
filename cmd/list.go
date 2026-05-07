@@ -10,15 +10,17 @@ import (
 )
 
 type listItem struct {
-	TunnelID  string `json:"tunnelId"`
-	Status    string `json:"status"`
-	Host      string `json:"host"`
-	LocalPort string `json:"localPort"`
-	PID       int    `json:"pid"`
-	Mode      string `json:"mode"`
-	Namespace string `json:"namespace"`
-	Protocol  string `json:"protocol"`
-	CreatedAt string `json:"createdAt"`
+	TunnelID     string `json:"tunnelId"`
+	Status       string `json:"status"`
+	Host         string `json:"host"`
+	SealosHost   string `json:"sealosHost,omitempty"`
+	CustomDomain string `json:"customDomain,omitempty"`
+	LocalPort    string `json:"localPort"`
+	PID          int    `json:"pid"`
+	Mode         string `json:"mode"`
+	Namespace    string `json:"namespace"`
+	Protocol     string `json:"protocol"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 var listJSON bool
@@ -67,15 +69,17 @@ func collectListItemsWithLocalCheck(checkLocalPort bool) ([]listItem, error) {
 	for _, sess := range sessions {
 		snapshot := classifySession(sess, checkLocalPort)
 		items = append(items, listItem{
-			TunnelID:  sess.TunnelID,
-			Status:    snapshot.Status,
-			Host:      valueOr(sess.Host, "-"),
-			LocalPort: valueOr(sess.LocalPort, "-"),
-			PID:       sess.PID,
-			Mode:      valueOr(sess.Mode, "foreground"),
-			Namespace: valueOr(sess.Namespace, "-"),
-			Protocol:  valueOr(sess.Protocol, "-"),
-			CreatedAt: formatAuthTime(sess.CreatedAt),
+			TunnelID:     sess.TunnelID,
+			Status:       snapshot.Status,
+			Host:         valueOr(sess.Host, "-"),
+			SealosHost:   sess.SealosHost,
+			CustomDomain: sess.CustomDomain,
+			LocalPort:    valueOr(sess.LocalPort, "-"),
+			PID:          sess.PID,
+			Mode:         valueOr(sess.Mode, "foreground"),
+			Namespace:    valueOr(sess.Namespace, "-"),
+			Protocol:     valueOr(sess.Protocol, "-"),
+			CreatedAt:    formatAuthTime(sess.CreatedAt),
 		})
 	}
 

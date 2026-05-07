@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/labring/sealtun/pkg/auth"
@@ -39,11 +40,15 @@ func runLoginFlow(regionInput string, insecure bool) error {
 	}
 
 	auth.SetInsecureSkipTLSVerify(insecure)
+	defer auth.SetInsecureSkipTLSVerify(false)
 	fmt.Printf("login called (region: %s)\n", region)
 
 	deviceAuth, err := auth.RequestDeviceAuthorization(region)
 	if err != nil {
 		return fmt.Errorf("failed to request device authorization: %w", err)
+	}
+	if err := validateDeviceAuthorization(deviceAuth); err != nil {
+		return err
 	}
 
 	authURL, err := verificationURL(deviceAuth)
@@ -62,6 +67,9 @@ func runLoginFlow(regionInput string, insecure bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to poll for token: %w", err)
 	}
+	if err := validateAccessToken(tokenRes); err != nil {
+		return err
+	}
 	fmt.Println("Authorization received. Exchanging for regional token...")
 
 	regionData, err := auth.GetRegionToken(region, tokenRes.AccessToken)
@@ -75,6 +83,10 @@ func runLoginFlow(regionInput string, insecure bool) error {
 	}
 	if initData == nil || initData.Data.SealosDomain == "" {
 		return fmt.Errorf("region init data did not include SEALOS_DOMAIN")
+	}
+	sealosDomain, err := validateRegionLoginData(regionData, initData)
+	if err != nil {
+		return err
 	}
 
 	var currentWorkspace *auth.Workspace
@@ -104,7 +116,7 @@ func runLoginFlow(regionInput string, insecure bool) error {
 
 	authData := auth.AuthData{
 		Region:           region,
-		SealosDomain:     initData.Data.SealosDomain,
+		SealosDomain:     sealosDomain,
 		AccessToken:      tokenRes.AccessToken,
 		RegionalToken:    regionData.Data.Token,
 		AuthenticatedAt:  time.Now().Format(time.RFC3339),
@@ -122,6 +134,52 @@ func runLoginFlow(regionInput string, insecure bool) error {
 	return nil
 }
 
+func validateDeviceAuthorization(deviceAuth *auth.DeviceAuthResponse) error {
+	if deviceAuth == nil {
+		return fmt.Errorf("device authorization response is empty")
+	}
+	if strings.TrimSpace(deviceAuth.DeviceCode) == "" {
+		return fmt.Errorf("device authorization response did not include a device code")
+	}
+	if strings.TrimSpace(deviceAuth.UserCode) == "" {
+		return fmt.Errorf("device authorization response did not include a user code")
+	}
+	if deviceAuth.ExpiresIn <= 0 {
+		return fmt.Errorf("device authorization response included invalid expiration %d", deviceAuth.ExpiresIn)
+	}
+	if _, err := verificationURL(deviceAuth); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAccessToken(tokenRes *auth.TokenResponse) error {
+	if tokenRes == nil || strings.TrimSpace(tokenRes.AccessToken) == "" {
+		return fmt.Errorf("authorization response did not include an access token")
+	}
+	return nil
+}
+
+func validateRegionLoginData(regionData *auth.RegionTokenResponse, initData *auth.InitDataResponse) (string, error) {
+	if regionData == nil || strings.TrimSpace(regionData.Data.Token) == "" {
+		return "", fmt.Errorf("region token response did not include a regional token")
+	}
+	if regionData == nil || strings.TrimSpace(regionData.Data.Kubeconfig) == "" {
+		return "", fmt.Errorf("region token response did not include kubeconfig")
+	}
+	if initData == nil || strings.TrimSpace(initData.Data.SealosDomain) == "" {
+		return "", fmt.Errorf("region init data did not include SEALOS_DOMAIN")
+	}
+	sealosDomain, err := validateCustomDomain(initData.Data.SealosDomain)
+	if err != nil {
+		return "", fmt.Errorf("region init data included invalid SEALOS_DOMAIN: %w", err)
+	}
+	if sealosDomain == "" {
+		return "", fmt.Errorf("region init data did not include SEALOS_DOMAIN")
+	}
+	return sealosDomain, nil
+}
+
 func verificationURL(deviceAuth *auth.DeviceAuthResponse) (string, error) {
 	if deviceAuth == nil {
 		return "", fmt.Errorf("device authorization response is empty")
@@ -134,7 +192,7 @@ func verificationURL(deviceAuth *auth.DeviceAuthResponse) (string, error) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("device authorization response did not include a safe http(s) verification URL")
+	return "", fmt.Errorf("device authorization response did not include a safe https verification URL")
 }
 
 func isSafeBrowserURL(value string) bool {
@@ -142,7 +200,7 @@ func isSafeBrowserURL(value string) bool {
 	if err != nil {
 		return false
 	}
-	return (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
+	return u.Scheme == "https" && u.Host != ""
 }
 
 func openBrowser(url string) {
@@ -166,7 +224,7 @@ func openBrowser(url string) {
 		args = []string{url}
 	}
 
-	if err := exec.Command(cmd, args...).Start(); err != nil {
+	if err := exec.Command(cmd, args...).Start(); err != nil { // #nosec G204 -- command is selected from a fixed OS allowlist and the URL is HTTPS-validated.
 		fmt.Printf("Browser opened failed: %v. Please open the URL manually.\n", err)
 	} else {
 		fmt.Println("Browser opened automatically.")

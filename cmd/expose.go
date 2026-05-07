@@ -31,6 +31,18 @@ and establishes a secure connection to forward traffic to your local port.`,
 		if err := validateLocalPort(localPort); err != nil {
 			return err
 		}
+		normalizedCustomDomain, err := validateCustomDomain(customDomain)
+		if err != nil {
+			return err
+		}
+		if waitDomain {
+			if normalizedCustomDomain == "" {
+				return fmt.Errorf("--wait-domain requires --domain")
+			}
+			if domainWaitTimeout <= 0 {
+				return fmt.Errorf("--domain-timeout must be greater than 0 when --wait-domain is set")
+			}
+		}
 		if err := validateProtocol(protocol); err != nil {
 			return err
 		}
@@ -47,7 +59,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return err
 		}
 		kcPath := filepath.Join(sealtunDir, "kubeconfig")
-		kubeconfigBytes, err := os.ReadFile(kcPath)
+		kubeconfigBytes, err := os.ReadFile(kcPath) // #nosec G304 -- kubeconfig path is fixed under the user-owned Sealtun config directory.
 		if err != nil {
 			return fmt.Errorf("failed to read kubeconfig: %w", err)
 		}
@@ -68,7 +80,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 			return err
 		}
 
-		host, err := k8sClient.EnsureTunnel(ctx, tunnelID, secret, protocol, localPort)
+		hosts, err := k8sClient.EnsureTunnelWithOptions(ctx, tunnelID, secret, protocol, localPort, k8s.TunnelOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to provision tunnel on Sealos: %w", err)
 		}
@@ -86,7 +98,9 @@ and establishes a secure connection to forward traffic to your local port.`,
 			Namespace:       k8sClient.Namespace(),
 			Kubeconfig:      string(kubeconfigBytes),
 			Protocol:        protocol,
-			Host:            host,
+			Host:            hosts.PublicHost,
+			SealosHost:      hosts.SealosHost,
+			CustomDomain:    hosts.CustomDomain,
 			LocalPort:       localPort,
 			Secret:          secret,
 			Mode:            "foreground",
@@ -97,19 +111,52 @@ and establishes a secure connection to forward traffic to your local port.`,
 			},
 		}
 		if err := session.Save(sessionRecord); err != nil {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), tunnelCleanupTimeout)
 			defer cancel()
-			_ = k8sClient.Cleanup(cleanupCtx, tunnelID)
+			_ = k8sClient.CleanupTunnel(cleanupCtx, tunnelID)
 			return fmt.Errorf("failed to persist tunnel session: %w", err)
 		}
 
-		fmt.Printf("[+] Public URL will be: https://%s\n", host)
+		fmt.Printf("[+] Public URL will be: https://%s\n", hosts.PublicHost)
+		if normalizedCustomDomain != "" {
+			fmt.Printf("[+] Requested custom domain: %s\n", normalizedCustomDomain)
+			fmt.Printf("[+] Sealos CNAME target: %s\n", hosts.SealosHost)
+			fmt.Printf("[+] Configure DNS: CNAME %s -> %s\n", normalizedCustomDomain, hosts.SealosHost)
+			if !waitDomain {
+				fmt.Printf("[+] After DNS is ready, attach it with: sealtun domain set %s %s\n", tunnelID, normalizedCustomDomain)
+			}
+		}
 		fmt.Printf("[+] Waiting for tunnel server pod to be ready...\n")
 
 		readyCtx, cancelReady := context.WithTimeout(ctx, readyTimeout)
 		defer cancelReady()
 		if err := k8sClient.WaitForReady(readyCtx, tunnelID); err != nil {
 			return fmt.Errorf("timed out waiting for tunnel server: %w", err)
+		}
+		if waitDomain && normalizedCustomDomain != "" {
+			fmt.Printf("[+] Waiting for custom domain DNS, Ingress, and certificate readiness (timeout %s)...\n", domainWaitTimeout)
+			if err := waitForDomainCNAMEReady(ctx, normalizedCustomDomain, hosts.SealosHost, domainWaitTimeout); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain DNS is not ready yet: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Re-run `sealtun domain set %s %s` after CNAME is ready.\n", tunnelID, normalizedCustomDomain)
+			} else if payload, err := configureSessionCustomDomain(ctx, tunnelID, normalizedCustomDomain); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain could not be attached: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Recheck DNS and retry `sealtun domain set %s %s`.\n", tunnelID, normalizedCustomDomain)
+			} else if current, err := session.Get(tunnelID); err == nil {
+				sessionRecord = *current
+				if printErr := printDomainPayload(cmd, payload); printErr != nil {
+					return printErr
+				}
+			}
+		}
+		if waitDomain && sessionRecord.CustomDomain != "" {
+			payload, err := waitForDomainReady(ctx, sessionRecord, domainWaitTimeout)
+			if payload != nil {
+				_ = printDomainVerifyPayload(cmd, payload)
+			}
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain is not ready yet: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run. Recheck later with `sealtun domain verify %s --wait`.\n", tunnelID)
+			}
 		}
 
 		if !foreground {
@@ -138,7 +185,7 @@ and establishes a secure connection to forward traffic to your local port.`,
 		defer cleanupTunnel(cleanupTarget, tunnelID)
 
 		// 4 & 5. Connect via WebSocket
-		wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", host)
+		wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", sessionControlHost(sessionRecord))
 		return tunnel.DialServerAndServeWithOnConnected(ctx, wsURL, secret, localPort, func() {
 			current, err := session.Get(tunnelID)
 			if err != nil {
@@ -155,15 +202,22 @@ and establishes a secure connection to forward traffic to your local port.`,
 var protocol string
 var readyTimeout time.Duration
 var foreground bool
+var customDomain string
+var waitDomain bool
+var domainWaitTimeout time.Duration
 
 const daemonConnectTimeout = 60 * time.Second
 const daemonConnectionStability = 2 * time.Second
+const tunnelCleanupTimeout = 30 * time.Second
 
 func init() {
 	rootCmd.AddCommand(exposeCmd)
 	exposeCmd.Flags().StringVar(&protocol, "protocol", "https", "Protocol to tunnel (currently only https)")
 	exposeCmd.Flags().DurationVar(&readyTimeout, "ready-timeout", 90*time.Second, "Maximum time to wait for the remote tunnel pod to become ready")
 	exposeCmd.Flags().BoolVar(&foreground, "foreground", false, "Run the tunnel in the current process instead of handing it off to the local daemon")
+	exposeCmd.Flags().StringVar(&customDomain, "domain", "", "Custom domain to prepare; create a CNAME to the printed Sealos target before attaching")
+	exposeCmd.Flags().BoolVar(&waitDomain, "wait-domain", false, "Wait for verified custom domain DNS, then attach it and wait for Ingress/certificate readiness")
+	exposeCmd.Flags().DurationVar(&domainWaitTimeout, "domain-timeout", 5*time.Minute, "Maximum time to wait for custom domain readiness")
 }
 
 func validateLocalPort(port string) error {
@@ -210,10 +264,10 @@ func recoverStaleSessions(ctx context.Context) error {
 
 func cleanupTunnel(k8sClient *k8s.Client, tunnelID string) {
 	fmt.Printf("\r[+] Disconnected. Cleaning up tunnel resources remotely...\n")
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), tunnelCleanupTimeout)
 	defer cancel()
 
-	if err := k8sClient.Cleanup(cleanupCtx, tunnelID); err != nil {
+	if err := k8sClient.CleanupTunnel(cleanupCtx, tunnelID); err != nil {
 		fmt.Printf("[!] Cleanup for tunnel %s did not complete: %v\n", tunnelID, err)
 		return
 	}

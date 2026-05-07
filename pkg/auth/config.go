@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Workspace struct {
@@ -81,24 +82,24 @@ func copyLegacyFile(src, dst string) error {
 		return err
 	}
 
-	info, err := os.Stat(src)
+	info, err := os.Lstat(src)
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() {
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return nil
 	}
 
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- legacy source is a validated regular file under the user-owned legacy config directory.
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) // #nosec G304 -- destination is a fixed file under the user-owned Sealtun config directory.
 	if err != nil {
 		if os.IsExist(err) {
 			return nil
@@ -108,9 +109,14 @@ func copyLegacyFile(src, dst string) error {
 
 	if _, err := io.Copy(out, in); err != nil {
 		_ = out.Close()
+		_ = os.Remove(dst)
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	return nil
 }
 
 // SaveAuthData saves auth and kubeconfig
@@ -120,20 +126,72 @@ func SaveAuthData(authData AuthData, kubeconfig string) error {
 		return err
 	}
 
-	authPath := filepath.Join(dir, "auth.json")
-	b, err := json.MarshalIndent(authData, "", "  ")
+	b, err := json.MarshalIndent(authData, "", "  ") // #nosec G117 -- auth data is intentionally persisted with 0600 permissions for CLI reuse.
 	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(authPath, b, 0600); err != nil {
 		return err
 	}
 
 	kcPath := filepath.Join(dir, "kubeconfig")
-	if err := os.WriteFile(kcPath, []byte(kubeconfig), 0600); err != nil {
+	previousKubeconfig, hadPreviousKubeconfig, err := readExistingFile(kcPath)
+	if err != nil {
+		return err
+	}
+	if err := writeFileAtomic(kcPath, []byte(kubeconfig), 0600); err != nil {
 		return err
 	}
 
+	authPath := filepath.Join(dir, "auth.json")
+	if err := writeFileAtomic(authPath, b, 0600); err != nil {
+		if rollbackErr := restoreFile(kcPath, previousKubeconfig, hadPreviousKubeconfig, 0600); rollbackErr != nil {
+			return fmt.Errorf("%w; failed to restore previous kubeconfig: %v", err, rollbackErr)
+		}
+		return err
+	}
+
+	return nil
+}
+
+func readExistingFile(path string) ([]byte, bool, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is one of the fixed Sealtun auth files under the user-owned config directory.
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return data, true, nil
+}
+
+func restoreFile(path string, data []byte, exists bool, perm os.FileMode) error {
+	if !exists {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return writeFileAtomic(path, data, perm)
+}
+
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmpPath := filepath.Join(dir, fmt.Sprintf(".%s.%d.%d.tmp", filepath.Base(path), os.Getpid(), time.Now().UnixNano()))
+	file, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, perm) // #nosec G304 -- temp file is created next to a fixed Sealtun config file.
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
 	return nil
 }
 
@@ -144,7 +202,7 @@ func LoadAuthData() (*AuthData, error) {
 		return nil, err
 	}
 	authPath := filepath.Join(dir, "auth.json")
-	b, err := os.ReadFile(authPath)
+	b, err := os.ReadFile(authPath) // #nosec G304 -- auth path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return nil, err
 	}
