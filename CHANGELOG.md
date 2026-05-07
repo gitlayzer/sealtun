@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.0.10] - 2026-05-07
+
+### Added
+- **Region Management**: Added `sealtun region list`, `sealtun region current`, and `sealtun region use` for built-in Sealos Cloud regions.
+- **Sealos Domain Discovery**: Login now fetches Launchpad init data and stores `SEALOS_DOMAIN` for ingress host generation.
+- **Diagnostics Controls**: Added `list --check` for local target port probing and `inspect --remote` for opt-in Kubernetes diagnostics.
+
+### Changed
+- **Session Health Model**: `inspect` and `doctor` now report degraded tunnels when the tunnel owner is alive but the local target port is unreachable.
+- **Legacy Migration**: First-run migration from `~/.sealos` now copies only auth and kubeconfig files, not old tunnel session records.
+- **Region Contract**: Login now accepts only built-in regions to avoid partially supported custom region endpoint combinations.
+
+### Fixed
+- **Login Browser URL Handling**: Device authorization URLs are selected before printing and are restricted to safe `http`/`https` schemes.
+- **Doctor Reliability**: Remote diagnostics now use bounded worker scheduling to reduce noisy timeout cascades on slow clusters.
+- **Cleanup Safety**: Cleanup paths use session-scoped kubeconfig data and avoid broad app-deploy-manager label deletion.
+
 ## [v0.0.8] - 2026-04-20
 
 ### Added

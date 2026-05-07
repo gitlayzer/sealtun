@@ -17,6 +17,40 @@ const (
 	ClientID = "af993c98-d19d-4bdc-b338-79b80dc4f8bf"
 )
 
+type RegionOption struct {
+	Name         string `json:"name"`
+	URL          string `json:"url"`
+	SealosDomain string `json:"sealosDomain,omitempty"`
+}
+
+var knownRegions = []RegionOption{
+	{Name: "gzg", URL: "https://gzg.sealos.run", SealosDomain: "sealosgzg.site"},
+	{Name: "hzh", URL: "https://hzh.sealos.run", SealosDomain: "sealoshzh.site"},
+	{Name: "cloud", URL: "https://cloud.sealos.io", SealosDomain: "cloud.sealos.io"},
+}
+
+func KnownRegions() []RegionOption {
+	items := make([]RegionOption, len(knownRegions))
+	copy(items, knownRegions)
+	return items
+}
+
+func ResolveRegion(input string) (string, error) {
+	value := strings.TrimSpace(input)
+	if value == "" {
+		return DefaultRegion, nil
+	}
+	normalizedValue := strings.TrimRight(value, "/")
+
+	for _, region := range knownRegions {
+		if value == region.Name || normalizedValue == region.URL {
+			return region.URL, nil
+		}
+	}
+
+	return "", fmt.Errorf("unknown region %q; run `sealtun region list` to see supported regions", input)
+}
+
 var insecureSkipTLSVerify bool
 
 func SetInsecureSkipTLSVerify(enabled bool) {
@@ -64,6 +98,12 @@ type Namespace struct {
 type NamespaceListResponse struct {
 	Data struct {
 		Namespaces []Namespace `json:"namespaces"`
+	} `json:"data"`
+}
+
+type InitDataResponse struct {
+	Data struct {
+		SealosDomain string `json:"SEALOS_DOMAIN"`
 	} `json:"data"`
 }
 
@@ -224,6 +264,44 @@ func ListWorkspaces(region, regionalToken string) (*NamespaceListResponse, error
 	}
 
 	var res NamespaceListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func GetInitData(region string) (*InitDataResponse, error) {
+	normalized, err := ResolveRegion(region)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(normalized)
+	if err != nil {
+		return nil, err
+	}
+	host := u.Hostname()
+	if host == "" {
+		return nil, fmt.Errorf("invalid region %q", region)
+	}
+	apiURL := fmt.Sprintf("https://applaunchpad.%s/api/platform/getInitData", u.Host)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	client := httpClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get init data failed (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var res InitDataResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return nil, err
 	}

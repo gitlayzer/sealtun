@@ -146,7 +146,7 @@ func TestCollectDoctorPayloadCountsStoppedSeparately(t *testing.T) {
 	}
 }
 
-func TestCollectDoctorPayloadCountsReachablePortsOnlyForActiveSessions(t *testing.T) {
+func TestCollectDoctorPayloadCountsDegradedSessionsSeparately(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -190,14 +190,17 @@ func TestCollectDoctorPayloadCountsReachablePortsOnlyForActiveSessions(t *testin
 	if err != nil {
 		t.Fatalf("collectDoctorPayload: %v", err)
 	}
-	if payload.ActiveSessions != 1 {
-		t.Fatalf("expected 1 active session, got %d", payload.ActiveSessions)
+	if payload.ActiveSessions != 0 {
+		t.Fatalf("expected no active sessions, got %d", payload.ActiveSessions)
+	}
+	if payload.DegradedSessions != 1 {
+		t.Fatalf("expected 1 degraded session, got %d", payload.DegradedSessions)
 	}
 	if payload.ReachableActivePorts != 0 {
 		t.Fatalf("expected no reachable active ports, got %d", payload.ReachableActivePorts)
 	}
-	if !containsWarning(payload.Warnings, "some active tunnels do not have a reachable local port") {
-		t.Fatalf("expected active port warning, got %#v", payload.Warnings)
+	if !containsWarning(payload.Warnings, "1 tunnel session(s) have a live owner but unreachable local port") {
+		t.Fatalf("expected degraded warning, got %#v", payload.Warnings)
 	}
 }
 

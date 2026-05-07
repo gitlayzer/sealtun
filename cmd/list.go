@@ -22,12 +22,14 @@ type listItem struct {
 }
 
 var listJSON bool
+var listCheck bool
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List local Sealtun tunnel sessions",
 	Long: `List local Sealtun tunnel sessions tracked on this machine.
-This command reads local session records and classifies them as active or stale.`,
+By default this command only reads local session records. Use --check to probe
+local target ports and mark unreachable running tunnels as degraded.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		items, err := collectListItems()
 		if err != nil {
@@ -48,9 +50,14 @@ This command reads local session records and classifies them as active or stale.
 func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output tunnel sessions as JSON")
+	listCmd.Flags().BoolVar(&listCheck, "check", false, "Probe local target ports and report degraded sessions")
 }
 
 func collectListItems() ([]listItem, error) {
+	return collectListItemsWithLocalCheck(listCheck)
+}
+
+func collectListItemsWithLocalCheck(checkLocalPort bool) ([]listItem, error) {
 	sessions, err := session.List()
 	if err != nil {
 		return nil, fmt.Errorf("load tunnel sessions: %w", err)
@@ -58,9 +65,10 @@ func collectListItems() ([]listItem, error) {
 
 	items := make([]listItem, 0, len(sessions))
 	for _, sess := range sessions {
+		snapshot := classifySession(sess, checkLocalPort)
 		items = append(items, listItem{
 			TunnelID:  sess.TunnelID,
-			Status:    sessionState(sess),
+			Status:    snapshot.Status,
 			Host:      valueOr(sess.Host, "-"),
 			LocalPort: valueOr(sess.LocalPort, "-"),
 			PID:       sess.PID,
@@ -100,8 +108,4 @@ func printListTable(cmd *cobra.Command, items []listItem) {
 		)
 	}
 	_ = w.Flush()
-}
-
-func sessionState(sess session.TunnelSession) string {
-	return session.RuntimeStatusWithOwner(sess, sessionOwnerAlive(sess))
 }

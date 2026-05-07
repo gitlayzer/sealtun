@@ -16,6 +16,7 @@ type Workspace struct {
 
 type AuthData struct {
 	Region           string     `json:"region"`
+	SealosDomain     string     `json:"sealos_domain,omitempty"`
 	AccessToken      string     `json:"access_token"`
 	RegionalToken    string     `json:"regional_token"`
 	AuthenticatedAt  string     `json:"authenticated_at"`
@@ -67,28 +68,6 @@ func GetSealosDir() (string, error) {
 func copyLegacyConfigFiles(legacyDir, dir string) error {
 	for _, name := range []string{"auth.json", "kubeconfig"} {
 		if err := copyLegacyFile(filepath.Join(legacyDir, name), filepath.Join(dir, name)); err != nil {
-			return err
-		}
-	}
-
-	legacySessionsDir := filepath.Join(legacyDir, "sessions")
-	entries, err := os.ReadDir(legacySessionsDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	sessionsDir := filepath.Join(dir, "sessions")
-	if err := os.MkdirAll(sessionsDir, 0700); err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		if err := copyLegacyFile(filepath.Join(legacySessionsDir, entry.Name()), filepath.Join(sessionsDir, entry.Name())); err != nil {
 			return err
 		}
 	}

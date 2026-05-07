@@ -9,6 +9,7 @@ It connects your local development machine straight to the internet by dynamical
 ## Features
 
 - 🔑 **Password-less OAuth2 Login**: Connect easily with `sealtun login` using the Device Authorization Grant flow.
+- 🌍 **Region Switching**: List built-in Sealos Cloud regions and switch regions by re-running login with `sealtun region use`.
 - 🚀 **One-Command Expose**: Execute `sealtun expose 8080`, and get a fully trusted HTTPS URL for your localhost securely routed.
 - 🌐 **Optimized for Sealos**: Native support for Sealos Cloud domains, HTTPS traffic, and WebSocket tunnels.
 - 🐳 **All-in-One Binary**: The client and the server agent live comfortably in the exact same compact binary and Docker image.
@@ -30,8 +31,14 @@ go build -o sealtun main.go
 Perform the device authentication (which operates smoothly without passwords similar to `gh auth login`):
 ```bash
 sealtun login
+
+# List supported regions
+sealtun region list
+
+# Switch to another region
+sealtun region use hzh
 ```
-*Note: This automatically retrieves your Kubernetes API configuration and tokens securely storing them within `~/.sealtun`.*
+*Note: Only built-in Sealos Cloud regions are currently supported. Login retrieves your Kubernetes credentials and the region's `SEALOS_DOMAIN`, then stores them under `~/.sealtun`.*
 
 ### 2. Expose a local port
 For instance, to make your local Web Server running on Port `3000` accessible to everyone on the Internet:
@@ -56,9 +63,12 @@ Sealtun will:
 
 - `expose` now validates port and protocol inputs before provisioning remote resources.
 - `--protocol` currently supports only `https`. TCP, UDP, and gRPC are intentionally out of scope until there is a dedicated transport design for them.
-- `inspect` and `doctor` collect remote Deployment, Service, Ingress, Pod, and Event diagnostics.
+- Ingress host generation prefers the `SEALOS_DOMAIN` returned by Sealos Launchpad instead of guessing from the region host.
+- `list` reads local session records by default; use `list --check` to probe local target ports and report degraded sessions.
+- `inspect` shows local session state by default; use `inspect --remote` to include best-effort Kubernetes diagnostics.
+- `doctor` summarizes daemon, login, session, local port, and remote Deployment, Service, Ingress, Pod, and Event diagnostics.
 - Tunnel pod readiness now has a default `90s` timeout, configurable via `--ready-timeout`.
-- Configuration is stored in `~/.sealtun`, with automatic migration from the legacy `~/.sealos` path.
+- Configuration is stored in `~/.sealtun`; first run only migrates legacy auth and kubeconfig files from `~/.sealos`, not old tunnel session records.
 
 ## License
 

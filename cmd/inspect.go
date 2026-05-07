@@ -66,11 +66,10 @@ func collectInspectPayload(tunnelID string) (*inspectPayload, error) {
 		return nil, err
 	}
 
-	processAlive := sessionOwnerAlive(*sess)
-	portReachable := localPortReachable(sess.LocalPort)
+	snapshot := classifySession(*sess, true)
 	payload := &inspectPayload{
 		TunnelID:           sess.TunnelID,
-		Status:             sessionState(*sess),
+		Status:             snapshot.Status,
 		Mode:               valueOr(sess.Mode, "foreground"),
 		Region:             sess.Region,
 		Namespace:          sess.Namespace,
@@ -78,14 +77,11 @@ func collectInspectPayload(tunnelID string) (*inspectPayload, error) {
 		Host:               sess.Host,
 		LocalPort:          sess.LocalPort,
 		PID:                sess.PID,
-		ProcessAlive:       processAlive,
-		LocalPortReachable: portReachable,
+		ProcessAlive:       snapshot.ProcessAlive,
+		LocalPortReachable: snapshot.LocalPortReachable,
 		CreatedAt:          formatAuthTime(sess.CreatedAt),
 		Resources:          sess.Resources,
 		LastError:          sess.LastError,
-	}
-	if payload.Status == "active" && payload.ProcessAlive && !payload.LocalPortReachable {
-		payload.Status = "degraded"
 	}
 
 	if payload.Status == "stale" {

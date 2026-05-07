@@ -21,6 +21,7 @@ type doctorPayload struct {
 	ActiveSessions       int      `json:"activeSessions"`
 	ConnectingSessions   int      `json:"connectingSessions"`
 	ErrorSessions        int      `json:"errorSessions"`
+	DegradedSessions     int      `json:"degradedSessions"`
 	StoppedSessions      int      `json:"stoppedSessions"`
 	StaleSessions        int      `json:"staleSessions"`
 	ReachableActivePorts int      `json:"reachableActivePorts"`
@@ -62,7 +63,7 @@ func collectDoctorPayload() (*doctorPayload, error) {
 		return nil, err
 	}
 
-	items, err := collectListItems()
+	items, err := collectListItemsWithLocalCheck(true)
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +80,9 @@ func collectDoctorPayload() (*doctorPayload, error) {
 		switch item.Status {
 		case "active":
 			payload.ActiveSessions++
-			if localPortReachable(item.LocalPort) {
-				payload.ReachableActivePorts++
-			}
+			payload.ReachableActivePorts++
+		case "degraded":
+			payload.DegradedSessions++
 		case "connecting":
 			payload.ConnectingSessions++
 		case "error":
@@ -118,8 +119,8 @@ func collectDoctorPayload() (*doctorPayload, error) {
 	if payload.ErrorSessions > 0 {
 		payload.Warnings = append(payload.Warnings, fmt.Sprintf("%d tunnel session(s) are in error state; inspect them for the last error", payload.ErrorSessions))
 	}
-	if payload.ActiveSessions > payload.ReachableActivePorts {
-		payload.Warnings = append(payload.Warnings, "some active tunnels do not have a reachable local port")
+	if payload.DegradedSessions > 0 {
+		payload.Warnings = append(payload.Warnings, fmt.Sprintf("%d tunnel session(s) have a live owner but unreachable local port", payload.DegradedSessions))
 	}
 
 	return payload, nil
@@ -136,41 +137,57 @@ func runDoctorRemoteDiagnostics(payload *doctorPayload, items []listItem) {
 		err      error
 	}
 
-	sem := make(chan struct{}, doctorRemoteConcurrency)
-	results := make(chan result)
+	jobs := make(chan listItem, len(items))
+	results := make(chan result, len(items))
 	var wg sync.WaitGroup
-	started := 0
+	queued := 0
 
+	workerCount := doctorRemoteConcurrency
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range jobs {
+				sess, err := findSession(item.TunnelID)
+				if err != nil {
+					select {
+					case results <- result{tunnelID: item.TunnelID, err: fmt.Errorf("session disappeared during diagnostics: %w", err)}:
+					case <-ctx.Done():
+					}
+					continue
+				}
+				remote, err := collectRemoteDiagnosticsWithContext(ctx, *sess)
+				if err != nil {
+					select {
+					case results <- result{tunnelID: item.TunnelID, err: fmt.Errorf("remote diagnostics unavailable: %w", err)}:
+					case <-ctx.Done():
+					}
+					continue
+				}
+				select {
+				case results <- result{tunnelID: item.TunnelID, checked: true, warnings: remote.Warnings}:
+				case <-ctx.Done():
+				}
+			}
+		}()
+	}
+
+enqueue:
 	for _, item := range items {
 		if item.Status == "stopped" || item.Status == "stale" {
 			continue
 		}
-		item := item
-		started++
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				results <- result{tunnelID: item.TunnelID, err: ctx.Err()}
-				return
-			}
-
-			sess, err := findSession(item.TunnelID)
-			if err != nil {
-				results <- result{tunnelID: item.TunnelID, err: fmt.Errorf("session disappeared during diagnostics: %w", err)}
-				return
-			}
-			remote, err := collectRemoteDiagnosticsWithContext(ctx, *sess)
-			if err != nil {
-				results <- result{tunnelID: item.TunnelID, err: fmt.Errorf("remote diagnostics unavailable: %w", err)}
-				return
-			}
-			results <- result{tunnelID: item.TunnelID, checked: true, warnings: remote.Warnings}
-		}()
+		select {
+		case jobs <- item:
+			queued++
+		case <-ctx.Done():
+			break enqueue
+		}
 	}
+	close(jobs)
 
 	go func() {
 		wg.Wait()
@@ -194,7 +211,7 @@ func runDoctorRemoteDiagnostics(payload *doctorPayload, items []listItem) {
 		}
 	}
 
-	if started > 0 && ctx.Err() != nil {
+	if queued > 0 && ctx.Err() != nil {
 		payload.Warnings = append(payload.Warnings, fmt.Sprintf("remote diagnostics stopped after %s; some tunnels may not have been checked", doctorRemoteTimeout))
 	}
 }
@@ -206,7 +223,7 @@ func printDoctor(cmd *cobra.Command, payload *doctorPayload) {
 	fmt.Fprintf(out, "  Daemon running: %s\n", yesNo(payload.DaemonRunning))
 	fmt.Fprintf(out, "  Logged in: %s\n", yesNo(payload.LoggedIn))
 	fmt.Fprintf(out, "  Kubeconfig present: %s\n", yesNo(payload.KubeconfigPresent))
-	fmt.Fprintf(out, "  Sessions: %d total, %d active, %d connecting, %d error, %d stopped, %d stale\n", payload.TotalSessions, payload.ActiveSessions, payload.ConnectingSessions, payload.ErrorSessions, payload.StoppedSessions, payload.StaleSessions)
+	fmt.Fprintf(out, "  Sessions: %d total, %d active, %d degraded, %d connecting, %d error, %d stopped, %d stale\n", payload.TotalSessions, payload.ActiveSessions, payload.DegradedSessions, payload.ConnectingSessions, payload.ErrorSessions, payload.StoppedSessions, payload.StaleSessions)
 	fmt.Fprintf(out, "  Reachable active local ports: %d\n", payload.ReachableActivePorts)
 	fmt.Fprintf(out, "  Remote checks: %d checked, %d with issues\n", payload.RemoteChecked, payload.RemoteIssues)
 

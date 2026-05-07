@@ -166,7 +166,9 @@ func newClientFromRawConfig(config *rest.Config, rawConfig clientcmdapi.Config, 
 
 	// Infer the public app domain from the selected Sealos region.
 	domain := "cloud.sealos.app"
-	if authData != nil && authData.Region != "" {
+	if authData != nil && authData.SealosDomain != "" {
+		domain = authData.SealosDomain
+	} else if authData != nil && authData.Region != "" {
 		if u, err := url.Parse(authData.Region); err == nil {
 			host := u.Host
 			if strings.Contains(host, ":") {

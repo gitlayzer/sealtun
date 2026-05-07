@@ -44,6 +44,19 @@ func TestDomainInferenceForSealosRegions(t *testing.T) {
 	}
 }
 
+func TestDomainUsesSealosDomainFromAuthDataWhenPresent(t *testing.T) {
+	client, err := newClientFromRawConfig(&rest.Config{Host: "https://kubernetes.example.com"}, rawConfigForTest(), &auth.AuthData{
+		Region:       "https://hzh.sealos.run",
+		SealosDomain: "custom.sealos.example",
+	})
+	if err != nil {
+		t.Fatalf("newClientFromRawConfig returned error: %v", err)
+	}
+	if client.domain != "custom.sealos.example" {
+		t.Fatalf("expected custom sealos domain to win, got %s", client.domain)
+	}
+}
+
 func TestEnsureTunnelCleansPartialResourcesOnFailure(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	clientset.PrependReactor("create", "ingresses", func(action ktesting.Action) (bool, runtime.Object, error) {

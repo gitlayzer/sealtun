@@ -30,6 +30,7 @@ type kubeconfigStatus struct {
 type statusPayload struct {
 	LoggedIn        bool             `json:"loggedIn"`
 	Region          string           `json:"region,omitempty"`
+	SealosDomain    string           `json:"sealosDomain,omitempty"`
 	AuthMethod      string           `json:"authMethod,omitempty"`
 	AuthenticatedAt string           `json:"authenticatedAt,omitempty"`
 	WorkspaceID     string           `json:"workspaceId,omitempty"`
@@ -98,6 +99,7 @@ func collectStatus() (*statusPayload, error) {
 	} else {
 		status.LoggedIn = true
 		status.Region = authData.Region
+		status.SealosDomain = authData.SealosDomain
 		status.AuthMethod = authData.AuthMethod
 		status.AuthenticatedAt = formatAuthTime(authData.AuthenticatedAt)
 		if authData.CurrentWorkspace != nil {
@@ -145,6 +147,7 @@ func printHumanStatus(cmd *cobra.Command, status *statusPayload) {
 	fmt.Fprintln(out, "Session")
 	if status.LoggedIn {
 		fmt.Fprintf(out, "  Region: %s\n", valueOr(status.Region, "unknown"))
+		fmt.Fprintf(out, "  Sealos domain: %s\n", valueOr(status.SealosDomain, "unknown"))
 		fmt.Fprintf(out, "  Auth method: %s\n", valueOr(status.AuthMethod, "unknown"))
 		fmt.Fprintf(out, "  Authenticated at: %s\n", valueOr(status.AuthenticatedAt, "unknown"))
 		if status.WorkspaceID != "" || status.WorkspaceName != "" {

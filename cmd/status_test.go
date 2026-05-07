@@ -71,6 +71,9 @@ users:
 	if !status.LoggedIn {
 		t.Fatal("expected logged in status")
 	}
+	if status.SealosDomain != "" {
+		t.Fatalf("expected empty sealos domain, got %s", status.SealosDomain)
+	}
 	if status.Kubeconfig.CurrentContext != "ctx-demo" {
 		t.Fatalf("unexpected current context: %s", status.Kubeconfig.CurrentContext)
 	}
@@ -82,6 +85,44 @@ users:
 	}
 	if status.WorkspaceID != "ns-test" {
 		t.Fatalf("unexpected workspace id: %s", status.WorkspaceID)
+	}
+}
+
+func TestCollectStatusIncludesSealosDomain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := auth.SaveAuthData(auth.AuthData{
+		Region:          "https://hzh.sealos.run",
+		SealosDomain:    "sealoshzh.site",
+		AuthMethod:      "oauth2_device_grant",
+		AuthenticatedAt: "2026-05-06T08:00:00Z",
+	}, `
+apiVersion: v1
+kind: Config
+current-context: ctx-demo
+contexts:
+- name: ctx-demo
+  context:
+    cluster: cluster-demo
+clusters:
+- name: cluster-demo
+  cluster:
+    server: https://example.com
+users:
+- name: user-demo
+  user:
+    token: abc
+`); err != nil {
+		t.Fatalf("SaveAuthData returned error: %v", err)
+	}
+
+	status, err := collectStatus()
+	if err != nil {
+		t.Fatalf("collectStatus returned error: %v", err)
+	}
+	if status.SealosDomain != "sealoshzh.site" {
+		t.Fatalf("expected sealos domain sealoshzh.site, got %s", status.SealosDomain)
 	}
 }
 

@@ -18,6 +18,12 @@ import (
 
 var errMissingSessionKubeconfig = errors.New("session has no embedded kubeconfig")
 
+type sessionSnapshot struct {
+	Status             string
+	ProcessAlive       bool
+	LocalPortReachable bool
+}
+
 func findSession(tunnelID string) (*session.TunnelSession, error) {
 	sess, err := session.Get(tunnelID)
 	if err != nil {
@@ -96,6 +102,26 @@ func sessionOwnerAlive(sess session.TunnelSession) bool {
 		return daemonstate.Alive()
 	}
 	return session.OwnerAlive(sess)
+}
+
+func classifySession(sess session.TunnelSession, checkLocalPort bool) sessionSnapshot {
+	processAlive := sessionOwnerAlive(sess)
+	status := session.RuntimeStatusWithOwner(sess, processAlive)
+	localReachable := false
+	if checkLocalPort {
+		localReachable = localPortReachable(sess.LocalPort)
+		if status == "active" && processAlive && !localReachable {
+			status = "degraded"
+		}
+	} else if status == "active" && processAlive && sess.Mode != "daemon" {
+		status = "running"
+	}
+
+	return sessionSnapshot{
+		Status:             status,
+		ProcessAlive:       processAlive,
+		LocalPortReachable: localReachable,
+	}
 }
 
 func sessionIsStale(sess session.TunnelSession, gracePeriod time.Duration) bool {
