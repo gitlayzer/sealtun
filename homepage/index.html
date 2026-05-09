@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sealtun | 面向 Sealos 的云原生隧道</title>
+  <meta name="description" content="Sealtun 是面向 Sealos Cloud 和 Kubernetes 的云原生隧道工具。用一个二进制暴露本地服务，支持自定义域名、Profile、多区域、诊断、日志、指标和声明式配置。">
+  <meta property="og:title" content="Sealtun | 面向 Sealos 的云原生隧道">
+  <meta property="og:description" content="把本地服务安全发布到 Sealos Cloud，自动管理 Kubernetes 资源、Ingress、自定义域名和诊断闭环。">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0b4f43">
+  <link rel="icon" type="image/svg+xml" href="../assets/sealtun-logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="glow glow-left" aria-hidden="true"></div>
+  <div class="glow glow-right" aria-hidden="true"></div>
+
+  <nav class="nav-shell" aria-label="Primary navigation">
+    <a class="brand" href="#top" aria-label="Sealtun home">
+      <img src="../assets/sealtun-logo.svg" alt="Sealtun logo" class="brand-mark">
+      <span>Sealtun</span>
+    </a>
+    <div class="nav-links">
+      <a href="#value">优势</a>
+      <a href="#features">功能</a>
+      <a href="#workflow">流程</a>
+      <a href="#install">安装</a>
+    </div>
+    <a class="nav-cta" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
+      GitHub
+      <span aria-hidden="true">↗</span>
+    </a>
+  </nav>
+
+  <main id="main">
+    <section class="hero section" id="top">
+      <div class="hero-copy reveal">
+        <span class="eyebrow">Sealos Cloud Native Tunnel</span>
+        <h1>把本地服务发布成可信的 Sealos 公网入口。</h1>
+        <p class="hero-lead">
+          Sealtun 自动创建 Kubernetes 代理资源、Ingress、域名和本地 WebSocket 隧道，让开发环境、临时演示和团队联调获得稳定的 HTTPS 访问地址。
+        </p>
+        <div class="hero-actions" aria-label="Primary actions">
+          <a class="button primary" href="#install">
+            快速安装
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a class="button secondary" href="https://github.com/gitlayzer/sealtun/releases/latest" target="_blank" rel="noreferrer">
+            下载最新版本
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <div class="hero-proof" aria-label="Project highlights">
+          <span>一个二进制</span>
+          <span>内置多区域</span>
+          <span>Kubernetes 原生</span>
+        </div>
+      </div>
+
+      <div class="hero-stage reveal delay-1" aria-label="Sealtun product preview">
+        <div class="terminal-shell">
+          <div class="terminal-card">
+            <div class="terminal-top">
+              <span></span><span></span><span></span>
+              <strong>live tunnel</strong>
+            </div>
+            <pre><code>$ sealtun login gzg --profile main
+Authenticated as main · gzg
+
+$ sealtun expose 3000 --domain web.example.com
+Public URL: https://x7q9k2ma.sealosgzg.site
+DNS: CNAME web.example.com -> x7q9k2ma.sealosgzg.site
+
+$ sealtun domain verify x7q9k2ma --wait
+DNS ready        yes
+Ingress ready    yes
+Certificate      ready</code></pre>
+          </div>
+        </div>
+        <aside class="route-card" aria-label="Tunnel summary">
+          <span class="status-dot"></span>
+          <strong>web.example.com</strong>
+          <p>daemon · localhost:3000 · gzg</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="signal-strip reveal" aria-label="Key metrics">
+      <div>
+        <strong>1</strong>
+        <span>客户端与远端 server 共用一个二进制</span>
+      </div>
+      <div>
+        <strong>5</strong>
+        <span>内置 Sealos Cloud 区域与域名后缀</span>
+      </div>
+      <div>
+        <strong>0</strong>
+        <span>无需手动编写 Ingress 和证书 YAML</span>
+      </div>
+      <div>
+        <strong>100%</strong>
+        <span>基于 Kubernetes API 的资源管理</span>
+      </div>
+    </section>
+
+    <section class="section value" id="value">
+      <div class="section-intro reveal">
+        <span class="eyebrow">Why teams choose it</span>
+        <h2>不是临时转发脚本，而是 Sealos 场景里的隧道控制面。</h2>
+      </div>
+      <div class="value-grid">
+        <article class="value-card reveal">
+          <span>01</span>
+          <h3>更少云端配置</h3>
+          <p>CLI 自动创建远端代理 Pod、Service 和 Ingress。你只需要确认本地端口，Sealtun 负责把它变成可访问的 HTTPS 入口。</p>
+        </article>
+        <article class="value-card accent reveal delay-1">
+          <span>02</span>
+          <h3>更稳的域名路径</h3>
+          <p>先生成 Sealos 官方子域名，再引导 CNAME 到该地址；自定义域名绑定前会验证 DNS，绑定后能诊断证书和 Ingress 状态。</p>
+        </article>
+        <article class="value-card reveal delay-2">
+          <span>03</span>
+          <h3>更清楚的本地状态</h3>
+          <p>Profile、region、workspace 和 kubeconfig 都跟随 active scope。CLI 与 dashboard 只读取当前 Sealtun 配置边界内的数据。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section features" id="features">
+      <div class="feature-copy reveal">
+        <span class="eyebrow">Product capabilities</span>
+        <h2>从暴露端口到排障闭环，常用能力已经连成一条线。</h2>
+        <p>适合开发预览、临时验收、客户演示、Webhook 回调、本地调试和团队联调。</p>
+      </div>
+      <div class="feature-list">
+        <article class="feature-item reveal">
+          <div class="feature-icon">EX</div>
+          <div>
+            <h3>Expose</h3>
+            <p><code>sealtun expose 3000</code> 创建公网 HTTPS 地址，并由本地 daemon 维护连接。</p>
+          </div>
+        </article>
+        <article class="feature-item reveal delay-1">
+          <div class="feature-icon">DM</div>
+          <div>
+            <h3>Custom domain</h3>
+            <p><code>domain status</code> 和 <code>domain doctor</code> 检查 CNAME、Ingress、Certificate 与 TLS secret。</p>
+          </div>
+        </article>
+        <article class="feature-item reveal delay-2">
+          <div class="feature-icon">PF</div>
+          <div>
+            <h3>Profile & region</h3>
+            <p>多账号、多 region、多 workspace 分开保存，切换 profile 时同步切换 auth 与 kubeconfig。</p>
+          </div>
+        </article>
+        <article class="feature-item reveal delay-3">
+          <div class="feature-icon">AP</div>
+          <div>
+            <h3>Declarative apply</h3>
+            <p><code>sealtun apply -f sealtun.yaml</code> 用稳定名称幂等创建或更新团队共享隧道。</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section workflow" id="workflow">
+      <div class="section-intro reveal">
+        <span class="eyebrow">Operational workflow</span>
+        <h2>一条清晰路径，覆盖创建、连接、观察和回收。</h2>
+      </div>
+      <div class="timeline">
+        <div class="step reveal">
+          <span>Login</span>
+          <h3>选择区域与身份</h3>
+          <p>登录获取 Sealos Cloud 凭据，保存当前 region 的 <code>kubeconfig</code> 与可用域名后缀。</p>
+        </div>
+        <div class="step reveal delay-1">
+          <span>Provision</span>
+          <h3>创建云端代理</h3>
+          <p>远端资源按 <code>sealtun-*</code> 命名，便于诊断、审计和安全清理。</p>
+        </div>
+        <div class="step reveal delay-2">
+          <span>Connect</span>
+          <h3>建立反向隧道</h3>
+          <p>本地 daemon 连接远端 WebSocket 控制面，并把请求转发到本地服务。</p>
+        </div>
+        <div class="step reveal delay-3">
+          <span>Observe</span>
+          <h3>诊断和观测</h3>
+          <p><code>inspect</code>、<code>doctor</code>、<code>logs</code>、<code>metrics</code> 与 dashboard 形成排障闭环。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section dashboard">
+      <div class="dashboard-panel reveal">
+        <div class="panel-copy">
+          <span class="eyebrow">Local dashboard</span>
+          <h2>给运营和排障留一个可读的本地视图。</h2>
+          <p>Dashboard 只读取 <code>~/.sealtun</code> 当前登录范围内的数据，展示隧道、域名、诊断和运行状态，不越界扫描系统配置。</p>
+        </div>
+        <div class="dashboard-card" aria-label="Dashboard preview">
+          <div class="dashboard-top">
+            <strong>Active scope</strong>
+            <span>gzg · main</span>
+          </div>
+          <div class="dashboard-metrics">
+            <div><span>Active</span><strong>3</strong></div>
+            <div><span>Domains</span><strong>2</strong></div>
+            <div><span>Warnings</span><strong>1</strong></div>
+          </div>
+          <div class="dashboard-row"><span class="ok">active</span><span>web</span><span>web.example.com</span></div>
+          <div class="dashboard-row"><span class="ok">active</span><span>api</span><span>api.sealosgzg.site</span></div>
+          <div class="dashboard-row"><span class="warn">pending</span><span>docs</span><span>docs.example.com</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section install" id="install">
+      <div class="install-copy reveal">
+        <span class="eyebrow">Install</span>
+        <h2>下载一个二进制，就能开始创建 Sealos 隧道。</h2>
+        <p>GitHub Releases 提供 macOS、Linux 和 Windows 产物。正式发布时，远端 Pod 镜像与 CLI 版本保持一致。</p>
+      </div>
+      <div class="install-card reveal delay-1">
+        <div class="tabs">
+          <button class="tab active" data-target="mac" type="button">macOS / Linux</button>
+          <button class="tab" data-target="windows" type="button">Windows</button>
+          <button class="tab" data-target="source" type="button">Source</button>
+        </div>
+        <div class="code-wrap">
+          <button class="copy-button" type="button" data-copy-current>复制</button>
+          <pre class="code-pane active" data-pane="mac"><code>OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+esac
+curl -L "https://github.com/gitlayzer/sealtun/releases/latest/download/sealtun_${OS}_${ARCH}.tar.gz" -o sealtun.tar.gz
+tar -xzf sealtun.tar.gz sealtun
+chmod +x sealtun
+sudo mv sealtun /usr/local/bin/sealtun</code></pre>
+          <pre class="code-pane" data-pane="windows"><code>$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+Invoke-WebRequest -Uri "https://github.com/gitlayzer/sealtun/releases/latest/download/sealtun_windows_$arch.zip" -OutFile sealtun.zip
+Expand-Archive .\sealtun.zip -DestinationPath .
+.\sealtun.exe --version</code></pre>
+          <pre class="code-pane" data-pane="source"><code>git clone https://github.com/gitlayzer/sealtun.git
+cd sealtun
+make build
+./sealtun --version</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section final-cta">
+      <div class="cta-card reveal">
+        <span class="eyebrow">Ready for release</span>
+        <h2>让每一次本地演示，都有一个像样的公网入口。</h2>
+        <div class="hero-actions">
+          <a class="button primary" href="#install">
+            立即安装
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a class="button secondary" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
+            查看源码
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand">
+      <img src="../assets/sealtun-logo.svg" alt="Sealtun logo" class="footer-mark">
+      <span>Sealtun</span>
+    </div>
+    <p>Cloud-native localhost tunnels for Sealos Cloud.</p>
+    <a href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">GitHub Repository</a>
+  </footer>
+
+  <script src="./script.js"></script>
+</body>
+</html>
