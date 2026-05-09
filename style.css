@@ -163,9 +163,15 @@ main,
 }
 
 .brand-mark {
+  display: inline-grid;
+  place-items: center;
   width: 31px;
   height: 31px;
-  display: block;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--green), var(--green-2));
+  color: var(--cream);
+  font: 800 17px/1 var(--sans);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .nav-links {
@@ -849,8 +855,14 @@ h3 {
 }
 
 .footer-mark {
+  display: inline-grid;
+  place-items: center;
   width: 28px;
   height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--green), var(--green-2));
+  color: var(--cream);
+  font: 800 15px/1 var(--sans);
 }
 
 .footer a {
