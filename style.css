@@ -163,7 +163,38 @@ code {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.lang-option {
+  min-width: 34px;
+  min-height: 30px;
+  cursor: pointer;
+  border-radius: 999px;
+  color: rgba(248, 251, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  transition: transform 220ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
+}
+
+.lang-option:hover {
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.lang-option.active {
+  background: rgba(248, 251, 255, 0.92);
+  color: #0f172a;
 }
 
 .header-cta {
@@ -229,6 +260,19 @@ code {
   align-items: center;
 }
 
+.hero-copy {
+  min-width: 0;
+}
+
+.section-copy,
+.capability-grid,
+.skill-panel,
+.skill-list,
+.install-card,
+.final-cta > * {
+  min-width: 0;
+}
+
 .hero-kicker {
   display: flex;
   flex-wrap: wrap;
@@ -276,6 +320,25 @@ h1 {
   margin-top: 32px;
 }
 
+.hero-command {
+  width: min(100%, 610px);
+  max-width: 100%;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(248, 251, 255, 0.84);
+  overflow-x: auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.hero-command code {
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -289,7 +352,7 @@ h1 {
   transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), background 220ms var(--ease);
 }
 
-.button span {
+.button span:last-child {
   display: inline-grid;
   place-items: center;
   width: 32px;
@@ -303,7 +366,7 @@ h1 {
   box-shadow: 0 18px 44px rgba(255, 255, 255, 0.18);
 }
 
-.button.primary span {
+.button.primary span:last-child {
   background: rgba(15, 23, 42, 0.1);
 }
 
@@ -313,7 +376,7 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.button.secondary span {
+.button.secondary span:last-child {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -323,7 +386,7 @@ h1 {
   box-shadow: 0 18px 44px rgba(17, 24, 39, 0.2);
 }
 
-.button.dark span {
+.button.dark span:last-child {
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -334,6 +397,7 @@ h1 {
 
 .button:active,
 .header-cta:active,
+.lang-option:active,
 .tab:active,
 .copy-button:active {
   transform: scale(0.98);
@@ -533,6 +597,23 @@ h3 {
   box-shadow: var(--shadow);
 }
 
+.skill-command {
+  margin-top: 26px;
+  max-width: 100%;
+  padding: 16px 18px;
+  overflow-x: auto;
+  border-radius: 18px;
+  background: #0b1018;
+  color: rgba(248, 251, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.skill-command code {
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .skill-list {
   display: grid;
   gap: 12px;
@@ -578,6 +659,7 @@ h3 {
 
 .tab {
   flex: 1;
+  min-width: max-content;
   min-height: 42px;
   cursor: pointer;
   border-radius: 999px;
@@ -765,6 +847,10 @@ h3 {
   h2 {
     font-size: 36px;
   }
+
+  .header-actions {
+    gap: 8px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -778,14 +864,29 @@ h3 {
   }
 
   .brand-logo {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
   }
 
   .header-cta {
-    min-height: 38px;
-    padding: 0 14px;
+    min-height: 36px;
+    padding: 0 12px;
     font-size: 12px;
+  }
+
+  .site-header {
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .lang-option {
+    min-width: 30px;
+    min-height: 28px;
+    font-size: 11px;
   }
 
   .hero {
@@ -815,7 +916,7 @@ h3 {
 
   h1 {
     margin-top: 28px;
-    font-size: 40px;
+    font-size: 38px;
   }
 
   h2 {
@@ -824,6 +925,28 @@ h3 {
 
   .hero-lead {
     font-size: 15px;
+  }
+
+  .button {
+    min-height: 48px;
+    padding-left: 16px;
+    font-size: 13px;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .hero-actions .button {
+    width: 100%;
+    padding-right: 6px;
+  }
+
+  .button span:last-child {
+    width: 30px;
+    height: 30px;
   }
 
   .logo-stage {
@@ -864,13 +987,19 @@ h3 {
   }
 
   .tabs {
-    flex-direction: column;
+    overflow-x: auto;
     border-radius: 18px;
   }
 
   .code-pane {
     min-height: 310px;
     font-size: 12px;
+  }
+
+  .hero-command code,
+  .skill-command code {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .final-cta,

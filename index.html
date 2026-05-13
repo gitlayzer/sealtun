@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">跳到正文</a>
+  <a class="skip-link" href="#main" data-i18n="skip">跳到正文</a>
 
   <header class="site-header">
     <a class="brand" href="#top" aria-label="Sealtun home">
@@ -28,13 +28,17 @@
       <span>Sealtun</span>
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
-      <a href="#capabilities">Capabilities</a>
-      <a href="#skills">Skills</a>
-      <a href="#install">Install</a>
+      <a href="#capabilities" data-i18n="nav.capabilities">能力</a>
+      <a href="#skills" data-i18n="nav.skills">Skills</a>
+      <a href="#install" data-i18n="nav.install">安装</a>
     </nav>
     <div class="header-actions">
       <a class="ghost-link" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">GitHub</a>
-      <a class="header-cta" href="#install">Get Started</a>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-option active" type="button" data-lang="zh">中</button>
+        <button class="lang-option" type="button" data-lang="en">EN</button>
+      </div>
+      <a class="header-cta" href="#install" data-i18n="nav.cta">开始使用</a>
     </div>
   </header>
 
@@ -45,15 +49,18 @@
         <div class="hero-copy">
           <div class="hero-kicker reveal">
             <span>Sealos Cloud native</span>
-            <span>100% source available</span>
+            <span data-i18n="hero.badgeSource">100% source available</span>
           </div>
-          <h1 class="reveal delay-1">Controlled localhost tunnels for Sealos.</h1>
+          <h1 class="reveal delay-1" data-i18n="hero.title">让 AI 和团队都能用好的 Sealos 本地隧道。</h1>
           <p class="hero-lead reveal delay-2">
-            Sealtun 把本地端口发布成稳定 HTTPS 入口，并把访问控制、自定义域名、声明式配置和诊断观测放在同一条清楚的工作流里。
+            <span data-i18n="hero.lead">先用一条命令把 Sealtun Skill 装进 AI，再让它替你完成公网预览、访问控制、声明式配置和排障。你不需要先记住每个 CLI 参数。</span>
           </p>
           <div class="hero-actions reveal delay-3">
-            <a class="button primary" href="#install">Start with npm<span aria-hidden="true">↗</span></a>
-            <a class="button secondary" href="#skills">View Skill<span aria-hidden="true">↓</span></a>
+            <a class="button primary" href="#skills"><span data-i18n="hero.primary">Install Skill</span><span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#install"><span data-i18n="hero.secondary">CLI install</span><span aria-hidden="true">↓</span></a>
+          </div>
+          <div class="hero-command reveal delay-3" aria-label="Install Sealtun skill">
+            <code>npx skills add https://github.com/gitlayzer/sealtun</code>
           </div>
         </div>
 
@@ -71,34 +78,34 @@
       </div>
 
       <div class="trust-row reveal delay-3" aria-label="Sealtun highlights">
-        <span>Public HTTPS</span>
-        <span>Access policies</span>
-        <span>Custom domains</span>
+        <span data-i18n="trust.skill">AI Skill install</span>
+        <span data-i18n="trust.https">Public HTTPS</span>
+        <span data-i18n="trust.policy">Access policies</span>
+        <span data-i18n="trust.domain">Custom domains</span>
         <span>sealtun.yaml</span>
-        <span>Codex Skill</span>
       </div>
     </section>
 
     <section class="section intro" id="capabilities">
       <div class="section-copy reveal">
-        <p class="eyebrow">What it does</p>
-        <h2>从本地服务到公网入口，保持短路径和可控边界。</h2>
+        <p class="eyebrow" data-i18n="cap.eyebrow">What it does</p>
+        <h2 data-i18n="cap.title">从本地服务到公网入口，保持短路径和可控边界。</h2>
       </div>
       <div class="capability-grid">
         <article class="capability-card reveal">
           <span>01</span>
-          <h3>直接生成 Sealos 原生入口</h3>
-          <p>登录后暴露本地端口，远端使用 Kubernetes 资源承载隧道代理，生成可访问的 HTTPS 地址。</p>
+          <h3 data-i18n="cap.card1.title">直接生成 Sealos 原生入口</h3>
+          <p data-i18n="cap.card1.body">登录后暴露本地端口，远端使用 Kubernetes 资源承载隧道代理，生成可访问的 HTTPS 地址。</p>
         </article>
         <article class="capability-card reveal delay-1">
           <span>02</span>
-          <h3>访问策略在代理层执行</h3>
-          <p>Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，避免把业务访问边界交给人工约定。</p>
+          <h3 data-i18n="cap.card2.title">访问策略在代理层执行</h3>
+          <p data-i18n="cap.card2.body">Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，避免把业务访问边界交给人工约定。</p>
         </article>
         <article class="capability-card reveal delay-2">
           <span>03</span>
-          <h3>声明式配置和诊断可以复用</h3>
-          <p><code>sealtun.yaml</code> 支持 dry-run、diff 和 apply；doctor、logs、metrics、dashboard 让问题定位回到同一条链路。</p>
+          <h3 data-i18n="cap.card3.title">声明式配置和诊断可以复用</h3>
+          <p><code>sealtun.yaml</code> <span data-i18n="cap.card3.body">支持 dry-run、diff 和 apply；doctor、logs、metrics、dashboard 让问题定位回到同一条链路。</span></p>
         </article>
       </div>
     </section>
@@ -106,32 +113,40 @@
     <section class="section skill-section" id="skills">
       <div class="skill-panel reveal">
         <p class="eyebrow">Codex Skill</p>
-        <h2>让 agent 会用 Sealtun，也知道什么时候不该动手。</h2>
-        <p>仓库内置 <code>skills/sealtun</code>，覆盖隧道使用、访问控制、声明式配置、排障和发布流程。它会先判断任务边界；涉及 <code>expose</code>、<code>apply</code>、<code>git push</code>、<code>npm publish</code> 这类会改变状态的操作时，不会跳过确认。</p>
+        <h2 data-i18n="skill.title">不用先学 Sealtun，让 AI 先学会。</h2>
+        <p><span data-i18n="skill.bodyA">把这个仓库作为 Skill 安装后，AI agent 会理解 Sealtun 的 CLI、配置、访问策略、排障和发布流程。</span> <span data-i18n="skill.bodyB">你可以直接描述目标：暴露本地服务、加 Basic Auth、写 sealtun.yaml、查 doctor，而不是先查参数。</span></p>
+        <div class="skill-command" aria-label="Install Sealtun skill command">
+          <code>npx skills add https://github.com/gitlayzer/sealtun</code>
+        </div>
       </div>
       <div class="skill-list reveal delay-1" aria-label="Sealtun skill scope">
-        <div><span>Usage</span><strong>CLI 参数、安装方式、常见命令</strong></div>
-        <div><span>Config</span><strong>sealtun.yaml、dry-run、diff</strong></div>
-        <div><span>Operate</span><strong>doctor、logs、metrics、cleanup</strong></div>
-        <div><span>Release</span><strong>GitHub Release、npm、远端镜像</strong></div>
+        <div><span data-i18n="skill.step1.kicker">Install</span><strong data-i18n="skill.step1.body">一条 npx 命令把 Skill 加进 AI 工作流</strong></div>
+        <div><span data-i18n="skill.step2.kicker">Ask</span><strong data-i18n="skill.step2.body">用自然语言描述要暴露哪个端口和访问规则</strong></div>
+        <div><span data-i18n="skill.step3.kicker">Review</span><strong data-i18n="skill.step3.body">涉及 expose、apply、发布等状态变更时先确认</strong></div>
+        <div><span data-i18n="skill.step4.kicker">Operate</span><strong data-i18n="skill.step4.body">让 AI 处理 doctor、logs、metrics 和 cleanup</strong></div>
       </div>
     </section>
 
     <section class="section install" id="install">
       <div class="section-copy reveal">
-        <p class="eyebrow">Install</p>
-        <h2>一个 CLI，覆盖临时演示、回调调试和团队联调。</h2>
-        <p>从 npm 或 npx 开始；需要团队共享时，把隧道写进 <code>sealtun.yaml</code>，用 dry-run 和 diff 先看清变更。</p>
+        <p class="eyebrow" data-i18n="install.eyebrow">Install</p>
+        <h2 data-i18n="install.title">AI 用 Skill，人用 CLI，两条路径都很短。</h2>
+        <p><span data-i18n="install.bodyA">先装 Skill，让 AI 会用 Sealtun；需要自己操作时，再用 npm 或 npx 安装 CLI。</span> <span data-i18n="install.bodyB">团队共享入口可以写进</span> <code>sealtun.yaml</code><span data-i18n="install.bodyC">，用 dry-run 和 diff 先看清变更。</span></p>
       </div>
       <div class="install-card reveal delay-1">
         <div class="tabs" role="tablist" aria-label="Install examples">
-          <button class="tab active" data-target="npm" type="button">npm</button>
-          <button class="tab" data-target="policy" type="button">访问策略</button>
-          <button class="tab" data-target="yaml" type="button">声明式</button>
+          <button class="tab active" data-target="skill" type="button" data-i18n="tabs.skill">AI Skill</button>
+          <button class="tab" data-target="npm" type="button">CLI</button>
+          <button class="tab" data-target="policy" type="button" data-i18n="tabs.policy">访问策略</button>
+          <button class="tab" data-target="yaml" type="button" data-i18n="tabs.yaml">声明式</button>
         </div>
         <div class="code-wrap">
-          <button class="copy-button" type="button" data-copy-current>复制</button>
-          <pre class="code-pane active" data-pane="npm"><code>npm install -g sealtun
+          <button class="copy-button" type="button" data-copy-current data-i18n="copy.default">复制</button>
+          <pre class="code-pane active" data-pane="skill"><code>npx skills add https://github.com/gitlayzer/sealtun
+
+# Then ask your AI agent:
+# "Expose localhost:3000 with Basic Auth and a temporary review link."</code></pre>
+          <pre class="code-pane" data-pane="npm"><code>npm install -g sealtun
 sealtun login gzg --profile demo
 sealtun expose 3000</code></pre>
           <pre class="code-pane" data-pane="policy"><code>export SEALTUN_BASIC_AUTH_PASSWORD='change-me'
@@ -154,11 +169,11 @@ sealtun cleanup</code></pre>
 
     <section class="section final-cta">
       <div class="section-copy reveal">
-        <p class="eyebrow">Built for local services that need a real entrance</p>
-        <h2>把本地开发服务放到公网时，入口、权限和回收都应该清楚。</h2>
+        <p class="eyebrow" data-i18n="cta.eyebrow">Built for local services that need a real entrance</p>
+        <h2 data-i18n="cta.title">把本地开发服务放到公网时，入口、权限和回收都应该清楚。</h2>
       </div>
       <a class="button dark reveal delay-1" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
-        View source<span aria-hidden="true">↗</span>
+        <span data-i18n="cta.button">View source</span><span aria-hidden="true">↗</span>
       </a>
     </section>
   </main>
@@ -172,8 +187,8 @@ sealtun cleanup</code></pre>
       </svg>
       <span>Sealtun</span>
     </div>
-    <p>Localhost tunnels built for Sealos Cloud.</p>
-    <a href="https://github.com/gitlayzer/sealtun/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
+    <p data-i18n="footer.tagline">Localhost tunnels built for Sealos Cloud.</p>
+    <a href="https://github.com/gitlayzer/sealtun/releases/latest" target="_blank" rel="noreferrer" data-i18n="footer.release">Latest release</a>
   </footer>
 
   <script src="./script.js"></script>
