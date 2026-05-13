@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sealtun | Sealos native localhost tunnels</title>
-  <meta name="description" content="Sealtun 把本地开发服务发布成 Sealos 原生 HTTPS 入口，支持访问策略、临时链接、自定义域名、声明式配置、本地观测控制台和 Codex Skill。">
+  <meta name="description" content="Sealtun 是面向 Sealos Cloud 的本地服务公网入口，把 localhost 发布成可控、可诊断、可声明式管理的 HTTPS 隧道。">
   <meta property="og:title" content="Sealtun | Sealos native localhost tunnels">
-  <meta property="og:description" content="为 Sealos Cloud 构建的本地服务公网入口，支持访问控制、声明式隧道、诊断观测和 agent skill。">
+  <meta property="og:description" content="把本地开发服务安全发布到 Sealos Cloud，支持访问策略、自定义域名、声明式配置、诊断观测和 Codex Skill。">
   <meta property="og:type" content="website">
-  <meta name="theme-color" content="#06080d">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2306080d'/%3E%3Cpath d='M18 22h28M18 32h28M18 42h28' stroke='%23f8fbff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M25 22c0 6 14 5 14 10s-14 4-14 10' stroke='%233b82f6' stroke-width='5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#070a12">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23070a12'/%3E%3Cpath d='M18 22h28M18 32h28M18 42h28' stroke='%23f8fbff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M25 22c0 6 14 5 14 10s-14 4-14 10' stroke='%233b82f6' stroke-width='5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -20,202 +20,108 @@
 
   <header class="site-header">
     <a class="brand" href="#top" aria-label="Sealtun home">
-      <span class="brand-mark" aria-hidden="true">S</span>
+      <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="16"></rect>
+        <path class="logo-lines" d="M18 22h28M18 32h28M18 42h28"></path>
+        <path class="logo-tunnel" d="M25 22c0 6 14 5 14 10s-14 4-14 10"></path>
+      </svg>
       <span>Sealtun</span>
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
-      <a href="#features">Features</a>
+      <a href="#capabilities">Capabilities</a>
       <a href="#skills">Skills</a>
-      <a href="#workflow">Workflow</a>
       <a href="#install">Install</a>
     </nav>
     <div class="header-actions">
-      <a class="stars" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">GitHub</a>
+      <a class="ghost-link" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">GitHub</a>
       <a class="header-cta" href="#install">Get Started</a>
     </div>
   </header>
 
   <main id="main">
     <section class="hero" id="top">
-      <div class="hero-light beam-left" aria-hidden="true"></div>
-      <div class="hero-light beam-right" aria-hidden="true"></div>
-      <div class="hero-grid" aria-hidden="true"></div>
-
+      <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-inner">
-        <div class="hero-badges reveal">
-          <span>v0.0.15</span>
-          <span>Sealos Cloud native</span>
-          <span>100% source available</span>
-        </div>
-        <h1 class="reveal delay-1">Ship local services to <span>Sealos</span> with one controlled tunnel.</h1>
-        <p class="hero-lead reveal delay-2">
-          Sealtun 把 localhost 发布成稳定 HTTPS 入口，同时保留访问控制、自定义域名、声明式配置、观测诊断和 Codex Skill。适合演示、验收、Webhook、OAuth 回调和团队联调。
-        </p>
-        <div class="hero-actions reveal delay-3">
-          <a class="button primary" href="#install">Start with npm<span aria-hidden="true">↗</span></a>
-          <a class="button secondary" href="#skills">View Skill<span aria-hidden="true">↓</span></a>
+        <div class="hero-copy">
+          <div class="hero-kicker reveal">
+            <span>Sealos Cloud native</span>
+            <span>100% source available</span>
+          </div>
+          <h1 class="reveal delay-1">Controlled localhost tunnels for Sealos.</h1>
+          <p class="hero-lead reveal delay-2">
+            Sealtun 把本地端口发布成稳定 HTTPS 入口，并把访问控制、自定义域名、声明式配置和诊断观测放在同一条清楚的工作流里。
+          </p>
+          <div class="hero-actions reveal delay-3">
+            <a class="button primary" href="#install">Start with npm<span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#skills">View Skill<span aria-hidden="true">↓</span></a>
+          </div>
         </div>
 
-        <div class="prompt-panel reveal delay-2" aria-label="Sealtun prompt style command panel">
-          <div class="prompt-input">
-            <span>Give me a protected public URL for localhost:3000</span>
-            <button type="button" aria-label="Run example">↗</button>
-          </div>
-          <div class="prompt-chips" aria-label="Common Sealtun tasks">
-            <span>Basic Auth</span>
-            <span>Temporary link</span>
-            <span>Custom domain</span>
-            <span>sealtun.yaml</span>
-            <span>Codex Skill</span>
-          </div>
-          <pre><code>$ npm install -g sealtun
-$ sealtun login gzg --profile demo
-$ sealtun expose 3000 --domain app.example.com \
-  --basic-auth-user admin \
-  --basic-auth-password-env SEALTUN_BASIC_AUTH_PASSWORD \
-  --temporary-access-token-env SEALTUN_TEMP_TOKEN \
-  --temporary-access-ttl 1h
-
-Public URL   https://app.example.com
-Policy       basic auth · temporary link · 1h</code></pre>
+        <div class="logo-stage reveal delay-2" aria-label="Sealtun logo preview">
+          <svg class="hero-logo" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="16"></rect>
+            <path class="logo-lines" d="M18 22h28M18 32h28M18 42h28"></path>
+            <path class="logo-tunnel" d="M25 22c0 6 14 5 14 10s-14 4-14 10"></path>
+          </svg>
+          <div class="route-line route-one"></div>
+          <div class="route-line route-two"></div>
+          <div class="route-label local">localhost:3000</div>
+          <div class="route-label cloud">Sealos HTTPS</div>
         </div>
+      </div>
+
+      <div class="trust-row reveal delay-3" aria-label="Sealtun highlights">
+        <span>Public HTTPS</span>
+        <span>Access policies</span>
+        <span>Custom domains</span>
+        <span>sealtun.yaml</span>
+        <span>Codex Skill</span>
       </div>
     </section>
 
-    <section class="stats reveal" aria-label="Sealtun highlights">
-      <div>
-        <strong>5</strong>
-        <span>内置 Sealos Cloud region</span>
-      </div>
-      <div>
-        <strong>4</strong>
-        <span>代理层访问策略</span>
-      </div>
-      <div>
-        <strong>v1</strong>
-        <span>声明式 sealtun.yaml</span>
-      </div>
-      <div>
-        <strong>1</strong>
-        <span>客户端与 server 共用二进制</span>
-      </div>
-    </section>
-
-    <section class="section split" id="features">
+    <section class="section intro" id="capabilities">
       <div class="section-copy reveal">
-        <p class="eyebrow">What changed</p>
-        <h2>它现在更像一个隧道控制面，而不是临时端口转发。</h2>
-        <p>Sealtun 会创建 Kubernetes 原生资源，保留 Sealos 控制面域名，把公网访问策略放在代理层执行，并提供 CLI、Dashboard、声明式配置和 Skill 给人和 agent 使用。</p>
+        <p class="eyebrow">What it does</p>
+        <h2>从本地服务到公网入口，保持短路径和可控边界。</h2>
       </div>
-      <div class="feature-grid">
-        <article class="feature-card reveal">
+      <div class="capability-grid">
+        <article class="capability-card reveal">
           <span>01</span>
-          <h3>访问策略不依赖 Ingress annotation</h3>
-          <p>Basic Auth、Bearer Token、IP allowlist / denylist、临时链接都在 Sealtun server proxy 层执行。公网业务路径受保护，控制通道和健康检查不会被误拦截。</p>
+          <h3>直接生成 Sealos 原生入口</h3>
+          <p>登录后暴露本地端口，远端使用 Kubernetes 资源承载隧道代理，生成可访问的 HTTPS 地址。</p>
         </article>
-        <article class="feature-card reveal delay-1">
+        <article class="capability-card reveal delay-1">
           <span>02</span>
-          <h3>自定义域名先验证，再绑定</h3>
-          <p>先生成 Sealos host 作为 CNAME 目标。CNAME 归属验证通过后，才写入 Ingress 并管理 cert-manager 证书，避免未验证域名被提前占用。</p>
+          <h3>访问策略在代理层执行</h3>
+          <p>Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，避免把业务访问边界交给人工约定。</p>
         </article>
-        <article class="feature-card reveal delay-2">
+        <article class="capability-card reveal delay-2">
           <span>03</span>
-          <h3>声明式隧道可以 diff 和 dry-run</h3>
-          <p><code>sealtun apply -f sealtun.yaml --dry-run</code> 离线预览，<code>sealtun diff -f</code> 对比本地 session，真实 apply 使用稳定 name 更新同一条隧道。</p>
-        </article>
-        <article class="feature-card reveal delay-3">
-          <span>04</span>
-          <h3>观测路径完整</h3>
-          <p><code>list</code>、<code>inspect</code>、<code>doctor</code>、<code>logs</code>、<code>metrics</code>、<code>dashboard</code> 把本地 daemon、远端 Pod、Ingress、证书和 Event 放到一条排障路径里。</p>
+          <h3>声明式配置和诊断可以复用</h3>
+          <p><code>sealtun.yaml</code> 支持 dry-run、diff 和 apply；doctor、logs、metrics、dashboard 让问题定位回到同一条链路。</p>
         </article>
       </div>
     </section>
 
     <section class="section skill-section" id="skills">
-      <div class="skill-card reveal">
-        <div class="skill-flow" aria-label="Sealtun Skill decision flow">
-          <span>request</span>
-          <i></i>
-          <span>scope gate</span>
-          <i></i>
-          <span>safe workflow</span>
-        </div>
-        <pre><code>skills/sealtun
-├─ cli usage
-├─ declarative config
-├─ troubleshooting
-└─ release / npm publishing</code></pre>
-      </div>
-      <div class="section-copy reveal delay-1">
+      <div class="skill-panel reveal">
         <p class="eyebrow">Codex Skill</p>
-        <h2>让 AI agent 先判断任务，再决定怎么操作 Sealtun。</h2>
-        <p>仓库内置 <code>skills/sealtun</code>，会识别内网穿透、临时公网预览、Webhook 回调、访问控制、<code>sealtun.yaml</code>、诊断和 npm 发布等场景。没有明确要求时，它不会擅自运行 <code>expose</code>、<code>apply</code>、<code>domain set</code>、<code>git push</code> 或 <code>npm publish</code>。</p>
-        <div class="tag-row" aria-label="Skill trigger examples">
-          <span>内网穿透</span>
-          <span>Webhook 回调</span>
-          <span>临时公网地址</span>
-          <span>隧道访问控制</span>
-          <span>npm 发布</span>
-        </div>
+        <h2>让 agent 会用 Sealtun，也知道什么时候不该动手。</h2>
+        <p>仓库内置 <code>skills/sealtun</code>，覆盖隧道使用、访问控制、声明式配置、排障和发布流程。它会先判断任务边界；涉及 <code>expose</code>、<code>apply</code>、<code>git push</code>、<code>npm publish</code> 这类会改变状态的操作时，不会跳过确认。</p>
       </div>
-    </section>
-
-    <section class="section workflow" id="workflow">
-      <div class="section-copy center reveal">
-        <p class="eyebrow">Workflow</p>
-        <h2>从登录到回收，每一步都有清楚边界。</h2>
-      </div>
-      <div class="workflow-grid">
-        <article class="workflow-item reveal">
-          <span>Login</span>
-          <h3>选择 region 和 profile</h3>
-          <p>设备授权登录，保存 region、workspace、auth 和 kubeconfig。多账号场景用 profile 隔离。</p>
-        </article>
-        <article class="workflow-item reveal delay-1">
-          <span>Expose</span>
-          <h3>创建 Sealos 原生资源</h3>
-          <p>远端资源按 `sealtun-*` 命名，使用 Deployment、Service、Ingress 和同版本镜像。</p>
-        </article>
-        <article class="workflow-item reveal delay-2">
-          <span>Secure</span>
-          <h3>加上公网访问边界</h3>
-          <p>把认证、IP 规则和临时访问时间写进隧道配置，而不是留给人工约定。</p>
-        </article>
-        <article class="workflow-item reveal delay-3">
-          <span>Observe</span>
-          <h3>诊断、日志、指标和清理</h3>
-          <p>Dashboard 只监听本地地址；doctor 汇总本地和远端状态；TTL 到期后 daemon 清理资源。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section dashboard-section">
-      <div class="dashboard-copy reveal">
-        <p class="eyebrow">Observe</p>
-        <h2>本地控制台和 CLI 命令读同一份状态。</h2>
-        <p>Dashboard、logs、metrics、domain doctor 共同覆盖本地 session、远端 Pod、Ingress、证书和请求计数。排障时不用在多个控制台之间猜。</p>
-      </div>
-      <div class="dashboard-panel reveal delay-1" aria-label="Dashboard preview">
-        <div class="dashboard-top">
-          <strong>Local dashboard</strong>
-          <span>127.0.0.1:19777</span>
-        </div>
-        <div class="dashboard-metrics">
-          <div><span>Active</span><strong>3</strong></div>
-          <div><span>Domains</span><strong>2</strong></div>
-          <div><span>Warnings</span><strong>1</strong></div>
-        </div>
-        <div class="dashboard-row ok"><span>active</span><span>web</span><span>app.example.com</span></div>
-        <div class="dashboard-row ok"><span>active</span><span>api</span><span>api.sealosgzg.site</span></div>
-        <div class="dashboard-row warn"><span>pending</span><span>docs</span><span>CNAME waiting</span></div>
+      <div class="skill-list reveal delay-1" aria-label="Sealtun skill scope">
+        <div><span>Usage</span><strong>CLI 参数、安装方式、常见命令</strong></div>
+        <div><span>Config</span><strong>sealtun.yaml、dry-run、diff</strong></div>
+        <div><span>Operate</span><strong>doctor、logs、metrics、cleanup</strong></div>
+        <div><span>Release</span><strong>GitHub Release、npm、远端镜像</strong></div>
       </div>
     </section>
 
     <section class="section install" id="install">
       <div class="section-copy reveal">
         <p class="eyebrow">Install</p>
-        <h2>用 npm、npx 或 Release 二进制开始。</h2>
-        <p>npm 包会按当前系统安装对应平台的可选二进制依赖；Release 会同步 GitHub 资产和 <code>ghcr.io/gitlayzer/sealtun</code> 远端镜像。</p>
+        <h2>一个 CLI，覆盖临时演示、回调调试和团队联调。</h2>
+        <p>从 npm 或 npx 开始；需要团队共享时，把隧道写进 <code>sealtun.yaml</code>，用 dry-run 和 diff 先看清变更。</p>
       </div>
       <div class="install-card reveal delay-1">
         <div class="tabs" role="tablist" aria-label="Install examples">
@@ -226,9 +132,7 @@ Policy       basic auth · temporary link · 1h</code></pre>
         <div class="code-wrap">
           <button class="copy-button" type="button" data-copy-current>复制</button>
           <pre class="code-pane active" data-pane="npm"><code>npm install -g sealtun
-sealtun --version
-
-npx sealtun@latest login
+sealtun login gzg --profile demo
 sealtun expose 3000</code></pre>
           <pre class="code-pane" data-pane="policy"><code>export SEALTUN_BASIC_AUTH_PASSWORD='change-me'
 export SEALTUN_TEMP_TOKEN='review-link-secret'
@@ -242,26 +146,30 @@ sealtun expose 3000 \
 sealtun diff -f sealtun.yaml
 sealtun apply -f sealtun.yaml
 
-sealtun dashboard
-sealtun doctor</code></pre>
+sealtun doctor
+sealtun cleanup</code></pre>
         </div>
       </div>
     </section>
 
     <section class="section final-cta">
       <div class="section-copy reveal">
-        <p class="eyebrow">Built for local services that need to be real</p>
-        <h2>演示、验收、回调调试、临时联调，都可以有清楚的入口和边界。</h2>
+        <p class="eyebrow">Built for local services that need a real entrance</p>
+        <h2>把本地开发服务放到公网时，入口、权限和回收都应该清楚。</h2>
       </div>
-      <a class="button primary reveal delay-1" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
-        View on GitHub<span aria-hidden="true">↗</span>
+      <a class="button dark reveal delay-1" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
+        View source<span aria-hidden="true">↗</span>
       </a>
     </section>
   </main>
 
   <footer class="footer">
     <div class="footer-brand">
-      <span class="footer-mark" aria-hidden="true">S</span>
+      <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="16"></rect>
+        <path class="logo-lines" d="M18 22h28M18 32h28M18 42h28"></path>
+        <path class="logo-tunnel" d="M25 22c0 6 14 5 14 10s-14 4-14 10"></path>
+      </svg>
       <span>Sealtun</span>
     </div>
     <p>Localhost tunnels built for Sealos Cloud.</p>
