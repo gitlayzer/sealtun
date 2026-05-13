@@ -20,7 +20,7 @@ if ("IntersectionObserver" in window) {
 
 const tabs = document.querySelectorAll("[data-target]");
 const panes = document.querySelectorAll("[data-pane]");
-let currentPane = "mac";
+let currentPane = document.querySelector(".tab.active")?.dataset.target || "npm";
 
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
