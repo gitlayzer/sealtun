@@ -335,14 +335,17 @@ h1 {
 
 .hero-command,
 .skill-command {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
 }
 
 .hero-command code {
-  flex: 1;
+  display: block;
   min-width: 0;
+  overflow-x: auto;
+  padding: 4px 6px;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
@@ -413,7 +416,7 @@ h1 {
 }
 
 .inline-copy {
-  flex: 0 0 auto;
+  justify-self: end;
   min-height: 34px;
   padding: 0 13px;
   cursor: pointer;
@@ -640,14 +643,15 @@ h3 {
 }
 
 .skill-command code {
-  flex: 1;
+  display: block;
   min-width: 0;
+  overflow-x: auto;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   color: inherit;
   background: transparent;
-  padding: 0 8px;
+  padding: 4px 8px;
 }
 
 .skill-list {
@@ -1040,7 +1044,7 @@ h3 {
 
   .hero-command,
   .skill-command {
-    align-items: flex-start;
+    align-items: center;
   }
 
   .final-cta,
