@@ -187,3 +187,21 @@ document.querySelector("[data-copy-current]")?.addEventListener("click", async e
     button.textContent = dictionary["copy.default"];
   }, 1400);
 });
+
+document.querySelectorAll("[data-copy-nearest]").forEach(button => {
+  button.addEventListener("click", async event => {
+    const button = event.currentTarget;
+    const command = button.closest(".hero-command, .skill-command")?.querySelector("code");
+    if (!command) return;
+    const dictionary = translations[currentLang];
+    try {
+      await navigator.clipboard.writeText(command.textContent.trim());
+      button.textContent = dictionary["copy.success"];
+    } catch (_) {
+      button.textContent = dictionary["copy.error"];
+    }
+    window.setTimeout(() => {
+      button.textContent = dictionary["copy.default"];
+    }, 1400);
+  });
+});
