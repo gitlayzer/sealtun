@@ -616,6 +616,74 @@ h3 {
   line-height: 1.64;
 }
 
+.latest-section {
+  padding-top: 64px;
+}
+
+.latest-section .section-copy p:not(.eyebrow) {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.latest-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 44px;
+}
+
+.latest-card {
+  min-width: 0;
+  min-height: 240px;
+  padding: 28px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(59, 130, 246, 0.12), transparent 16rem),
+    var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 52px rgba(24, 40, 72, 0.07);
+}
+
+.latest-card.wide {
+  grid-column: span 2;
+  min-height: 270px;
+}
+
+.latest-card span {
+  color: var(--blue);
+  font: 800 12px/1 var(--mono);
+}
+
+.latest-card h3 {
+  margin-top: 36px;
+  max-width: 420px;
+}
+
+.latest-card p {
+  margin-top: 14px;
+  color: var(--text);
+  line-height: 1.66;
+}
+
+.feature-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.feature-chips code {
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #0b1018;
+  color: rgba(248, 251, 255, 0.88);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .skill-section {
   display: grid;
   grid-template-columns: 1fr 0.92fr;
@@ -876,9 +944,14 @@ h3 {
 
   .hero-inner,
   .intro,
+  .latest-grid,
   .skill-section,
   .install {
     grid-template-columns: 1fr;
+  }
+
+  .latest-card.wide {
+    grid-column: auto;
   }
 
   .logo-stage {
@@ -1035,6 +1108,20 @@ h3 {
   .tabs {
     overflow-x: auto;
     border-radius: 18px;
+  }
+
+  .latest-grid {
+    margin-top: 34px;
+  }
+
+  .latest-card {
+    min-height: auto;
+    padding: 24px;
+    border-radius: 22px;
+  }
+
+  .latest-card h3 {
+    margin-top: 28px;
   }
 
   .code-pane {

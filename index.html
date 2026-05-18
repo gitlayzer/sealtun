@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sealtun | Sealos native localhost tunnels</title>
-  <meta name="description" content="Sealtun 是面向 Sealos Cloud 的本地服务公网入口，把 localhost 发布成可控、可诊断、可声明式管理的 HTTPS 隧道。">
+  <meta name="description" content="Sealtun 是面向 Sealos Cloud 的本地服务公网入口，支持 HTTPS、SSH、TCP、自定义域名、访问策略、profiles、声明式配置和 AI Skill。">
   <meta property="og:title" content="Sealtun | Sealos native localhost tunnels">
-  <meta property="og:description" content="把本地开发服务安全发布到 Sealos Cloud，支持访问策略、自定义域名、声明式配置、诊断观测和 Codex Skill。">
+  <meta property="og:description" content="把本地开发服务安全发布到 Sealos Cloud，支持 HTTPS/SSH/TCP 入口、访问策略、自定义域名证书、声明式配置、诊断观测和 Codex Skill。">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#070a12">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23070a12'/%3E%3Cpath d='M18 22h28M18 32h28M18 42h28' stroke='%23f8fbff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M25 22c0 6 14 5 14 10s-14 4-14 10' stroke='%233b82f6' stroke-width='5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
@@ -29,6 +29,7 @@
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
       <a href="#capabilities" data-i18n="nav.capabilities">能力</a>
+      <a href="#latest" data-i18n="nav.latest">最新功能</a>
       <a href="#skills" data-i18n="nav.skills">Skills</a>
       <a href="#install" data-i18n="nav.install">安装</a>
     </nav>
@@ -51,9 +52,9 @@
             <span>Sealos Cloud native</span>
             <span data-i18n="hero.badgeSource">100% source available</span>
           </div>
-          <h1 class="reveal delay-1" data-i18n="hero.title">让 AI 和团队都能用好的 Sealos 本地隧道。</h1>
+          <h1 class="reveal delay-1" data-i18n="hero.title">让 AI 和团队都能用好的 Sealos 公网隧道。</h1>
           <p class="hero-lead reveal delay-2">
-            <span data-i18n="hero.lead">先用一条命令把 Sealtun Skill 装进 AI，再让它替你完成公网预览、访问控制、声明式配置和排障。你不需要先记住每个 CLI 参数。</span>
+            <span data-i18n="hero.lead">Sealtun 已经覆盖 HTTPS 预览、SSH/TCP 四层入口、自定义域名证书、访问策略、region/profile、声明式多隧道和本地观测。先安装 Skill，让 AI 直接替你完成这些操作。</span>
           </p>
           <div class="hero-actions reveal delay-3">
             <a class="button primary" href="#skills"><span data-i18n="hero.primary">Install Skill</span><span aria-hidden="true">↗</span></a>
@@ -74,15 +75,16 @@
           <div class="route-line route-one"></div>
           <div class="route-line route-two"></div>
           <div class="route-label local">localhost:3000</div>
-          <div class="route-label cloud">Sealos HTTPS</div>
+          <div class="route-label cloud">HTTPS / SSH / TCP</div>
         </div>
       </div>
 
       <div class="trust-row reveal delay-3" aria-label="Sealtun highlights">
         <span data-i18n="trust.skill">AI Skill install</span>
-        <span data-i18n="trust.https">Public HTTPS</span>
+        <span data-i18n="trust.modes">HTTPS / SSH / TCP</span>
         <span data-i18n="trust.policy">Access policies</span>
-        <span data-i18n="trust.domain">Custom domains</span>
+        <span data-i18n="trust.domain">Custom domains + certs</span>
+        <span data-i18n="trust.profile">Region profiles</span>
         <span>sealtun.yaml</span>
       </div>
     </section>
@@ -95,18 +97,68 @@
       <div class="capability-grid">
         <article class="capability-card reveal">
           <span>01</span>
-          <h3 data-i18n="cap.card1.title">直接生成 Sealos 原生入口</h3>
-          <p data-i18n="cap.card1.body">登录后暴露本地端口，远端使用 Kubernetes 资源承载隧道代理，生成可访问的 HTTPS 地址。</p>
+          <h3 data-i18n="cap.card1.title">一条命令选择入口协议</h3>
+          <p data-i18n="cap.card1.body">默认生成公网 HTTPS 地址；需要直连 SSH 或数据库等非 HTTP 协议时，可以切到 ssh 或 tcp 四层入口。</p>
         </article>
         <article class="capability-card reveal delay-1">
           <span>02</span>
           <h3 data-i18n="cap.card2.title">访问策略在代理层执行</h3>
-          <p data-i18n="cap.card2.body">Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，避免把业务访问边界交给人工约定。</p>
+          <p data-i18n="cap.card2.body">Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，公开预览也能保留边界。</p>
         </article>
         <article class="capability-card reveal delay-2">
           <span>03</span>
-          <h3 data-i18n="cap.card3.title">声明式配置和诊断可以复用</h3>
-          <p><code>sealtun.yaml</code> <span data-i18n="cap.card3.body">支持 dry-run、diff 和 apply；doctor、logs、metrics、dashboard 让问题定位回到同一条链路。</span></p>
+          <h3 data-i18n="cap.card3.title">声明、诊断和回收可以复用</h3>
+          <p><code>sealtun.yaml</code> <span data-i18n="cap.card3.body">支持 dry-run、diff、apply、ttl 和多隧道；doctor、logs、events、metrics、dashboard 让问题定位回到同一条链路。</span></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section latest-section" id="latest">
+      <div class="section-copy center reveal">
+        <p class="eyebrow" data-i18n="latest.eyebrow">Latest capabilities</p>
+        <h2 data-i18n="latest.title">最新功能已经覆盖从入口创建到持续运维。</h2>
+        <p data-i18n="latest.body">Sealtun 现在不只是把 Web 页面发出去。它可以管理公网协议、域名证书、访问控制、账号环境和运行状态，让本地调试更接近真实入口。</p>
+      </div>
+      <div class="latest-grid">
+        <article class="latest-card wide reveal">
+          <span data-i18n="latest.modes.kicker">Entrance modes</span>
+          <h3 data-i18n="latest.modes.title">HTTPS、SSH、TCP 三种公网入口</h3>
+          <p data-i18n="latest.modes.body">Web 预览继续走 HTTPS；本地 sshd 可以用 NodePort 直连；数据库、队列和调试服务可以用通用 TCP 入口。</p>
+          <div class="feature-chips" aria-label="Sealtun protocols">
+            <code>sealtun expose 3000</code>
+            <code>--protocol ssh</code>
+            <code>--protocol tcp</code>
+          </div>
+        </article>
+        <article class="latest-card wide reveal delay-1">
+          <span data-i18n="latest.domain.kicker">Domains</span>
+          <h3 data-i18n="latest.domain.title">自定义域名先验证，再绑定证书</h3>
+          <p data-i18n="latest.domain.body">Sealtun 保留 Sealos host 作为 CNAME 目标，确认 DNS 归属后再写入 Ingress，并创建 cert-manager Issuer 和 Certificate。</p>
+          <div class="feature-chips" aria-label="Domain commands">
+            <code>--domain</code>
+            <code>domain verify --wait</code>
+            <code>domain doctor</code>
+          </div>
+        </article>
+        <article class="latest-card reveal delay-1">
+          <span data-i18n="latest.access.kicker">Access</span>
+          <h3 data-i18n="latest.access.title">公开预览可以带权限</h3>
+          <p data-i18n="latest.access.body">Basic Auth、Bearer Token、IP 规则和临时访问链接都在代理层处理，token 以 hash 形式保存。</p>
+        </article>
+        <article class="latest-card reveal delay-2">
+          <span data-i18n="latest.profile.kicker">Profiles</span>
+          <h3 data-i18n="latest.profile.title">多 region 和多账号切换</h3>
+          <p data-i18n="latest.profile.body">内置 gzg、hzh、bja、cloud、usw region，并支持命名 profile 保存不同账号、workspace 和 kubeconfig。</p>
+        </article>
+        <article class="latest-card reveal delay-2">
+          <span data-i18n="latest.observe.kicker">Observe</span>
+          <h3 data-i18n="latest.observe.title">日志、事件、指标和控制台</h3>
+          <p data-i18n="latest.observe.body">logs、events、metrics、inspect --remote、doctor 和本地 dashboard 把本地 session 与远端 Kubernetes 状态放在一起看。</p>
+        </article>
+        <article class="latest-card reveal delay-3">
+          <span data-i18n="latest.declarative.kicker">Declarative</span>
+          <h3 data-i18n="latest.declarative.title">声明式多隧道和自动过期</h3>
+          <p data-i18n="latest.declarative.body">sealtun.yaml 支持多个稳定命名隧道、dry-run、diff、apply、ttl 和失败回滚，适合团队共享配置。</p>
         </article>
       </div>
     </section>
@@ -115,7 +167,7 @@
       <div class="skill-panel reveal">
         <p class="eyebrow">Codex Skill</p>
         <h2 data-i18n="skill.title">不用先学 Sealtun，让 AI 先学会。</h2>
-        <p><span data-i18n="skill.bodyA">把这个仓库作为 Skill 安装后，AI agent 会理解 Sealtun 的 CLI、配置、访问策略、排障和发布流程。</span> <span data-i18n="skill.bodyB">你可以直接描述目标：暴露本地服务、加 Basic Auth、写 sealtun.yaml、查 doctor，而不是先查参数。</span></p>
+        <p><span data-i18n="skill.bodyA">把这个仓库作为 Skill 安装后，AI agent 会理解 Sealtun 的 CLI、配置、访问策略、四层入口、域名诊断和发布流程。</span> <span data-i18n="skill.bodyB">你可以直接描述目标：暴露本地服务、加 Basic Auth、绑定域名、写 sealtun.yaml、查 doctor，而不是先查参数。</span></p>
         <div class="skill-command" aria-label="Install Sealtun skill command">
           <code>npx skills add https://github.com/gitlayzer/sealtun</code>
           <button class="inline-copy" type="button" data-copy-nearest data-i18n="copy.default">复制</button>
@@ -123,9 +175,9 @@
       </div>
       <div class="skill-list reveal delay-1" aria-label="Sealtun skill scope">
         <div><span data-i18n="skill.step1.kicker">Install</span><strong data-i18n="skill.step1.body">一条 npx 命令把 Skill 加进 AI 工作流</strong></div>
-        <div><span data-i18n="skill.step2.kicker">Ask</span><strong data-i18n="skill.step2.body">用自然语言描述要暴露哪个端口和访问规则</strong></div>
-        <div><span data-i18n="skill.step3.kicker">Review</span><strong data-i18n="skill.step3.body">涉及 expose、apply、发布等状态变更时先确认</strong></div>
-        <div><span data-i18n="skill.step4.kicker">Operate</span><strong data-i18n="skill.step4.body">让 AI 处理 doctor、logs、metrics 和 cleanup</strong></div>
+        <div><span data-i18n="skill.step2.kicker">Ask</span><strong data-i18n="skill.step2.body">用自然语言描述端口、协议、域名和访问规则</strong></div>
+        <div><span data-i18n="skill.step3.kicker">Review</span><strong data-i18n="skill.step3.body">涉及 expose、apply、domain set、cleanup 等状态变更时先确认</strong></div>
+        <div><span data-i18n="skill.step4.kicker">Operate</span><strong data-i18n="skill.step4.body">让 AI 处理 doctor、logs、events、metrics 和 dashboard</strong></div>
       </div>
     </section>
 
@@ -133,12 +185,13 @@
       <div class="section-copy reveal">
         <p class="eyebrow" data-i18n="install.eyebrow">Install</p>
         <h2 data-i18n="install.title">AI 用 Skill，人用 CLI，两条路径都很短。</h2>
-        <p><span data-i18n="install.bodyA">先装 Skill，让 AI 会用 Sealtun；需要自己操作时，再用 npm 或 npx 安装 CLI。</span> <span data-i18n="install.bodyB">团队共享入口可以写进</span> <code>sealtun.yaml</code><span data-i18n="install.bodyC">，用 dry-run 和 diff 先看清变更。</span></p>
+        <p><span data-i18n="install.bodyA">先装 Skill，让 AI 会用 Sealtun；需要自己操作时，再用 npm 或 npx 安装 CLI。</span> <span data-i18n="install.bodyB">团队共享入口可以写进</span> <code>sealtun.yaml</code><span data-i18n="install.bodyC">，用 dry-run 和 diff 先看清变更，再 apply。</span></p>
       </div>
       <div class="install-card reveal delay-1">
         <div class="tabs" role="tablist" aria-label="Install examples">
           <button class="tab active" data-target="skill" type="button" data-i18n="tabs.skill">AI Skill</button>
           <button class="tab" data-target="npm" type="button">CLI</button>
+          <button class="tab" data-target="domain" type="button" data-i18n="tabs.domain">域名</button>
           <button class="tab" data-target="policy" type="button" data-i18n="tabs.policy">访问策略</button>
           <button class="tab" data-target="yaml" type="button" data-i18n="tabs.yaml">声明式</button>
         </div>
@@ -150,7 +203,16 @@
 # "Expose localhost:3000 with Basic Auth and a temporary review link."</code></pre>
           <pre class="code-pane" data-pane="npm"><code>npm install -g sealtun
 sealtun login gzg --profile demo
-sealtun expose 3000</code></pre>
+
+sealtun expose 3000
+sealtun expose 22 --protocol ssh
+sealtun expose 5432 --protocol tcp</code></pre>
+          <pre class="code-pane" data-pane="domain"><code>sealtun expose 3000 --domain app.example.com
+
+# Create CNAME app.example.com -> &lt;sealos-host&gt;
+sealtun domain verify &lt;tunnel-id&gt; --wait --timeout 5m
+sealtun domain status
+sealtun domain doctor &lt;tunnel-id&gt;</code></pre>
           <pre class="code-pane" data-pane="policy"><code>export SEALTUN_BASIC_AUTH_PASSWORD='change-me'
 export SEALTUN_TEMP_TOKEN='review-link-secret'
 
@@ -159,12 +221,19 @@ sealtun expose 3000 \
   --basic-auth-password-env SEALTUN_BASIC_AUTH_PASSWORD \
   --temporary-access-token-env SEALTUN_TEMP_TOKEN \
   --temporary-access-ttl 1h</code></pre>
-          <pre class="code-pane" data-pane="yaml"><code>sealtun apply -f sealtun.yaml --dry-run
-sealtun diff -f sealtun.yaml
-sealtun apply -f sealtun.yaml
+          <pre class="code-pane" data-pane="yaml"><code>version: v1
+tunnels:
+  - name: web
+    localPort: 3000
+    protocol: https
+    ttl: 2h
+  - name: postgres
+    localPort: 5432
+    protocol: tcp
 
-sealtun doctor
-sealtun cleanup</code></pre>
+sealtun apply -f sealtun.yaml --dry-run
+sealtun diff -f sealtun.yaml
+sealtun apply -f sealtun.yaml</code></pre>
         </div>
       </div>
     </section>
@@ -172,7 +241,7 @@ sealtun cleanup</code></pre>
     <section class="section final-cta">
       <div class="section-copy reveal">
         <p class="eyebrow" data-i18n="cta.eyebrow">Built for local services that need a real entrance</p>
-        <h2 data-i18n="cta.title">把本地开发服务放到公网时，入口、权限和回收都应该清楚。</h2>
+        <h2 data-i18n="cta.title">把本地开发服务放到公网时，协议、域名、权限、诊断和回收都应该清楚。</h2>
       </div>
       <a class="button dark reveal delay-1" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
         <span data-i18n="cta.button">View source</span><span aria-hidden="true">↗</span>
