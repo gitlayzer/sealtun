@@ -18,6 +18,7 @@
   --shadow: 0 26px 70px rgba(16, 34, 44, 0.12);
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --sans: "Figtree", "Noto Sans SC", "Avenir Next", "Segoe UI", sans-serif;
+  --control: "Noto Sans SC", "Figtree", "Avenir Next", "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", "SFMono-Regular", "Menlo", monospace;
 }
 
@@ -228,6 +229,7 @@ code {
   border-radius: 12px;
   color: var(--deep);
   background: var(--aqua-2);
+  font-family: var(--control);
   font-size: 13px;
   font-weight: 800;
 }
@@ -319,12 +321,20 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  min-height: 48px;
+  height: 48px;
   padding: 0 18px;
   border-radius: 13px;
+  font-family: var(--control);
   font-size: 14px;
   line-height: 1;
   font-weight: 800;
+}
+
+.button span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  transform: translateY(3px);
 }
 
 .button.primary {
@@ -376,6 +386,7 @@ h1 {
   border-radius: 10px;
   color: #effffe;
   background: rgba(255, 255, 255, 0.1);
+  font-family: var(--control);
   font-size: 12px;
   font-weight: 800;
 }
@@ -483,11 +494,12 @@ h1 {
   align-items: center;
   justify-content: center;
   min-height: 36px;
-  padding: 0 13px;
+  padding: 2px 13px 0;
   border: 1px solid rgba(235, 251, 255, 0.12);
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.055);
   color: rgba(239, 250, 250, 0.7);
+  font-family: var(--control);
   font-size: 13px;
   line-height: 1;
   font-weight: 700;
@@ -737,9 +749,18 @@ h3 {
   cursor: pointer;
   border-radius: 11px;
   color: #55707a;
+  font-family: var(--control);
   font-size: 12px;
   line-height: 1;
   font-weight: 800;
+}
+
+.tab,
+.header-cta,
+.lang-option,
+.copy-inline,
+.copy-button {
+  padding-top: 2px;
 }
 
 .tab.active {
@@ -1003,7 +1024,7 @@ h3 {
 
   .button {
     width: 100%;
-    min-height: 46px;
+    height: 46px;
   }
 
   .command-bar {
