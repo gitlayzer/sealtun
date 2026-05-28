@@ -48,6 +48,7 @@ a {
 }
 
 button {
+  padding: 0;
   border: 0;
   background: none;
   color: inherit;
@@ -207,12 +208,16 @@ code {
 }
 
 .lang-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 36px;
   min-height: 32px;
   cursor: pointer;
   border-radius: 10px;
   color: rgba(245, 252, 252, 0.68);
   font-size: 12px;
+  line-height: 1;
   font-weight: 800;
 }
 
@@ -224,6 +229,7 @@ code {
 .header-cta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 40px;
   padding: 0 16px;
   border-radius: 12px;
@@ -231,6 +237,7 @@ code {
   background: var(--aqua-2);
   font-family: var(--control);
   font-size: 13px;
+  line-height: 1;
   font-weight: 800;
 }
 
@@ -334,7 +341,6 @@ h1 {
   display: inline-flex;
   align-items: center;
   line-height: 1;
-  transform: translateY(3px);
 }
 
 .button.primary {
@@ -380,6 +386,9 @@ h1 {
 
 .copy-inline,
 .copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   min-height: 34px;
   cursor: pointer;
@@ -388,6 +397,7 @@ h1 {
   background: rgba(255, 255, 255, 0.1);
   font-family: var(--control);
   font-size: 12px;
+  line-height: 1;
   font-weight: 800;
 }
 
@@ -753,14 +763,6 @@ h3 {
   font-size: 12px;
   line-height: 1;
   font-weight: 800;
-}
-
-.tab,
-.header-cta,
-.lang-option,
-.copy-inline,
-.copy-button {
-  padding-top: 2px;
 }
 
 .tab.active {
