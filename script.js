@@ -3,157 +3,153 @@ document.documentElement.classList.add("js");
 const translations = {
   zh: {
     metaTitle: "Sealtun | 面向 Sealos 的本地服务公网入口",
-    metaDescription: "Sealtun 是面向 Sealos Cloud 的本地服务公网入口，支持 HTTPS、SSH、TCP、自定义域名、分享链接、dashboard 工作台、模板、export 和 AI Skill。",
+    metaDescription: "Sealtun 是面向 Sealos Cloud 的本地服务公网入口，支持 HTTPS、SSH、TCP、自定义域名、临时分享、dashboard 工作台、模板、export 和 AI Skill。",
     skip: "跳到正文",
+    topline: "面向 Sealos Cloud、Kubernetes 和 AI Agent 的公网隧道。",
+    "top.release": "最新版本",
     "nav.capabilities": "能力",
     "nav.latest": "最新功能",
     "nav.skills": "Skills",
     "nav.install": "安装",
     "nav.cta": "开始使用",
-    "hero.badgeSource": "100% source available",
-    "hero.title": "让 AI 和团队都能用好的 Sealos 公网隧道。",
-    "hero.lead": "Sealtun 已经覆盖 HTTPS 预览、SSH/TCP 四层入口、自定义域名证书、临时分享链接、dashboard 工作台、模板生成和 YAML 导出。先安装 Skill，让 AI 直接替你完成这些操作。",
+    "hero.eyebrow": "Sealos-native tunnel",
+    "hero.title": "Sealtun 把 localhost 变成可控的 Sealos 公网入口。",
+    "hero.lead": "HTTPS 预览、SSH/TCP 四层入口、自定义域名证书、临时分享、dashboard 工作台、模板和 YAML 导出都已经接好。更重要的是，AI 可以通过 Skill 直接替你操作。",
     "hero.primary": "安装 Skill",
-    "hero.secondary": "CLI 安装",
-    "trust.skill": "AI Skill 安装",
-    "trust.modes": "HTTPS / SSH / TCP",
-    "trust.share": "临时分享链接",
+    "hero.secondary": "查看 CLI 用法",
+    "trust.login": "OAuth2 登录 / region / profile",
+    "trust.protocols": "HTTPS / SSH / TCP",
+    "trust.policy": "Basic Auth / Bearer / IP rules",
     "trust.domain": "自定义域名 + 证书",
-    "trust.dashboard": "Dashboard 工作台",
-    "cap.eyebrow": "What it does",
-    "cap.title": "从本地服务到公网入口，保持短路径和可控边界。",
-    "cap.card1.title": "一条命令选择入口协议",
-    "cap.card1.body": "默认生成公网 HTTPS 地址；需要直连 SSH 或数据库等非 HTTP 协议时，可以切到 ssh 或 tcp 四层入口。",
-    "cap.card2.title": "访问策略在代理层执行",
-    "cap.card2.body": "Basic Auth、Bearer Token、IP allowlist / denylist 和临时链接都在 Sealtun proxy 层生效，公开预览也能保留边界。",
-    "cap.card3.title": "模板、声明和导出可以复用",
-    "cap.card3.body": "支持 template 生成、dry-run、diff、apply、ttl、多隧道和 export 回写；团队共享配置不用从头拼参数。",
+    "trust.skill": "Codex Skill",
+    "statement.eyebrow": "What Sealtun does",
+    "statement.title": "从本地端口到公网入口，路径应该短，边界应该清楚。",
+    "statement.body": "Sealtun 使用 Sealos Cloud 的 Kubernetes、Service 与 Ingress 能力，把本地服务通过加密 WebSocket 隧道转发出去。开发预览、第三方回调、SSH 调试、数据库临时访问和团队评审链接，都可以走同一套 CLI。",
+    "protocol.eyebrow": "Public entrances",
+    "protocol.title": "不同协议有不同入口，不混在一起。",
+    "protocol.body": "HTTPS 适合 Web 和回调，SSH/TCP 走四层公网 NodePort。访问控制、临时分享和自定义域名属于 HTTPS 代理层能力，规则清楚，排障也更直接。",
+    "protocol.https.title": "HTTPS 预览",
+    "protocol.https.body": "一条 `sealtun expose 3000` 获得受信任的公网 URL，兼容普通 HTTP 和 WebSocket 应用流量。",
+    "protocol.ssh.title": "公网 SSH",
+    "protocol.ssh.body": "本地 sshd 可以通过 `--protocol ssh` 暴露成公网 TCP 入口，适合临时调试机器或开发环境。",
+    "protocol.tcp.title": "通用 TCP",
+    "protocol.tcp.body": "Postgres、Redis、MQTT 或其他非 HTTP 服务可以走 `--protocol tcp`，输出公网 host 和 port。",
     "latest.eyebrow": "Latest capabilities",
-    "latest.title": "最新功能覆盖入口、分享、域名、工作台和配置回收。",
-    "latest.body": "Sealtun 现在不只是把 Web 页面发出去。它可以管理公网协议、临时访问、域名证书、账号环境和运行状态，也能把已经运行的隧道反向整理成 YAML。",
-    "latest.modes.kicker": "Entrance modes",
-    "latest.modes.title": "HTTPS、SSH、TCP 三种公网入口",
-    "latest.modes.body": "Web 预览继续走 HTTPS；本地 sshd 可以用 NodePort 直连；数据库、队列和调试服务可以用通用 TCP 入口。",
+    "latest.title": "最新功能已经覆盖域名、分享、诊断、工作台和配置回收。",
     "latest.domain.kicker": "Domains",
-    "latest.domain.title": "域名先 plan，再 add 和 verify",
-    "latest.domain.body": "domain plan 先生成 CNAME 指引，domain add 可以等待 DNS 生效后绑定域名，并继续检查 Ingress 与证书状态。",
+    "latest.domain.title": "域名先 plan，再 add、verify 和 doctor",
+    "latest.domain.body": "`domain plan` 先生成 CNAME 指引，`domain add --wait` 等待 DNS 和证书就绪，`domain doctor` 用来串起 Ingress 与证书状态。",
     "latest.share.kicker": "Share",
     "latest.share.title": "已有 HTTPS 隧道可以临时分享",
-    "latest.share.body": "share create/list/revoke 为隧道生成自动失效的访问链接，URL 只在创建时显示一次，token 不会在列表里泄漏。",
-    "latest.dashboard.kicker": "Workbench",
-    "latest.dashboard.title": "Dashboard 不只是只读面板",
-    "latest.dashboard.body": "本地工作台可以创建 HTTPS/SSH/TCP 隧道，执行 YAML dry-run/diff/apply，查看日志指标事件，并管理域名和 cleanup。",
-    "latest.doctor.kicker": "Doctor",
-    "latest.doctor.title": "单条隧道诊断更直接",
-    "latest.doctor.body": "doctor <tunnel-id> 会把本地端口、daemon、远端 Pod、Service、Ingress 和证书问题串起来，并给出下一步建议。",
-    "latest.template.kicker": "Template & export",
-    "latest.template.title": "从模板开始，也能从现状导出",
-    "latest.template.body": "template https/ssh/tcp/mysql/postgres/redis/mqtt 生成命令和 YAML；export 可把本地 session 安全导出回 sealtun.yaml。",
+    "latest.share.body": "`share create/list/revoke` 生成自动失效的评审链接，URL 只在创建时显示一次，后续列表不泄漏 token。",
+    "latest.policy.kicker": "Access policy",
+    "latest.policy.title": "访问策略在代理层执行",
+    "latest.policy.body": "Basic Auth、Bearer Token、临时 token、IP allowlist 和 denylist 都由 Sealtun proxy 校验，不依赖 Ingress annotation。",
+    "latest.workbench.kicker": "Workbench",
+    "latest.workbench.title": "Dashboard 是本地工作台",
+    "latest.workbench.body": "可以创建 HTTPS/SSH/TCP 隧道，执行 YAML dry-run/diff/apply，查看 logs、metrics、events，并管理 domain、stop/start/cleanup。",
+    "latest.config.kicker": "YAML",
+    "latest.config.title": "模板、apply 和 export 可以闭环",
+    "latest.config.body": "`template` 生成命令和 `sealtun.yaml`，`apply` 用稳定名称幂等创建或更新，`export --all` 把本地 session 安全回收成 YAML。",
+    "latest.diagnose.kicker": "Diagnostics",
+    "latest.diagnose.title": "单条隧道诊断更直接",
+    "latest.diagnose.body": "`doctor <tunnel-id>`、`inspect --remote`、logs、events 和 metrics 会把本地 daemon、远端 Pod、Service、Ingress 与证书问题串起来。",
     "skill.title": "不用先学 Sealtun，让 AI 先学会。",
-    "skill.bodyA": "把这个仓库作为 Skill 安装后，AI agent 会理解 Sealtun 的 CLI、配置、分享链接、四层入口、域名诊断、dashboard 和发布流程。",
-    "skill.bodyB": "你可以直接描述目标：暴露本地服务、加 Basic Auth、创建临时分享、绑定域名、导出 sealtun.yaml、查 doctor，而不是先查参数。",
-    "skill.step1.kicker": "Install",
-    "skill.step1.body": "一条 npx 命令把 Skill 加进 AI 工作流",
-    "skill.step2.kicker": "Ask",
-    "skill.step2.body": "用自然语言描述端口、协议、域名和访问规则",
-    "skill.step3.kicker": "Review",
-    "skill.step3.body": "涉及 expose、apply、domain set、cleanup 等状态变更时先确认",
-    "skill.step4.kicker": "Operate",
-    "skill.step4.body": "让 AI 处理 doctor、share、template、export 和 dashboard",
-    "install.eyebrow": "Install",
-    "install.title": "AI 用 Skill，人用 CLI，两条路径都很短。",
-    "install.bodyA": "先装 Skill，让 AI 会用 Sealtun；需要自己操作时，再用 npm 或 npx 安装 CLI。",
-    "install.bodyB": "团队共享入口可以写进",
-    "install.bodyC": "，用 dry-run 和 diff 先看清变更，再 apply。",
+    "skill.body": "通过一条 npx 命令把仓库里的 Skill 装进 AI 工作流。之后你可以直接描述目标，比如暴露本地服务、加认证、创建临时分享、绑定域名、导出 sealtun.yaml 或跑 doctor。",
+    "skill.step1": "安装 Skill，让 AI 知道 Sealtun 的 CLI、YAML 和安全边界。",
+    "skill.step2": "用自然语言描述端口、协议、域名和访问规则。",
+    "skill.step3": "涉及 expose、apply、domain、cleanup 等状态变更时先确认。",
+    "skill.step4": "让 AI 处理命令细节、诊断输出和后续配置整理。",
+    "install.eyebrow": "Install and operate",
+    "install.title": "AI 用 Skill，人用 CLI，团队用 sealtun.yaml。",
+    "install.body": "安装路径保持短，运行路径保持可审计。你可以临时用 npx，也可以全局安装 CLI；团队配置写进 YAML 后再 dry-run、diff、apply。",
     "tabs.skill": "AI Skill",
     "tabs.domain": "域名",
     "tabs.share": "分享",
-    "tabs.yaml": "模板/YAML",
+    "tabs.yaml": "YAML",
     "copy.default": "复制",
     "copy.success": "已复制",
     "copy.error": "复制失败",
-    "cta.eyebrow": "Built for local services that need a real entrance",
-    "cta.title": "把本地开发服务放到公网时，入口、分享、域名、诊断和回收都应该清楚。",
-    "cta.button": "View source",
+    "cta.eyebrow": "Open source and Sealos native",
+    "cta.title": "把公网入口、访问策略、诊断和配置回收放进同一个工具。",
+    "cta.button": "查看源码",
     "footer.tagline": "Localhost tunnels built for Sealos Cloud.",
-    "footer.release": "Latest release"
+    "footer.back": "回到顶部"
   },
   en: {
-    metaTitle: "Sealtun | Sealos native localhost tunnels",
+    metaTitle: "Sealtun | Sealos-native localhost tunnels",
     metaDescription: "Sealtun exposes local services through Sealos Cloud with HTTPS, SSH, TCP, custom domains, temporary shares, dashboard workbench, templates, export, and AI Skill support.",
     skip: "Skip to content",
+    topline: "Public tunnels for Sealos Cloud, Kubernetes, and AI agents.",
+    "top.release": "Latest release",
     "nav.capabilities": "Capabilities",
     "nav.latest": "Latest",
     "nav.skills": "Skills",
     "nav.install": "Install",
-    "nav.cta": "Get Started",
-    "hero.badgeSource": "100% source available",
-    "hero.title": "Sealos-native public tunnels for AI and teams.",
-    "hero.lead": "Sealtun now covers HTTPS previews, SSH/TCP L4 entrances, custom-domain certificates, temporary share links, the dashboard workbench, template generation, and YAML export. Install the Skill first so AI can operate it for you.",
+    "nav.cta": "Get started",
+    "hero.eyebrow": "Sealos-native tunnel",
+    "hero.title": "Sealtun turns localhost into a controlled Sealos public entrance.",
+    "hero.lead": "HTTPS previews, SSH/TCP L4 entrances, custom-domain certificates, temporary shares, the dashboard workbench, templates, and YAML export are already wired together. More importantly, AI can operate Sealtun through the Skill.",
     "hero.primary": "Install Skill",
-    "hero.secondary": "CLI install",
-    "trust.skill": "AI Skill install",
-    "trust.modes": "HTTPS / SSH / TCP",
-    "trust.share": "Temporary shares",
+    "hero.secondary": "See CLI usage",
+    "trust.login": "OAuth2 login / region / profile",
+    "trust.protocols": "HTTPS / SSH / TCP",
+    "trust.policy": "Basic Auth / Bearer / IP rules",
     "trust.domain": "Custom domains + certs",
-    "trust.dashboard": "Dashboard workbench",
-    "cap.eyebrow": "What it does",
-    "cap.title": "A short, controlled path from localhost to a public Sealos entrance.",
-    "cap.card1.title": "Choose the public protocol in one command",
-    "cap.card1.body": "HTTPS is the default for public previews. Switch to ssh or tcp when you need direct L4 access for sshd, databases, queues, or debugging services.",
-    "cap.card2.title": "Run access policy at the proxy layer",
-    "cap.card2.body": "Basic Auth, Bearer Token, IP allow / deny rules, and temporary links are enforced by the Sealtun proxy, so public previews keep an explicit boundary.",
-    "cap.card3.title": "Reuse templates, declarations, and export",
-    "cap.card3.body": "supports template generation, dry-run, diff, apply, ttl, multi-tunnel config, and export back to YAML so teams do not rebuild flags from scratch.",
+    "trust.skill": "Codex Skill",
+    "statement.eyebrow": "What Sealtun does",
+    "statement.title": "From local port to public entrance, the path should be short and the boundary explicit.",
+    "statement.body": "Sealtun uses Sealos Cloud Kubernetes, Service, and Ingress primitives to forward local services through encrypted WebSocket tunnels. Dev previews, third-party callbacks, SSH debugging, temporary database access, and team review links can all use the same CLI.",
+    "protocol.eyebrow": "Public entrances",
+    "protocol.title": "Different protocols get different entrances, without mixing layers.",
+    "protocol.body": "HTTPS fits web apps and callbacks. SSH/TCP use public L4 NodePort. Access policy, temporary shares, and custom domains belong to the HTTPS proxy layer, which keeps behavior clear and diagnostics direct.",
+    "protocol.https.title": "HTTPS previews",
+    "protocol.https.body": "Run `sealtun expose 3000` to get a trusted public URL for regular HTTP and WebSocket application traffic.",
+    "protocol.ssh.title": "Public SSH",
+    "protocol.ssh.body": "Expose local sshd through `--protocol ssh` as a public TCP entrance for temporary machine or dev-environment debugging.",
+    "protocol.tcp.title": "Generic TCP",
+    "protocol.tcp.body": "Postgres, Redis, MQTT, or other non-HTTP services can use `--protocol tcp` and receive a public host and port.",
     "latest.eyebrow": "Latest capabilities",
-    "latest.title": "The latest Sealtun covers entrances, shares, domains, workbench, and config recovery.",
-    "latest.body": "Sealtun is no longer just a way to share a web page. It manages public protocols, temporary access, domain certificates, account context, and runtime state, and it can export running tunnels back to YAML.",
-    "latest.modes.kicker": "Entrance modes",
-    "latest.modes.title": "HTTPS, SSH, and TCP public entrances",
-    "latest.modes.body": "Keep web previews on HTTPS, expose a local sshd with direct NodePort SSH, or publish databases, queues, and debugging services through generic TCP.",
+    "latest.title": "The latest work covers domains, shares, diagnostics, workbench, and config recovery.",
     "latest.domain.kicker": "Domains",
-    "latest.domain.title": "Plan domains, then add and verify",
-    "latest.domain.body": "domain plan prints CNAME guidance first. domain add can wait for DNS, attach the host, then continue checking Ingress and certificate readiness.",
+    "latest.domain.title": "Plan domains, then add, verify, and doctor",
+    "latest.domain.body": "`domain plan` prints CNAME guidance, `domain add --wait` waits for DNS and certificates, and `domain doctor` connects Ingress and certificate status.",
     "latest.share.kicker": "Share",
     "latest.share.title": "Existing HTTPS tunnels can be shared temporarily",
-    "latest.share.body": "share create/list/revoke generates expiring review links. The URL is shown once at creation time, and token values are not leaked in later lists.",
-    "latest.dashboard.kicker": "Workbench",
-    "latest.dashboard.title": "Dashboard is more than a read-only panel",
-    "latest.dashboard.body": "The local workbench can create HTTPS/SSH/TCP tunnels, run YAML dry-run/diff/apply, view logs, metrics, and events, and manage domains and cleanup.",
-    "latest.doctor.kicker": "Doctor",
-    "latest.doctor.title": "Single-tunnel diagnostics are direct",
-    "latest.doctor.body": "doctor <tunnel-id> connects local port, daemon, remote Pod, Service, Ingress, and certificate checks, then suggests the next step.",
-    "latest.template.kicker": "Template & export",
-    "latest.template.title": "Start from templates or export reality",
-    "latest.template.body": "template https/ssh/tcp/mysql/postgres/redis/mqtt emits commands and YAML. export safely turns local sessions back into sealtun.yaml.",
+    "latest.share.body": "`share create/list/revoke` creates expiring review links. The URL is shown once at creation time, and later lists do not leak token values.",
+    "latest.policy.kicker": "Access policy",
+    "latest.policy.title": "Access policy runs at the proxy layer",
+    "latest.policy.body": "Basic Auth, Bearer Token, temporary tokens, IP allowlist, and denylist are enforced by the Sealtun proxy without relying on Ingress annotations.",
+    "latest.workbench.kicker": "Workbench",
+    "latest.workbench.title": "Dashboard is a local workbench",
+    "latest.workbench.body": "Create HTTPS/SSH/TCP tunnels, run YAML dry-run/diff/apply, view logs, metrics, and events, and manage domain, stop/start, and cleanup.",
+    "latest.config.kicker": "YAML",
+    "latest.config.title": "Templates, apply, and export close the loop",
+    "latest.config.body": "`template` emits commands and `sealtun.yaml`; `apply` idempotently creates or updates stable names; `export --all` safely recovers local sessions as YAML.",
+    "latest.diagnose.kicker": "Diagnostics",
+    "latest.diagnose.title": "Single-tunnel diagnostics are direct",
+    "latest.diagnose.body": "`doctor <tunnel-id>`, `inspect --remote`, logs, events, and metrics connect local daemon, remote Pod, Service, Ingress, and certificate checks.",
     "skill.title": "You do not have to learn Sealtun first. Let AI learn it.",
-    "skill.bodyA": "After installing this repository as a Skill, your AI agent understands Sealtun's CLI, config, share links, L4 entrances, domain diagnostics, dashboard, and release workflow.",
-    "skill.bodyB": "Describe the outcome: expose localhost, add Basic Auth, create a temporary share, bind a domain, export sealtun.yaml, run doctor. The agent handles the tool details.",
-    "skill.step1.kicker": "Install",
-    "skill.step1.body": "Add the Skill to your AI workflow with one npx command",
-    "skill.step2.kicker": "Ask",
-    "skill.step2.body": "Describe the port, protocol, domain, and access rules in natural language",
-    "skill.step3.kicker": "Review",
-    "skill.step3.body": "Confirm state-changing actions such as expose, apply, domain set, and cleanup",
-    "skill.step4.kicker": "Operate",
-    "skill.step4.body": "Let AI work through doctor, share, template, export, and dashboard",
-    "install.eyebrow": "Install",
-    "install.title": "Skill for AI, CLI for humans. Both paths stay short.",
-    "install.bodyA": "Install the Skill first so AI can use Sealtun. When you want direct control, install the CLI with npm or npx.",
-    "install.bodyB": "Shared tunnel definitions can live in",
-    "install.bodyC": ", with dry-run and diff before apply.",
+    "skill.body": "Install the repository Skill into your AI workflow with one npx command. Then describe the outcome: expose localhost, add auth, create a temporary share, bind a domain, export sealtun.yaml, or run doctor.",
+    "skill.step1": "Install the Skill so AI understands Sealtun CLI, YAML, and safety boundaries.",
+    "skill.step2": "Describe the port, protocol, domain, and access rules in natural language.",
+    "skill.step3": "Confirm state-changing actions such as expose, apply, domain, and cleanup.",
+    "skill.step4": "Let AI handle command details, diagnostic output, and config recovery.",
+    "install.eyebrow": "Install and operate",
+    "install.title": "Skill for AI, CLI for humans, sealtun.yaml for teams.",
+    "install.body": "Install paths stay short and operation stays auditable. Use npx temporarily or install the CLI globally; put team config in YAML and run dry-run, diff, and apply.",
     "tabs.skill": "AI Skill",
     "tabs.domain": "Domains",
     "tabs.share": "Share",
-    "tabs.yaml": "Template/YAML",
+    "tabs.yaml": "YAML",
     "copy.default": "Copy",
     "copy.success": "Copied",
     "copy.error": "Copy failed",
-    "cta.eyebrow": "Built for local services that need a real entrance",
-    "cta.title": "When localhost goes public, entrances, shares, domains, diagnostics, and cleanup should stay explicit.",
+    "cta.eyebrow": "Open source and Sealos native",
+    "cta.title": "Keep public entrances, access policy, diagnostics, and config recovery in one tool.",
     "cta.button": "View source",
     "footer.tagline": "Localhost tunnels built for Sealos Cloud.",
-    "footer.release": "Latest release"
+    "footer.back": "Back to top"
   }
 };
 
@@ -200,12 +196,12 @@ if ("IntersectionObserver" in window) {
         }
       });
     },
-    { threshold: 0.16 }
+    { threshold: 0.04 }
   );
 
-  revealElements.forEach(el => revealObserver.observe(el));
+  revealElements.forEach(element => revealObserver.observe(element));
 } else {
-  revealElements.forEach(el => el.classList.add("visible"));
+  revealElements.forEach(element => element.classList.add("visible"));
 }
 
 const tabs = document.querySelectorAll("[data-target]");
@@ -215,18 +211,38 @@ let currentPane = document.querySelector(".tab.active")?.dataset.target || "skil
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     currentPane = tab.dataset.target;
-    tabs.forEach(item => item.classList.toggle("active", item === tab));
+    tabs.forEach(item => {
+      const isActive = item === tab;
+      item.classList.toggle("active", isActive);
+      item.setAttribute("aria-selected", String(isActive));
+    });
     panes.forEach(pane => pane.classList.toggle("active", pane.dataset.pane === currentPane));
   });
 });
 
-document.querySelector("[data-copy-current]")?.addEventListener("click", async event => {
-  const active = document.querySelector(`[data-pane="${currentPane}"] code`);
-  if (!active) return;
-  const button = event.currentTarget;
+const writeClipboard = async text => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("copy failed");
+};
+
+const copyText = async (button, text) => {
   const dictionary = translations[currentLang];
   try {
-    await navigator.clipboard.writeText(active.textContent.trim());
+    await writeClipboard(text.trim());
     button.textContent = dictionary["copy.success"];
   } catch (_) {
     button.textContent = dictionary["copy.error"];
@@ -234,22 +250,16 @@ document.querySelector("[data-copy-current]")?.addEventListener("click", async e
   window.setTimeout(() => {
     button.textContent = dictionary["copy.default"];
   }, 1400);
+};
+
+document.querySelector("[data-copy-current]")?.addEventListener("click", event => {
+  const active = document.querySelector(`[data-pane="${currentPane}"] code`);
+  if (active) copyText(event.currentTarget, active.textContent);
 });
 
 document.querySelectorAll("[data-copy-nearest]").forEach(button => {
-  button.addEventListener("click", async event => {
-    const button = event.currentTarget;
-    const command = button.closest(".hero-command, .skill-command")?.querySelector("code");
-    if (!command) return;
-    const dictionary = translations[currentLang];
-    try {
-      await navigator.clipboard.writeText(command.textContent.trim());
-      button.textContent = dictionary["copy.success"];
-    } catch (_) {
-      button.textContent = dictionary["copy.error"];
-    }
-    window.setTimeout(() => {
-      button.textContent = dictionary["copy.default"];
-    }, 1400);
+  button.addEventListener("click", event => {
+    const command = event.currentTarget.closest(".command-bar")?.querySelector("code");
+    if (command) copyText(event.currentTarget, command.textContent);
   });
 });
