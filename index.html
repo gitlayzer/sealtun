@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sealtun | 面向 Sealos 的本地服务公网入口</title>
-  <meta name="description" content="Sealtun 是面向 Sealos Cloud 的本地服务公网入口，支持 HTTPS、SSH、TCP、自定义域名、临时分享、Profile、Dashboard Resources、模板、apply/export 和 AI Skill。">
+  <meta name="description" content="Sealtun 是面向 Sealos Cloud 的本地服务公网入口，支持 HTTPS、SSH、TCP、init 引导、资源可见性、watch、doctor 自动修复、Dashboard 命令预览和 AI Skill。">
   <meta property="og:title" content="Sealtun | 面向 Sealos 的本地服务公网入口">
   <meta property="og:description" content="把 localhost 发布成可控的 Sealos 公网入口，并让 AI 通过 Skill 直接使用 Sealtun。">
   <meta property="og:type" content="website">
@@ -53,7 +53,7 @@
         <div class="hero-copy">
           <p class="eyebrow reveal" data-i18n="hero.eyebrow">Sealos-native tunnel</p>
           <h1 class="reveal delay-1" data-i18n="hero.title">Sealtun 把 localhost 变成可控的 Sealos 公网入口。</h1>
-          <p class="hero-lead reveal delay-2" data-i18n="hero.lead">HTTPS 预览、SSH/TCP 四层入口、访问策略、自定义域名证书、临时分享、Profile、Dashboard Resources、模板和 YAML 生命周期都已经接好。更重要的是，AI 可以通过 Skill 直接替你操作。</p>
+          <p class="hero-lead reveal delay-2" data-i18n="hero.lead">HTTPS 预览、SSH/TCP 四层入口、访问策略、自定义域名证书、临时分享、init 引导、资源可见性、watch、doctor 自动修复和 Dashboard 命令预览都已经接好。更重要的是，AI 可以通过 Skill 直接替你操作。</p>
           <div class="hero-actions reveal delay-3">
             <a class="button primary" href="#skills"><span data-i18n="hero.primary">安装 Skill</span><span aria-hidden="true">-&gt;</span></a>
             <a class="button secondary" href="#install"><span data-i18n="hero.secondary">查看 CLI 用法</span><span aria-hidden="true">↓</span></a>
@@ -69,15 +69,18 @@
             <span></span><span></span><span></span>
             <strong>sealtun</strong>
           </div>
-          <pre><code>$ sealtun expose 3000 --domain app.example.com --wait-domain
+          <pre><code>$ sealtun init --protocol auto
+recommended command + sealtun.yaml, no resources created
+
+$ sealtun expose 3000 --domain app.example.com --wait-domain
 https://app.example.com  ->  localhost:3000
 policy: basic-auth, bearer, ip-rules
 
 $ sealtun dashboard --open
-live status, resources, discover, yaml apply
+live status, resources, discover, command previews
 
-$ sealtun export --all --include-secret-placeholders
-sealtun.yaml generated without secret values</code></pre>
+$ sealtun doctor --fix --dry-run
+safe repair plan before mutation</code></pre>
           <div class="console-metrics" aria-label="Sealtun capabilities">
             <div><span>HTTPS</span><strong>Ingress</strong></div>
             <div><span>SSH/TCP</span><strong>NodePort</strong></div>
@@ -90,7 +93,7 @@ sealtun.yaml generated without secret values</code></pre>
         <span data-i18n="trust.login">OAuth2 登录 / region / profile</span>
         <span data-i18n="trust.protocols">HTTPS / SSH / TCP</span>
         <span data-i18n="trust.policy">Basic Auth / Bearer / IP rules</span>
-        <span data-i18n="trust.resources">Live / Resources / Discover</span>
+        <span data-i18n="trust.resources">Init / Watch / Resources</span>
         <span data-i18n="trust.config">Template / apply / export</span>
         <span data-i18n="trust.skill">Codex Skill</span>
       </div>
@@ -141,7 +144,7 @@ sealtun.yaml generated without secret values</code></pre>
     <section class="section latest-section" id="latest">
       <div class="section-head compact reveal">
         <p class="eyebrow" data-i18n="latest.eyebrow">Latest capabilities</p>
-        <h2 data-i18n="latest.title">最新功能已经覆盖多账号、访问策略、工作台资源视图和 YAML 生命周期。</h2>
+        <h2 data-i18n="latest.title">最新功能已经覆盖引导、资源可见性、自动修复和工作台命令预览。</h2>
       </div>
 
       <div class="latest-grid">
@@ -157,9 +160,9 @@ sealtun.yaml generated without secret values</code></pre>
         </article>
 
         <article class="feature-card reveal delay-1">
-          <span data-i18n="latest.profile.kicker">Profiles</span>
-          <h3 data-i18n="latest.profile.title">Profile 和 region 可以管理多套 Sealos 环境</h3>
-          <p data-i18n="latest.profile.body">`login --profile` 保存账号、region、workspace 和 kubeconfig，`profile use` 与 `region use` 可以在多环境之间明确切换。</p>
+          <span data-i18n="latest.profile.kicker">Guided UX</span>
+          <h3 data-i18n="latest.profile.title">init 会把第一次使用变成推荐流程</h3>
+          <p data-i18n="latest.profile.body">`sealtun init` 会检查登录状态、当前 region/profile 和本地监听端口，输出推荐命令与 `sealtun.yaml`；只有加 `--apply` 才会创建资源。</p>
         </article>
 
         <article class="feature-card reveal delay-1">
@@ -177,7 +180,7 @@ sealtun.yaml generated without secret values</code></pre>
         <article class="feature-card reveal">
           <span data-i18n="latest.workbench.kicker">Workbench</span>
           <h3 data-i18n="latest.workbench.title">Dashboard 已经是完整工作台</h3>
-          <p data-i18n="latest.workbench.body">可以创建 HTTPS/SSH/TCP 隧道，执行 YAML dry-run/diff/apply，查看 logs、metrics、events，并管理 domain、stop/start/cleanup。</p>
+          <p data-i18n="latest.workbench.body">可以创建 HTTPS/SSH/TCP 隧道，执行 YAML dry-run/diff/apply，查看 logs、metrics、events/resources，并管理 domain、stop/start/cleanup；写操作确认前会展示等价 CLI 命令。</p>
         </article>
 
         <article class="feature-card reveal delay-1">
@@ -189,13 +192,13 @@ sealtun.yaml generated without secret values</code></pre>
         <article class="feature-card reveal delay-2">
           <span data-i18n="latest.diagnose.kicker">Diagnostics</span>
           <h3 data-i18n="latest.diagnose.title">单条隧道诊断更直接</h3>
-          <p data-i18n="latest.diagnose.body">`doctor <tunnel-id>`、`inspect --remote`、logs、events 和 metrics 会把本地 daemon、远端 Pod、Service、Ingress、证书和 TCP 计数串起来。</p>
+          <p data-i18n="latest.diagnose.body">`doctor --fix --dry-run` 先展示保守修复计划，`doctor --fix` 只执行低风险动作，例如恢复 stopped 隧道、清理 expired/stale 隧道或启动本地 daemon。</p>
         </article>
 
         <article class="feature-card reveal">
           <span data-i18n="latest.resources.kicker">Live resources</span>
           <h3 data-i18n="latest.resources.title">Live、Resources 和 Discover 放在工作台里</h3>
-          <p data-i18n="latest.resources.body">Dashboard 会在 Live、Reconnecting、Polling 间切换；Resources 展示 Deployment、Pod、Service、Ingress、Certificate、Issuer 和 Secret 摘要，Discover 可以扫描本机监听端口并预填新隧道。</p>
+          <p data-i18n="latest.resources.body">`resources` 命令和 Dashboard Resources tab 会展示 Deployment、Pod、Service、Ingress、Certificate、Issuer 和 Secret 元数据；`watch` 可以持续观察隧道或全局状态变化。</p>
         </article>
       </div>
     </section>
@@ -204,7 +207,7 @@ sealtun.yaml generated without secret values</code></pre>
       <div class="skill-copy reveal">
         <p class="eyebrow">Codex Skill</p>
         <h2 data-i18n="skill.title">不用先学 Sealtun，让 AI 先学会。</h2>
-        <p data-i18n="skill.body">通过一条 npx 命令把仓库里的 Skill 装进 AI 工作流。之后你可以直接描述目标，比如暴露本地服务、加认证、创建临时分享、绑定域名、打开 dashboard、导出 sealtun.yaml 或跑 doctor。</p>
+        <p data-i18n="skill.body">通过一条 npx 命令把仓库里的 Skill 装进 AI 工作流。之后你可以直接描述目标，比如初始化推荐流程、暴露本地服务、加认证、创建临时分享、绑定域名、打开 dashboard、查看 resources、watch 状态或跑 doctor。</p>
         <div class="command-bar skill-command" aria-label="Install Sealtun skill command">
           <code>npx skills add https://github.com/gitlayzer/sealtun</code>
           <button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button>
@@ -223,7 +226,7 @@ sealtun.yaml generated without secret values</code></pre>
       <div class="section-head reveal">
         <p class="eyebrow" data-i18n="install.eyebrow">Install and operate</p>
         <h2 data-i18n="install.title">AI 用 Skill，人用 CLI，团队用 sealtun.yaml。</h2>
-        <p data-i18n="install.body">安装路径保持短，运行路径保持可审计。你可以临时用 npx，也可以全局安装 CLI；团队配置写进 YAML 后再 dry-run、diff、apply，必要时再通过 dashboard 查看资源和事件。</p>
+        <p data-i18n="install.body">安装路径保持短，运行路径保持可审计。首次使用可以先跑 init 获取推荐命令；团队配置写进 YAML 后再 dry-run、diff、apply，必要时再通过 dashboard 查看资源、事件和命令预览。</p>
       </div>
 
       <div class="install-card reveal delay-1">
@@ -233,6 +236,7 @@ sealtun.yaml generated without secret values</code></pre>
           <button class="tab" data-target="domain" type="button" data-i18n="tabs.domain">域名</button>
           <button class="tab" data-target="share" type="button" data-i18n="tabs.share">分享</button>
           <button class="tab" data-target="dashboard" type="button" data-i18n="tabs.dashboard">工作台</button>
+          <button class="tab" data-target="diagnostics" type="button" data-i18n="tabs.diagnostics">诊断</button>
           <button class="tab" data-target="yaml" type="button" data-i18n="tabs.yaml">YAML</button>
         </div>
         <div class="code-wrap">
@@ -248,6 +252,10 @@ npx sealtun@latest login
 
 sealtun login gzg --profile demo
 sealtun profile use demo
+
+sealtun init
+sealtun init --protocol auto --json
+sealtun init --apply
 
 sealtun expose 3000
 sealtun expose 22 --protocol ssh
@@ -269,13 +277,25 @@ sealtun share revoke &lt;tunnel-id&gt; review</code></pre>
           <pre class="code-pane" data-pane="dashboard"><code>sealtun discover --json --limit 20
 sealtun dashboard --open
 
+sealtun resources &lt;tunnel-id&gt; --json
 sealtun metrics &lt;tunnel-id&gt; --json
 sealtun events &lt;tunnel-id&gt; --json
 
+# Dashboard write dialogs preview the equivalent CLI command.
 export SEALTUN_DASHBOARD_PASSWORD='change-me'
 sealtun dashboard --addr 0.0.0.0 --allow-remote \
   --basic-auth-user admin \
   --basic-auth-password-env SEALTUN_DASHBOARD_PASSWORD</code></pre>
+          <pre class="code-pane" data-pane="diagnostics"><code>sealtun watch
+sealtun watch &lt;tunnel-id&gt;
+sealtun watch &lt;tunnel-id&gt; --json
+
+sealtun doctor &lt;tunnel-id&gt;
+sealtun doctor --fix --dry-run
+sealtun doctor --fix
+
+sealtun resources &lt;tunnel-id&gt;
+sealtun cleanup &lt;tunnel-id&gt;</code></pre>
           <pre class="code-pane" data-pane="yaml"><code>sealtun template https --name web --port 3000
 sealtun template postgres --name db
 sealtun export --all -o sealtun.yaml
