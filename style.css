@@ -149,29 +149,13 @@ code {
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
+  width: 54px;
+  height: 30px;
   flex: 0 0 auto;
-  filter: drop-shadow(0 12px 22px rgba(38, 198, 218, 0.24));
+  object-fit: contain;
+  filter: drop-shadow(0 12px 22px rgba(15, 111, 255, 0.24));
 }
 
-.brand-logo rect {
-  fill: var(--deep);
-}
-
-.brand-logo .logo-lines {
-  fill: none;
-  stroke: #f7fbff;
-  stroke-width: 7;
-  stroke-linecap: round;
-}
-
-.brand-logo .logo-tunnel {
-  fill: none;
-  stroke: var(--aqua);
-  stroke-width: 5;
-  stroke-linecap: round;
-}
 
 .nav-links {
   gap: 8px;
@@ -823,8 +807,8 @@ h3 {
 }
 
 .footer .brand-logo {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 24px;
 }
 
 .footer a {
@@ -966,8 +950,8 @@ h3 {
   }
 
   .brand-logo {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 24px;
   }
 
   .header-actions {

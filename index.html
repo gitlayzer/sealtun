@@ -8,8 +8,12 @@
   <meta property="og:title" content="Sealtun | 面向 Sealos 的本地服务公网入口">
   <meta property="og:description" content="把 localhost 发布成可控的 Sealos 公网入口，并让 AI 通过 Skill 直接使用 Sealtun。">
   <meta property="og:type" content="website">
-  <meta name="theme-color" content="#0b2430">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b2430'/%3E%3Cpath d='M17 21h30M17 32h30M17 43h30' stroke='%23f7fbff' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M25 21c0 6 14 5 14 11s-14 5-14 11' stroke='%2326c6da' stroke-width='5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+  <meta property="og:image" content="./assets/sealtun-social.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="./assets/sealtun-social.png">
+  <meta name="theme-color" content="#0f6fff">
+  <link rel="icon" type="image/png" href="./assets/favicon.png">
+  <link rel="apple-touch-icon" href="./assets/sealtun-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -21,11 +25,7 @@
   <header class="site-header">
     <div class="wrap navbar">
       <a class="brand" href="#top" aria-label="Sealtun home">
-        <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
-          <rect width="64" height="64" rx="14"></rect>
-          <path class="logo-lines" d="M17 21h30M17 32h30M17 43h30"></path>
-          <path class="logo-tunnel" d="M25 21c0 6 14 5 14 11s-14 5-14 11"></path>
-        </svg>
+        <img class="brand-logo" src="./assets/sealtun-logo.png" alt="" aria-hidden="true">
         <span>Sealtun</span>
       </a>
 
@@ -323,11 +323,7 @@ sealtun apply -f sealtun.yaml
 
   <footer class="footer">
     <div class="footer-brand">
-      <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
-        <rect width="64" height="64" rx="14"></rect>
-        <path class="logo-lines" d="M17 21h30M17 32h30M17 43h30"></path>
-        <path class="logo-tunnel" d="M25 21c0 6 14 5 14 11s-14 5-14 11"></path>
-      </svg>
+      <img class="brand-logo" src="./assets/sealtun-logo.png" alt="" aria-hidden="true">
       <span>Sealtun</span>
     </div>
     <p data-i18n="footer.tagline">Localhost tunnels built for Sealos Cloud.</p>
