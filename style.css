@@ -149,8 +149,8 @@ code {
 }
 
 .brand-logo {
-  width: 54px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   object-fit: contain;
   filter: drop-shadow(0 12px 22px rgba(15, 111, 255, 0.24));
@@ -807,8 +807,8 @@ h3 {
 }
 
 .footer .brand-logo {
-  width: 42px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
 }
 
 .footer a {
@@ -950,8 +950,8 @@ h3 {
   }
 
   .brand-logo {
-    width: 44px;
-    height: 24px;
+    width: 34px;
+    height: 34px;
   }
 
   .header-actions {
