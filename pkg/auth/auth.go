@@ -300,7 +300,7 @@ func GetInitData(region string) (*InitDataResponse, error) {
 	if host == "" {
 		return nil, fmt.Errorf("invalid region %q", region)
 	}
-	apiURL := fmt.Sprintf("https://applaunchpad.%s/api/platform/getInitData", u.Host)
+	apiURL := fmt.Sprintf("https://kubepanel.%s/api/platform/init-data", u.Host)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, err
