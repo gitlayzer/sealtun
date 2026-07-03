@@ -14,7 +14,7 @@ Classify the request before answering or editing:
 - Troubleshooting: login/profile mismatch, daemon/session issues, local port discovery/failures, SSH/TCP direct NodePort problems, remote Kubernetes problems, resource lists/resource occupancy, DNS, Ingress, certificate, logs, metrics, or events. Read `references/troubleshooting.md`.
 - Skill maintenance or quality review: trigger precision, workflow scoring, or regression prompts for this skill. Read `references/evals.md`.
 
-If the request is inside the Sealtun repository, prefer the current source tree and README over these references when they conflict. Use `rg` to inspect Cobra commands and flags before changing CLI usage guidance.
+If the request is inside the Sealtun repository, prefer the current source tree, README, and QuickStart docs over these references when they conflict. Use `rg` to inspect Cobra commands and flags before changing CLI usage guidance.
 
 ## Intent Routing
 
@@ -44,7 +44,7 @@ Follow this flow after the skill triggers:
    - Guidance mode: user asks how to use Sealtun. Load the matching reference and give commands; do not run live tunnel/cloud commands.
    - Live operation mode: user explicitly asks to execute, create, apply, stop, clean up, or bind a domain. Run preflight checks first, then the requested command, then verification.
    - Troubleshooting mode: user reports a problem. Run non-mutating diagnostics first, identify the likely layer, then propose or perform fixes only when the requested action is clear.
-3. Gather minimum context. Inside this repo, inspect current code/README before relying on references. Outside the repo, use the references as the command source. Prefer non-mutating checks such as `sealtun --version`, `sealtun status`, `sealtun init`, `sealtun profile current`, `sealtun region current`, `sealtun discover`, `sealtun list`, `sealtun inspect`, `sealtun resources`, and `sealtun doctor`.
+3. Gather minimum context. Inside this repo, inspect current code/README/QuickStart docs before relying on references. Outside the repo, use the references as the command source. Prefer non-mutating checks such as `sealtun --version`, `sealtun status`, `sealtun init`, `sealtun profile current`, `sealtun region current`, `sealtun discover`, `sealtun list`, `sealtun inspect`, `sealtun resources`, and `sealtun doctor`.
 4. Handle first-use authorization gently. If `status` shows no login, explain that Sealtun needs Sealos authorization and kubeconfig before creating cloud resources. Guide the user through `sealtun login`, or `sealtun login <region> --profile <name>` when region/profile matters. If a browser/device authorization flow opens, tell the user to complete it in the browser and wait; do not treat the pause as a failure. After login, verify with `sealtun status`, `sealtun region current`, and optionally `sealtun profile current`.
 5. Control mutations. Do not run `sealtun up`, `sealtun expose`, real `sealtun apply`, `sealtun share create/revoke`, `sealtun domain add/set/clear`, `sealtun stop`, `sealtun cleanup`, or `sealtun logout` unless the user explicitly asked for that operation in the current task. `sealtun template`, `sealtun domain plan`, `sealtun share list`, `sealtun export`, `apply --dry-run`, `diff`, and read-only diagnostics are safe guidance steps. For declarative changes, prefer `apply --dry-run` and `diff` before real `apply`.
 6. Verify completion. After live operations, use the contract below, then report the exact command sequence and final state without printing secrets.

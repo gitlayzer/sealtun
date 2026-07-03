@@ -25,7 +25,7 @@ Every category should be at least 95 before release:
 | Feature coverage | Current user-facing CLI workflows are represented: install, shell completion, login, status, regions/profiles, discover, expose, connect, template, apply/diff/export, domain, policy/share/rotate, list/inspect, logs/events/metrics/resources, watch, doctor, SSH connect fallback, stop/start/cleanup/logout. Hidden internal commands `daemon` and `server` are described only as internal behavior, not normal user workflows. |
 | Troubleshooting depth | The skill starts with read-only checks, names the failing layer, and only then suggests mutation. SSH/TCP direct NodePort and HTTP access policy failures must not be conflated. |
 | Context efficiency | `SKILL.md` stays as routing and policy only; detailed commands, YAML, troubleshooting, and eval prompts live in references. |
-| Maintenance | Updating a CLI flag or behavior has an obvious reference location, and the skill says to prefer current repo source and README when working inside the repo. |
+| Maintenance | Updating a CLI flag or behavior has an obvious reference location, and the skill says to prefer current repo source, README, and QuickStart docs when working inside the repo. |
 
 ## Active Trigger Prompts
 
