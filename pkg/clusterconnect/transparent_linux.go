@@ -127,7 +127,7 @@ func originalDestination(conn net.Conn) (*OriginalDestination, error) {
 func getsockoptOriginalDst(fd int) (*OriginalDestination, error) {
 	var addr unix.RawSockaddrInet4
 	size := uint32(unix.SizeofSockaddrInet4)
-	_, _, errno := unix.Syscall6(unix.SYS_GETSOCKOPT, uintptr(fd), uintptr(unix.SOL_IP), uintptr(unix.SO_ORIGINAL_DST), uintptr(unsafe.Pointer(&addr)), uintptr(unsafe.Pointer(&size)), 0)
+	_, _, errno := unix.Syscall6(unix.SYS_GETSOCKOPT, uintptr(fd), uintptr(unix.SOL_IP), uintptr(unix.SO_ORIGINAL_DST), uintptr(unsafe.Pointer(&addr)), uintptr(unsafe.Pointer(&size)), 0) // #nosec G103 -- SO_ORIGINAL_DST requires passing sockaddr buffers to getsockopt.
 	if errno != 0 {
 		return nil, errno
 	}
@@ -137,7 +137,9 @@ func getsockoptOriginalDst(fd int) (*OriginalDestination, error) {
 }
 
 func sockaddrPort(port uint16) uint16 {
-	return binary.BigEndian.Uint16((*[2]byte)(unsafe.Pointer(&port))[:])
+	var raw [2]byte
+	binary.NativeEndian.PutUint16(raw[:], port)
+	return binary.BigEndian.Uint16(raw[:])
 }
 
 func runIptables(args ...string) error {
