@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -173,7 +174,7 @@ func writeHostsBlock(path string, entries []HostEntry) error {
 	}
 	block.WriteString(hostsEnd + "\n")
 	next := strings.TrimRight(base, "\n") + "\n\n" + block.String()
-	return os.WriteFile(path, []byte(next), 0o644) // #nosec G306 -- /etc/hosts commonly uses 0644.
+	return writeFileAtomic(path, []byte(next))
 }
 
 func clearHostsBlock(path string) error {
@@ -182,5 +183,35 @@ func clearHostsBlock(path string) error {
 		return err
 	}
 	next := strings.TrimRight(removeHostsBlock(string(data)), "\n") + "\n"
-	return os.WriteFile(path, []byte(next), 0o644) // #nosec G306 -- /etc/hosts commonly uses 0644.
+	return writeFileAtomic(path, []byte(next))
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }

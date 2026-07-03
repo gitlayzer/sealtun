@@ -892,8 +892,8 @@ func TestImageTagForVersion(t *testing.T) {
 	}{
 		{version: "dev", want: "latest"},
 		{version: "", want: "latest"},
-		{version: "f596979", want: "latest"},
-		{version: "f596979a", want: "latest"},
+		{version: "f596979", want: ""},
+		{version: "f596979a", want: ""},
 		{version: "v0.0.9", want: "0.0.9"},
 		{version: "0.0.9", want: "0.0.9"},
 		{version: "v0.0.9-rc.1", want: "0.0.9-rc.1"},
@@ -911,8 +911,20 @@ func TestImageTagForVersion(t *testing.T) {
 func TestServerImageForVersionCanBeOverridden(t *testing.T) {
 	t.Setenv("SEALTUN_SERVER_IMAGE", "example.com/sealtun:test")
 
-	if got := serverImageForVersion("v1.2.3"); got != "example.com/sealtun:test" {
+	got, err := serverImageForVersion("v1.2.3")
+	if err != nil {
+		t.Fatalf("server image override failed: %v", err)
+	}
+	if got != "example.com/sealtun:test" {
 		t.Fatalf("expected overridden image, got %s", got)
+	}
+}
+
+func TestServerImageForVersionRejectsUnknownVersions(t *testing.T) {
+	t.Setenv("SEALTUN_SERVER_IMAGE", "")
+
+	if _, err := serverImageForVersion("f596979"); err == nil {
+		t.Fatal("expected unknown version to require an explicit server image")
 	}
 }
 

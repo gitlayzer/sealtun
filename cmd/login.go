@@ -448,7 +448,8 @@ func openBrowser(url string) {
 		args = []string{url}
 	}
 
-	if err := exec.Command(cmd, args...).Start(); err != nil { // #nosec G204 -- command is selected from a fixed OS allowlist and the URL is HTTPS-validated.
+	// #nosec G204 -- command is selected from a fixed OS allowlist and the URL is HTTPS-validated.
+	if err := exec.Command(cmd, args...).Start(); err != nil {
 		fmt.Printf("Browser opened failed: %v. Please open the URL manually.\n", err)
 	} else {
 		fmt.Println("Browser opened automatically.")

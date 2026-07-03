@@ -152,7 +152,8 @@ func EnsurePrivateDir(dir, label string) (bool, error) {
 		return false, fmt.Errorf("%s %s is not a directory", label, dir)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- directories require execute bits; 0700 keeps config private to the user.
+		// #nosec G302 -- directories require execute bits; 0700 keeps config private to the user.
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return false, fmt.Errorf("restrict %s %s permissions: %w", label, dir, err)
 		}
 	}
@@ -332,7 +333,8 @@ func ensureProfileDir(dir, name string) error {
 		return fmt.Errorf("profile %s is not a directory", name)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- profile directories require execute bits; 0700 keeps saved credentials private.
+		// #nosec G302 -- profile directories require execute bits; 0700 keeps saved credentials private.
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return fmt.Errorf("restrict profile %s directory permissions: %w", name, err)
 		}
 	}
@@ -354,7 +356,8 @@ func validateProfileDir(dir, name string) error {
 		return fmt.Errorf("profile %s is not a directory", name)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- profile directories require execute bits; 0700 keeps saved credentials private.
+		// #nosec G302 -- profile directories require execute bits; 0700 keeps saved credentials private.
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return fmt.Errorf("restrict profile %s directory permissions: %w", name, err)
 		}
 	}

@@ -1,6 +1,6 @@
 ---
 name: sealtun
-description: "Use for Sealtun CLI help: expose local HTTPS/SSH/TCP or HTTP upstream targets, connect to cluster Services, sealtun.yaml, domains, policy/audit/rotate, discover, resources, watch, doctor. Avoid generic Kubernetes, DNS-only, prod deploy."
+description: "Use for Sealtun CLI help: tui/console, expose/up HTTPS/SSH/TCP/targets, connect to cluster Services, YAML, domains, policy/audit/share, resources, doctor. Avoid generic Kubernetes or DNS-only tasks."
 ---
 
 # Sealtun
@@ -9,7 +9,7 @@ description: "Use for Sealtun CLI help: expose local HTTPS/SSH/TCP or HTTP upstr
 
 Classify the request before answering or editing:
 
-- User operation: install, shell completion, guided init, login, `up`, discover local ports, expose HTTPS, remote HTTP upstream targets, SSH, or generic TCP, access cluster-internal Services/Pods with `connect`, generate protocol templates, secure public HTTP traffic, show/set policy, audit access, create/list/revoke/rotate temporary share links, rotate server secret, plan/add/verify a custom domain, inspect state, watch status, view or tune resources, stop/start/resume, clean up, or export YAML. Read `references/cli.md`.
+- User operation: install, shell completion, TUI/console, guided init, login, `up`, discover local ports, expose HTTPS, remote HTTP upstream targets, SSH, or generic TCP, access cluster-internal Services/Pods with `connect`, generate protocol templates, secure public HTTP traffic, show/set policy, audit access, create/list/revoke/rotate temporary share links, rotate server secret, plan/add/verify a custom domain, inspect state, watch status, view or tune resources, stop/start/resume, clean up, or export YAML. Read `references/cli.md`.
 - Declarative configuration: `sealtun.yaml`, `apply -f`, `diff -f`, `export`, multi-tunnel management, stable names, `ttl`, Pod resources, HTTPS access policies, SSH tunnel declarations, or generic TCP tunnel declarations. Read `references/declarative.md`.
 - Troubleshooting: login/profile mismatch, daemon/session issues, local port discovery/failures, SSH/TCP direct NodePort problems, remote Kubernetes problems, resource lists/resource occupancy, DNS, Ingress, certificate, logs, metrics, or events. Read `references/troubleshooting.md`.
 - Skill maintenance or quality review: trigger precision, workflow scoring, or regression prompts for this skill. Read `references/evals.md`.
@@ -23,6 +23,7 @@ Use the user's intent to choose the shortest safe path:
 | User intent | Primary path | Verify with |
 | --- | --- | --- |
 | Make a local web app, dev server, callback, preview, or webhook public | `status` -> `up` for interactive/dev use; `expose <port>` for scripts | URL from output, `list --check`, `inspect <id>` |
+| Manage tunnels from an interactive terminal | `tui` or `console` | selected tunnel state, confirmed action result, `list --check` |
 | Make an HTTP service reachable from this machine public | `status` -> `up --target http://host:port` for dev use; `expose --target` for scripts | URL from output, `inspect <id>`, protected request behavior |
 | Add Basic Auth, Bearer token, IP rules, rate limit, audit, or temporary links | HTTPS `expose`, `policy`, `share`, or YAML access policy | `inspect <id>`, `policy show/audit`, protected request behavior |
 | Expose SSH directly | `expose 22 --protocol ssh` | printed SSH host/port, `inspect <id> --remote`, user SSH client output |

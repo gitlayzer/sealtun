@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/labring/sealtun/pkg/clusterconnect"
 	"github.com/spf13/cobra"
@@ -22,6 +23,20 @@ type connectOptions struct {
 var connectOpts = connectOptions{
 	Mode: clusterconnect.ModeAuto,
 }
+
+type connectPreflighter interface {
+	Preflight(context.Context, clusterconnect.Options) (*clusterconnect.Preflight, error)
+}
+
+type connectPlanRunner interface {
+	Plan(context.Context) (*clusterconnect.TransparentPlan, error)
+	RunPlan(context.Context, *clusterconnect.TransparentPlan) error
+}
+
+var (
+	connectSaveState   = clusterconnect.SaveState
+	connectRemoveState = clusterconnect.RemoveState
+)
 
 var connectCmd = &cobra.Command{
 	Use:          "connect",
@@ -74,7 +89,8 @@ func runConnectCheck(cmd *cobra.Command, opts connectOptions) error {
 	if err != nil {
 		return err
 	}
-	preflight, err := env.Preflight(cmd.Context(), clusterconnect.Options{
+	ctx := connectCommandContext(cmd)
+	preflight, err := env.Preflight(ctx, clusterconnect.Options{
 		Mode:      opts.Mode,
 		Namespace: opts.Namespace,
 	})
@@ -99,7 +115,14 @@ func runConnect(cmd *cobra.Command, opts connectOptions) error {
 	if err != nil {
 		return err
 	}
-	preflight, err := env.Preflight(cmd.Context(), clusterconnect.Options{
+	return runConnectWithEnvironment(cmd, opts, env, func(options clusterconnect.TransparentOptions) connectPlanRunner {
+		return clusterconnect.NewTransparentServer(env, options)
+	})
+}
+
+func runConnectWithEnvironment(cmd *cobra.Command, opts connectOptions, env connectPreflighter, newServer func(clusterconnect.TransparentOptions) connectPlanRunner) error {
+	ctx := connectCommandContext(cmd)
+	preflight, err := env.Preflight(ctx, clusterconnect.Options{
 		Mode:      opts.Mode,
 		Namespace: opts.Namespace,
 	})
@@ -119,11 +142,11 @@ func runConnect(cmd *cobra.Command, opts connectOptions) error {
 		printConnectPreflight(cmd, preflight)
 	}
 
-	server := clusterconnect.NewTransparentServer(env, clusterconnect.TransparentOptions{
+	server := newServer(clusterconnect.TransparentOptions{
 		Namespace: opts.Namespace,
 		Listen:    opts.Listen,
 	})
-	plan, err := server.Plan(cmd.Context())
+	plan, err := server.Plan(ctx)
 	if err != nil {
 		return err
 	}
@@ -139,18 +162,28 @@ func runConnect(cmd *cobra.Command, opts connectOptions) error {
 		Hosts:      plan.Hosts,
 		PID:        os.Getpid(),
 	}
-	if err := clusterconnect.SaveState(state); err != nil {
+	if err := connectSaveState(state); err != nil {
 		return err
 	}
-	defer clusterconnect.RemoveState()
+	defer connectRemoveState()
 
-	connectCtx, stopSignals := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	connectCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	err = server.RunPlan(connectCtx, plan)
 	if err == nil || err == context.Canceled {
 		return nil
 	}
 	return err
+}
+
+func connectCommandContext(cmd *cobra.Command) context.Context {
+	if cmd == nil {
+		return context.Background()
+	}
+	if ctx := cmd.Context(); ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }
 
 func runConnectStatus(cmd *cobra.Command, asJSON bool) error {

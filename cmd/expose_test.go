@@ -46,6 +46,20 @@ func TestValidateProtocol(t *testing.T) {
 	}
 }
 
+func TestNewTunnelIDUsesSixtyFourBitsOfEntropy(t *testing.T) {
+	t.Parallel()
+
+	id := newTunnelID()
+	if len(id) != 16 {
+		t.Fatalf("expected 16 hex chars, got %q", id)
+	}
+	for _, r := range id {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			t.Fatalf("expected lowercase hex tunnel id, got %q", id)
+		}
+	}
+}
+
 func TestResolveExposeTargetDefaultsLocalPort(t *testing.T) {
 	t.Parallel()
 

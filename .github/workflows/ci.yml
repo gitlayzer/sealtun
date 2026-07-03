@@ -29,13 +29,28 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test ./...
+        run: go test -coverprofile=coverage.out ./...
 
       - name: Run vet
         run: go vet ./...
 
+      - name: Run race tests
+        run: go test -race ./cmd ./pkg/session ./pkg/accesspolicy ./pkg/publicauth ./pkg/k8s ./pkg/clusterconnect ./pkg/tunnel
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
+
+      - name: Run gosec
+        run: $(go env GOPATH)/bin/gosec ./cmd ./pkg/... ./assets ./
+
       - name: Check npm package builder syntax
         run: node --check scripts/build-npm-packages.mjs
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: coverage.out
 
   goreleaser-snapshot:
     runs-on: ubuntu-latest

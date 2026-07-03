@@ -19,6 +19,7 @@ Sealtun is a local tunnel CLI for **Sealos Cloud** and **Kubernetes** users. It 
 - 🛡️ **Security Operations**: HTTPS tunnels support Basic Auth, Bearer tokens, temporary links, IP rules, rate limits, access audit, and server secret rotation.
 - 📊 **Status and Diagnostics**: Use `doctor <tunnel-id>`, `inspect --remote`, `logs`, `events`, `metrics`, `resources`, and `watch` to diagnose local ports, daemon state, remote Pods, Services, Ingresses, and certificates.
 - 🧭 **Guided UX and Safe Fixes**: Use `init` for first-run command/YAML recommendations, and `resources`, `watch`, or `doctor --fix --dry-run` to understand and conservatively repair tunnel state.
+- 🖥️ **Terminal Console**: Use `tui` / `console` in an interactive terminal to discover ports, create tunnels, and manage logs, events, resources, domains, policies, share links, and lifecycle actions.
 - 🔌 **Cluster Service Access**: On Linux, `sudo sealtun connect` lets TCP clients directly reach Service FQDNs, Service ClusterIPs, and Pod IPs without SOCKS or client-side proxy config.
 - 🧩 **Protocol Templates**: Use `template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` to generate commands and `sealtun.yaml` examples.
 - 🧾 **Declarative Config**: Use `apply -f sealtun.yaml` to declare tunnels in YAML and create or update them with stable names; use `export` to turn local sessions back into YAML.
@@ -136,6 +137,16 @@ sealtun stop <tunnel-id>
 sealtun start <tunnel-id>
 sealtun cleanup <tunnel-id>
 ```
+
+For interactive day-to-day management, open the terminal console:
+
+```bash
+sealtun tui
+# alias
+sealtun console
+```
+
+The TUI reuses the existing CLI logic. Focus starts on the left menu, where up/down switches between `Tunnels`, `Create`, `Tools`, and `Status`; press `enter`, `right`, or `tab` to enter the content area, and `left`, `esc`, or `tab` to return to the menu. `Tunnels` lists and selects sessions; press `o` on a selected tunnel to open `Tunnel Actions` for inspect/doctor/logs/metrics/events/resources/export plus domain/policy/share/resources/rotate/repair/start/stop/cleanup operations. `Create` builds a basic HTTPS/SSH/TCP tunnel from a discovered local port. `Tools` is global-only and runs status, discover, init, template, connect check, domain status, doctor dry-run, export all, and YAML apply dry-run/diff/apply. Write operations show the equivalent CLI command and require confirmation. Real `connect` network takeover remains an explicit CLI flow.
 
 Access in-cluster Services/Pods from Linux:
 

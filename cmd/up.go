@@ -867,7 +867,7 @@ func loadProjectTunnelState() (*projectTunnelState, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the fixed per-project Sealtun state file under the current working directory.
 	if err != nil {
 		return nil, err
 	}

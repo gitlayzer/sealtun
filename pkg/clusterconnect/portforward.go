@@ -32,13 +32,6 @@ func (d *PortForwardDialer) DialPod(ctx context.Context, namespace, podName stri
 	if namespace == "" || podName == "" || port <= 0 {
 		return nil, fmt.Errorf("namespace, pod name, and port are required")
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, err
-	}
-	localPort := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
-
 	transport, upgrader, err := spdy.RoundTripperFor(d.RESTConfig)
 	if err != nil {
 		return nil, err
@@ -56,9 +49,13 @@ func (d *PortForwardDialer) DialPod(ctx context.Context, namespace, podName stri
 
 	stopChan := make(chan struct{})
 	readyChan := make(chan struct{})
+	// ForwardPorts returns exactly once; keep this buffered so Close can stop
+	// the forwarder without waiting for its final return path to be observed.
 	errChan := make(chan error, 1)
+	var fw *portforward.PortForwarder
 	go func() {
-		fw, err := portforward.New(spdyDialer, []string{fmt.Sprintf("%d:%d", localPort, port)}, stopChan, readyChan, io.Discard, io.Discard)
+		var err error
+		fw, err = portforward.NewOnAddresses(spdyDialer, []string{"127.0.0.1"}, []string{fmt.Sprintf("0:%d", port)}, stopChan, readyChan, io.Discard, io.Discard)
 		if err != nil {
 			errChan <- err
 			return
@@ -75,6 +72,20 @@ func (d *PortForwardDialer) DialPod(ctx context.Context, namespace, podName stri
 		close(stopChan)
 		return nil, ctx.Err()
 	}
+	if fw == nil {
+		close(stopChan)
+		return nil, fmt.Errorf("pod port-forward did not initialize")
+	}
+	ports, err := fw.GetPorts()
+	if err != nil {
+		close(stopChan)
+		return nil, err
+	}
+	if len(ports) == 0 || ports[0].Local == 0 {
+		close(stopChan)
+		return nil, fmt.Errorf("pod port-forward did not report a local port")
+	}
+	localPort := int(ports[0].Local)
 
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(localPort)))
@@ -82,20 +93,34 @@ func (d *PortForwardDialer) DialPod(ctx context.Context, namespace, podName stri
 		close(stopChan)
 		return nil, err
 	}
-	return &forwardedConn{Conn: conn, stop: stopChan}, nil
+	forwarded := &forwardedConn{Conn: conn, stop: stopChan, done: make(chan struct{})}
+	go forwarded.closeWhenForwarderStops(errChan)
+	return forwarded, nil
 }
 
 type forwardedConn struct {
 	net.Conn
-	stop chan struct{}
-	once sync.Once
+	stop     chan struct{}
+	done     chan struct{}
+	once     sync.Once
+	closeErr error
 }
 
 func (c *forwardedConn) Close() error {
 	c.once.Do(func() {
 		close(c.stop)
+		c.closeErr = c.Conn.Close()
+		close(c.done)
 	})
-	return c.Conn.Close()
+	return c.closeErr
+}
+
+func (c *forwardedConn) closeWhenForwarderStops(errc <-chan error) {
+	select {
+	case <-errc:
+		_ = c.Close()
+	case <-c.done:
+	}
 }
 
 func stringsTrimScheme(host string) string {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -93,9 +94,10 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// 2. Generate tunnel ID & secret.
-	tunnelID := uuid.New().String()[:8]
+	tunnelID := newTunnelID()
 	secret := uuid.New().String()
-	fmt.Printf("[+] Preparing tunnel %s...\n", tunnelID)
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "[+] Preparing tunnel %s...\n", tunnelID)
 
 	// 3. Create K8s Resources (Deployment, Service, Ingress)
 	k8sClient, err := k8s.NewClient(kcPath, authData)
@@ -104,7 +106,7 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	if err := recoverStaleSessions(ctx); err != nil {
+	if err := recoverStaleSessions(ctx, out); err != nil {
 		return err
 	}
 
@@ -180,44 +182,44 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 
 	if protocol == tunnelprotocol.SSH {
 		endpoint := endpointDisplay(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort)
-		fmt.Printf("[+] Public SSH host: %s\n", endpoint.Host)
-		fmt.Printf("[+] Public SSH port: %d\n", endpoint.Port)
-		fmt.Printf("[+] Connect with: %s\n", endpoint.Command)
-		fmt.Printf("[+] Local target: localhost:%s\n", localPort)
+		fmt.Fprintf(out, "[+] Public SSH host: %s\n", endpoint.Host)
+		fmt.Fprintf(out, "[+] Public SSH port: %d\n", endpoint.Port)
+		fmt.Fprintf(out, "[+] Connect with: %s\n", endpoint.Command)
+		fmt.Fprintf(out, "[+] Local target: localhost:%s\n", localPort)
 	} else if protocol == tunnelprotocol.TCP {
 		endpoint := endpointDisplay(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort)
-		fmt.Printf("[+] Public TCP host: %s\n", endpoint.Host)
-		fmt.Printf("[+] Public TCP port: %d\n", endpoint.Port)
-		fmt.Printf("[+] Public TCP endpoint: %s\n", endpointLabel(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort))
-		fmt.Printf("[+] Local target: localhost:%s\n", localPort)
+		fmt.Fprintf(out, "[+] Public TCP host: %s\n", endpoint.Host)
+		fmt.Fprintf(out, "[+] Public TCP port: %d\n", endpoint.Port)
+		fmt.Fprintf(out, "[+] Public TCP endpoint: %s\n", endpointLabel(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort))
+		fmt.Fprintf(out, "[+] Local target: localhost:%s\n", localPort)
 	} else {
-		fmt.Printf("[+] Public URL: %s\n", endpointLabel(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort))
-		fmt.Printf("[+] Target: %s\n", targetURL)
+		fmt.Fprintf(out, "[+] Public URL: %s\n", endpointLabel(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort))
+		fmt.Fprintf(out, "[+] Target: %s\n", targetURL)
 		if targetTLSInsecureSkipVerify {
-			fmt.Printf("[!] Target TLS certificate verification is disabled for this upstream.\n")
+			fmt.Fprintf(out, "[!] Target TLS certificate verification is disabled for this upstream.\n")
 		}
 	}
 	if basicAuthConfig != nil && basicAuthConfig.Enabled {
-		fmt.Printf("[+] Basic Auth enabled for public traffic as user %q.\n", basicAuthConfig.Username)
+		fmt.Fprintf(out, "[+] Basic Auth enabled for public traffic as user %q.\n", basicAuthConfig.Username)
 	}
 	if accessPolicyConfig != nil {
-		printAccessPolicySummary(accessPolicyConfig)
+		printAccessPolicySummary(out, accessPolicyConfig)
 		if temporaryAccessToken != "" || temporaryAccessTokenEnv != "" {
 			token, tokenErr := resolveSecretValue(temporaryAccessToken, temporaryAccessTokenEnv, "temporary access token", getenv)
 			if tokenErr == nil {
-				fmt.Printf("[+] Temporary access URL: %s\n", temporaryAccessURL(hosts.PublicHost, token))
+				fmt.Fprintf(out, "[+] Temporary access URL: %s\n", temporaryAccessURL(hosts.PublicHost, token))
 			}
 		}
 	}
 	if normalizedCustomDomain != "" {
-		fmt.Printf("[+] Requested custom domain: %s\n", normalizedCustomDomain)
-		fmt.Printf("[+] Sealos CNAME target: %s\n", hosts.SealosHost)
-		fmt.Printf("[+] Configure DNS: CNAME %s -> %s\n", normalizedCustomDomain, hosts.SealosHost)
+		fmt.Fprintf(out, "[+] Requested custom domain: %s\n", normalizedCustomDomain)
+		fmt.Fprintf(out, "[+] Sealos CNAME target: %s\n", hosts.SealosHost)
+		fmt.Fprintf(out, "[+] Configure DNS: CNAME %s -> %s\n", normalizedCustomDomain, hosts.SealosHost)
 		if !waitDomain {
-			fmt.Printf("[+] After DNS is ready, attach it with: sealtun domain set %s %s\n", tunnelID, normalizedCustomDomain)
+			fmt.Fprintf(out, "[+] After DNS is ready, attach it with: sealtun domain set %s %s\n", tunnelID, normalizedCustomDomain)
 		}
 	}
-	fmt.Printf("[+] Waiting for tunnel server pod to be ready...\n")
+	fmt.Fprintf(out, "[+] Waiting for tunnel server pod to be ready...\n")
 
 	readyCtx, cancelReady := context.WithTimeout(ctx, readyTimeout)
 	defer cancelReady()
@@ -225,7 +227,7 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("timed out waiting for tunnel server: %w", err)
 	}
 	if waitDomain && normalizedCustomDomain != "" {
-		fmt.Printf("[+] Waiting for custom domain DNS, Ingress, and certificate readiness (timeout %s)...\n", domainWaitTimeout)
+		fmt.Fprintf(out, "[+] Waiting for custom domain DNS, Ingress, and certificate readiness (timeout %s)...\n", domainWaitTimeout)
 		if err := waitForDomainCNAMEReady(ctx, normalizedCustomDomain, hosts.SealosHost, domainWaitTimeout); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain DNS is not ready yet: %v\n", err)
 			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Re-run `sealtun domain set %s %s` after CNAME is ready.\n", tunnelID, normalizedCustomDomain)
@@ -265,8 +267,8 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		}
 
 		rollback = false
-		fmt.Printf("[+] Tunnel is running in the background via the local daemon.\n")
-		fmt.Printf("[+] Use `sealtun list` or `sealtun inspect %s` to view it later.\n", tunnelID)
+		fmt.Fprintf(out, "[+] Tunnel is running in the background via the local daemon.\n")
+		fmt.Fprintf(out, "[+] Use `sealtun list` or `sealtun inspect %s` to view it later.\n", tunnelID)
 		return nil
 	}
 
@@ -293,6 +295,10 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 			_ = session.Update(*current)
 		})
 	})
+}
+
+func newTunnelID() string {
+	return strings.ReplaceAll(uuid.New().String(), "-", "")[:16]
 }
 
 var protocol string
@@ -381,27 +387,27 @@ func resolveExposeTarget(args []string, explicitTarget string) (string, string, 
 	return localPort, target.URL, nil
 }
 
-func printAccessPolicySummary(config *session.AccessPolicy) {
+func printAccessPolicySummary(w io.Writer, config *session.AccessPolicy) {
 	if config == nil {
 		return
 	}
 	if len(config.BearerTokenHashes) > 0 {
-		fmt.Printf("[+] Bearer token access enabled for public traffic.\n")
+		fmt.Fprintf(w, "[+] Bearer token access enabled for public traffic.\n")
 	}
 	if len(config.IPAllowlist) > 0 {
-		fmt.Printf("[+] IP allowlist enabled with %d rule(s).\n", len(config.IPAllowlist))
+		fmt.Fprintf(w, "[+] IP allowlist enabled with %d rule(s).\n", len(config.IPAllowlist))
 	}
 	if len(config.IPDenylist) > 0 {
-		fmt.Printf("[+] IP denylist enabled with %d rule(s).\n", len(config.IPDenylist))
+		fmt.Fprintf(w, "[+] IP denylist enabled with %d rule(s).\n", len(config.IPDenylist))
 	}
 	if len(config.TemporaryTokens) > 0 {
-		fmt.Printf("[+] Temporary access link enabled until %s.\n", config.TemporaryTokens[0].ExpiresAt)
+		fmt.Fprintf(w, "[+] Temporary access link enabled until %s.\n", config.TemporaryTokens[0].ExpiresAt)
 	}
 	if config.RateLimit != "" {
-		fmt.Printf("[+] Rate limit enabled: %s.\n", config.RateLimit)
+		fmt.Fprintf(w, "[+] Rate limit enabled: %s.\n", config.RateLimit)
 	}
 	if config.Audit != nil && config.Audit.Enabled {
-		fmt.Printf("[+] Access audit enabled for public traffic.\n")
+		fmt.Fprintf(w, "[+] Access audit enabled for public traffic.\n")
 	}
 }
 
@@ -453,7 +459,7 @@ func validateProtocol(protocol string) error {
 	return tunnelprotocol.ValidateExpose(protocol)
 }
 
-func recoverStaleSessions(ctx context.Context) error {
+func recoverStaleSessions(ctx context.Context, out io.Writer) error {
 	sessions, err := session.List()
 	if err != nil {
 		return fmt.Errorf("load tunnel sessions: %w", err)
@@ -464,12 +470,12 @@ func recoverStaleSessions(ctx context.Context) error {
 			continue
 		}
 
-		fmt.Printf("[+] Found stale tunnel session %s in namespace %s. Cleaning up...\n", sess.TunnelID, sess.Namespace)
+		fmt.Fprintf(out, "[+] Found stale tunnel session %s in namespace %s. Cleaning up...\n", sess.TunnelID, sess.Namespace)
 		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		err := cleanupSessionResources(cleanupCtx, sess)
 		cancel()
 		if err != nil {
-			fmt.Printf("[!] Skipped stale tunnel %s cleanup: %v\n", sess.TunnelID, err)
+			fmt.Fprintf(out, "[!] Skipped stale tunnel %s cleanup: %v\n", sess.TunnelID, err)
 			continue
 		}
 		if err := session.Delete(sess.TunnelID); err != nil {

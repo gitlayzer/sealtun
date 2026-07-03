@@ -19,6 +19,7 @@ Sealtun 是一款面向 **Sealos Cloud** 和 **Kubernetes** 用户的本地隧�
 - 🛡️ **安全运营**：HTTPS 隧道支持 Basic Auth、Bearer Token、临时链接、IP 规则、rate limit、访问审计和 server secret 轮换。
 - 📊 **状态与诊断**：`doctor <tunnel-id>`、`inspect --remote`、`logs`、`events`、`metrics`、`resources` 和 `watch` 可定位本地端口、daemon、远端 Pod、Service、Ingress 与证书问题。
 - 🧭 **引导与自动修复**：`init` 可根据登录状态和本地监听端口推荐命令/YAML；`resources`、`watch` 与 `doctor --fix --dry-run` 可帮助理解和保守修复隧道状态。
+- 🖥️ **终端控制台**：`tui` / `console` 可在交互式终端里发现端口、创建隧道，并管理日志、事件、资源、域名、策略、分享链接和生命周期操作。
 - 🔌 **集群内服务访问**：Linux 下 `sudo sealtun connect` 可直接访问 Service FQDN、Service ClusterIP 和 Pod IP 的 TCP 流量，无需 SOCKS 或客户端代理配置。
 - 🧩 **协议模板**：`template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` 可生成直接命令和 `sealtun.yaml` 示例。
 - 🧾 **声明式配置**：`apply -f sealtun.yaml` 可用 YAML 声明隧道，并以稳定名称幂等创建或更新；`export` 可把本地 session 导出回 YAML。
@@ -136,6 +137,16 @@ sealtun stop <tunnel-id>
 sealtun start <tunnel-id>
 sealtun cleanup <tunnel-id>
 ```
+
+偏交互式的日常管理可以直接打开终端控制台：
+
+```bash
+sealtun tui
+# 等价别名
+sealtun console
+```
+
+TUI 会复用现有 CLI 逻辑。默认焦点在左侧菜单，上下键切换 `Tunnels`、`Create`、`Tools`、`Status`；按 `enter`、`right` 或 `tab` 进入右侧内容，按 `left`、`esc` 或 `tab` 回到菜单。`Tunnels` 用来查看和选择隧道，选中后按 `o` 进入 `Tunnel Actions`，可以执行 inspect/doctor/logs/metrics/events/resources/export、domain/policy/share/resources/rotate/repair/start/stop/cleanup 等对象级操作；`Create` 用来从本地监听端口创建基础 HTTPS/SSH/TCP 隧道；`Tools` 只放全局操作，例如 status/discover/init/template/connect check/domain status/doctor dry-run/export all，以及 YAML apply dry-run/diff/apply。写操作都会先展示等价 CLI 命令并要求确认。`connect` 真实接管网络规则仍建议使用明确的 CLI 命令。
 
 Linux 下访问集群内 Service/Pod：
 

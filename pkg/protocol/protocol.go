@@ -11,6 +11,11 @@ const (
 	TCP   = "tcp"
 )
 
+const (
+	ServerHTTPPort   int32 = 8080
+	ServerRawTCPPort int32 = 2222
+)
+
 func Normalize(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }

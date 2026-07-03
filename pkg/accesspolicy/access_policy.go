@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const TemporaryTokenQueryParam = "_sealtun_token"
+const TemporaryTokenQueryParam = "_sealtun_token" // #nosec G101 -- query parameter name, not a credential value.
 const minTokenLength = 8
 
 var ipMatcherCache sync.Map

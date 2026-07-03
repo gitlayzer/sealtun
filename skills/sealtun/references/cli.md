@@ -8,7 +8,8 @@ Use these paths before listing every available flag:
 
 | Request | Commands | Notes |
 | --- | --- | --- |
-| "I want my local app on the internet" / "让本地项目跑在公网" | `sealtun status`; interactive/dev: `sealtun up`; scripted/exact: `sealtun expose <port>` | `up` reuses current project state or discovers/asks for a port. Defaults to HTTPS and daemon mode. |
+| "I want my local app on the internet" / "让本地项目跑在公网" | `sealtun status`; interactive/dev: `sealtun up`; terminal console: `sealtun tui`; scripted/exact: `sealtun expose <port>` | `up` reuses current project state or discovers/asks for a port. TUI is for interactive management. Defaults to HTTPS and daemon mode. |
+| "Open a terminal UI" / "用 TUI 管理隧道" | `sealtun tui` or `sealtun console` | Requires an interactive terminal. Use Tunnels to select a session, press `o` for Tunnel Actions, Create for local ports, and Tools for global commands. |
 | "Expose this remote HTTP address" / "把远端地址端口转公网" | dev: `sealtun up --target http://host:port`; scripts: `sealtun expose --target http://host:port` | HTTPS-only. The target must be reachable from the machine running Sealtun. |
 | "Help me get started" / "第一次怎么用" | `sealtun status`; `sealtun init`; `sealtun init --apply` only if creation is requested | `init` is read-only by default and prints a recommended command plus YAML. |
 | "Give my local app a public domain" / "给本地服务一个公网域名" | `sealtun expose <port> --domain <domain>` or `sealtun domain plan <id> <domain>` | If the tunnel already exists, plan first, then add/set only when mutation is requested. |
@@ -41,6 +42,24 @@ sealtun completion powershell
 ```
 
 Use the generated script according to the user's shell. If the user only asks whether completion exists, show the matching command instead of editing shell startup files.
+
+## Terminal Console
+
+```bash
+sealtun tui
+sealtun console
+sealtun tui --check=false
+```
+
+Use the TUI when the user wants an interactive terminal workspace instead of many separate commands. It reuses existing CLI internals and supports:
+
+- Keyboard focus starts on the left menu. Use up/down to switch sections, `enter`/`right`/`tab` to enter content, and `left`/`esc`/`tab` to return to the menu.
+- `Tunnels`: list current tunnel sessions. Press `enter` to inspect, or `o` to open `Tunnel Actions`.
+- `Tunnel Actions`: object-level inspect, doctor, logs, metrics, events, resources, export, domain, policy, share, resource tuning, repair, rotate, start, stop, and cleanup actions. Mutations show the equivalent CLI command and require confirmation.
+- `Create`: discover local listening ports and create basic HTTPS, SSH, or TCP tunnels from discovered ports.
+- `Tools`: global-only status, discover, init, template, connect check, domain status, doctor dry-run, export-all, and YAML apply dry-run/diff/apply operations.
+
+The TUI requires stdin/stdout to be a real terminal. Real transparent networking with `connect`, login/profile switching, and shell completion remain explicit CLI flows.
 
 ## Login, Regions, Profiles
 

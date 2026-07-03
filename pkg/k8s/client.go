@@ -140,19 +140,19 @@ type TunnelDiagnostics struct {
 }
 
 type TunnelRemoteState struct {
-	PublicHost    string             `json:"publicHost,omitempty"`
-	SealosHost    string             `json:"sealosHost,omitempty"`
-	CustomDomain  string             `json:"customDomain,omitempty"`
-	PublicPort    int32              `json:"publicPort,omitempty"`
-	Secret        string             `json:"secret,omitempty"`
-	Protocol      string             `json:"protocol,omitempty"`
-	LocalPort     string             `json:"localPort,omitempty"`
-	TargetURL     string             `json:"targetUrl,omitempty"`
-	BasicAuth     *BasicAuthOptions  `json:"basicAuth,omitempty"`
-	AccessPolicy  *accesspolicy.Policy `json:"accessPolicy,omitempty"`
-	Resources     *ResourceConfig    `json:"resources,omitempty"`
-	AuthSecretOK  bool               `json:"-"`
-	DeploymentOK  bool               `json:"-"`
+	PublicHost   string               `json:"publicHost,omitempty"`
+	SealosHost   string               `json:"sealosHost,omitempty"`
+	CustomDomain string               `json:"customDomain,omitempty"`
+	PublicPort   int32                `json:"publicPort,omitempty"`
+	Secret       string               `json:"secret,omitempty"`
+	Protocol     string               `json:"protocol,omitempty"`
+	LocalPort    string               `json:"localPort,omitempty"`
+	TargetURL    string               `json:"targetUrl,omitempty"`
+	BasicAuth    *BasicAuthOptions    `json:"basicAuth,omitempty"`
+	AccessPolicy *accesspolicy.Policy `json:"accessPolicy,omitempty"`
+	Resources    *ResourceConfig      `json:"resources,omitempty"`
+	AuthSecretOK bool                 `json:"-"`
+	DeploymentOK bool                 `json:"-"`
 }
 
 type DeploymentDiagnostics struct {
@@ -287,6 +287,8 @@ var (
 	dnsLabelPattern       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	releaseVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 )
+
+const serverRunAsUserID int64 = 1001
 
 type createdResource struct {
 	kind resourceKind
@@ -705,9 +707,9 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 
 	f := false
 	t := true
-	u := int64(1001)
+	u := serverRunAsUserID
 
-	args := []string{"server", "--secret-env", "SEALTUN_SECRET", "--port", "8080", "--protocol", protocol, "--local-port", localPort}
+	args := []string{"server", "--secret-env", "SEALTUN_SECRET", "--port", strconv.Itoa(int(tunnelprotocol.ServerHTTPPort)), "--protocol", protocol, "--local-port", localPort}
 	if strings.TrimSpace(targetURL) != "" {
 		args = append(args, "--target-url", strings.TrimSpace(targetURL))
 	}
@@ -766,6 +768,10 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 	if err != nil {
 		return false, err
 	}
+	serverImage, err := serverImageForVersion(version.Version)
+	if err != nil {
+		return false, err
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -783,7 +789,7 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 					Containers: []corev1.Container{
 						{
 							Name:            name,
-							Image:           serverImageForVersion(version.Version),
+							Image:           serverImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Args:            args,
 							Env:             env,
@@ -808,7 +814,7 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									TCPSocket: &corev1.TCPSocketAction{
-										Port: intstr.FromInt(8080),
+										Port: intstr.FromInt32(tunnelprotocol.ServerHTTPPort),
 									},
 								},
 								InitialDelaySeconds: 1,
@@ -863,20 +869,24 @@ func imageTagForVersion(value string) string {
 	if releaseVersionPattern.MatchString(value) {
 		return strings.TrimPrefix(value, "v")
 	}
-	return "latest"
+	return ""
 }
 
-func serverImageForVersion(value string) string {
+func serverImageForVersion(value string) (string, error) {
 	if image := strings.TrimSpace(os.Getenv("SEALTUN_SERVER_IMAGE")); image != "" {
-		return image
+		return image, nil
 	}
-	return fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", imageTagForVersion(value))
+	tag := imageTagForVersion(value)
+	if tag == "" {
+		return "", fmt.Errorf("unsupported sealtun version %q for server image; set SEALTUN_SERVER_IMAGE to override", value)
+	}
+	return fmt.Sprintf("ghcr.io/gitlayzer/sealtun:%s", tag), nil
 }
 
 func containerPortsForProtocol(protocol string) []corev1.ContainerPort {
-	ports := []corev1.ContainerPort{{Name: "http", ContainerPort: 8080}}
+	ports := []corev1.ContainerPort{{Name: "http", ContainerPort: tunnelprotocol.ServerHTTPPort}}
 	if tunnelprotocol.UsesRawTCP(protocol) {
-		ports = append(ports, corev1.ContainerPort{Name: "tcp", ContainerPort: 2222})
+		ports = append(ports, corev1.ContainerPort{Name: "tcp", ContainerPort: tunnelprotocol.ServerRawTCPPort})
 	}
 	return ports
 }
@@ -1007,7 +1017,7 @@ func httpServiceSpec(labels map[string]string) corev1.ServiceSpec {
 		Type:     corev1.ServiceTypeClusterIP,
 		Selector: labels,
 		Ports: []corev1.ServicePort{
-			{Name: "http", Port: 80, TargetPort: intstr.FromInt32(8080)},
+			{Name: "http", Port: 80, TargetPort: intstr.FromInt32(tunnelprotocol.ServerHTTPPort)},
 		},
 	}
 }
@@ -1019,8 +1029,8 @@ func tcpServiceSpec(labels map[string]string) corev1.ServiceSpec {
 		Ports: []corev1.ServicePort{
 			{
 				Name:       "tcp",
-				Port:       2222,
-				TargetPort: intstr.FromInt32(2222),
+				Port:       tunnelprotocol.ServerRawTCPPort,
+				TargetPort: intstr.FromInt32(tunnelprotocol.ServerRawTCPPort),
 				Protocol:   corev1.ProtocolTCP,
 			},
 		},

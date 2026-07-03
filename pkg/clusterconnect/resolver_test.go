@@ -54,6 +54,24 @@ func TestResolverServiceDNS(t *testing.T) {
 	}
 }
 
+func TestResolverServiceShortFQDN(t *testing.T) {
+	resolver := &Resolver{Client: fakeResolverAPI(), DefaultNamespace: "default"}
+	target, err := resolver.Resolve(context.Background(), "web.default.svc", 8080)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Namespace != "default" || target.PodName != "web-0" || target.PodPort != 3000 {
+		t.Fatalf("unexpected target: %#v", target)
+	}
+}
+
+func TestResolverDoesNotTreatTwoLabelHostAsServiceNamespace(t *testing.T) {
+	resolver := &Resolver{Client: fakeResolverAPI(), DefaultNamespace: "default"}
+	if _, err := resolver.Resolve(context.Background(), "example.com", 8080); err == nil {
+		t.Fatal("expected two-label host to be rejected")
+	}
+}
+
 func TestResolverServiceClusterIP(t *testing.T) {
 	resolver := &Resolver{Client: fakeResolverAPI(), DefaultNamespace: "default"}
 	target, err := resolver.Resolve(context.Background(), "10.96.0.12", 8080)
@@ -73,6 +91,13 @@ func TestResolverPodIP(t *testing.T) {
 	}
 	if target.PodName != "web-0" || target.PodPort != 3000 {
 		t.Fatalf("unexpected target: %#v", target)
+	}
+}
+
+func TestResolverPodIPRejectsOutOfRangePort(t *testing.T) {
+	resolver := &Resolver{Client: fakeResolverAPI(), DefaultNamespace: "default"}
+	if _, err := resolver.Resolve(context.Background(), "10.244.0.22", 70000); err == nil {
+		t.Fatal("expected out-of-range pod port to fail")
 	}
 }
 

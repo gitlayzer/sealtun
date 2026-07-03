@@ -198,6 +198,9 @@ func targetPortMatches(target intstr.IntOrString, endpointPort int32) bool {
 }
 
 func (r *Resolver) resolvePodIP(ctx context.Context, ip string, port int) (*Target, error) {
+	if port > 65535 {
+		return nil, fmt.Errorf("pod ip %s target port must be between 1 and 65535", ip)
+	}
 	pods, err := r.Client.ListPods(ctx, r.DefaultNamespace, metav1.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("status.podIP", ip).String(),
 	})
@@ -222,16 +225,11 @@ func parseServiceHost(host, defaultNamespace string) (service string, namespace 
 	switch {
 	case len(parts) == 1:
 		return parts[0], defaultNamespace, parts[0] != "" && defaultNamespace != ""
-	case len(parts) >= 2 && len(parts) <= 5:
-		if len(parts) >= 3 && parts[2] != "svc" {
-			return "", "", false
-		}
-		if len(parts) >= 4 && parts[3] != "cluster" {
-			return "", "", false
-		}
-		if len(parts) == 5 && parts[4] != "local" {
-			return "", "", false
-		}
+	case len(parts) == 3 && parts[2] == "svc":
+		return parts[0], parts[1], parts[0] != "" && parts[1] != ""
+	case len(parts) == 4 && parts[2] == "svc" && parts[3] == "cluster":
+		return parts[0], parts[1], parts[0] != "" && parts[1] != ""
+	case len(parts) == 5 && parts[2] == "svc" && parts[3] == "cluster" && parts[4] == "local":
 		return parts[0], parts[1], parts[0] != "" && parts[1] != ""
 	default:
 		return "", "", false

@@ -193,7 +193,7 @@ func readProcListeningPorts() ([]discoverItem, error) {
 }
 
 func readProcNetTCP(path string) ([]discoverItem, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- callers pass fixed /proc/net/tcp paths for local port discovery.
 	if err != nil {
 		return nil, err
 	}

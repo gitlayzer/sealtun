@@ -21,7 +21,7 @@ func withTunnelOperationLock(tunnelID string, fn func() error) error {
 		return err
 	}
 	lockPath := filepath.Join(root, fmt.Sprintf("tunnel-%s.lock", tunnelID))
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- tunnelID is validated before joining a private Sealtun lock path.
 	if err != nil {
 		return err
 	}

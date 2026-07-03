@@ -8,8 +8,8 @@ NPM ?= npm
 # Binary name
 BINARY_NAME=sealtun
 
-# Get version from git (Pure Git Hash mode)
-VERSION ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+# Development builds use the explicit dev channel; releases inject semver via GoReleaser.
+VERSION ?= dev
 NPM_LATEST_RELEASE_TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)
 NPM_VERSION ?= $(shell echo $(NPM_LATEST_RELEASE_TAG) | sed 's/^v//')
 NPM_RELEASE_TAG ?= v$(NPM_VERSION)

@@ -765,35 +765,62 @@ func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
 	fmt.Printf("Server listening on %s (H2C enabled)\n", addr)
 
-	errc := make(chan error, 2)
+	httpListener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	listeners := []net.Listener{httpListener}
+	var rawListener net.Listener
 	if tunnelprotocol.UsesRawTCP(s.protocol) {
+		rawListener, err = net.Listen("tcp", fmt.Sprintf(":%d", tunnelprotocol.ServerRawTCPPort))
+		if err != nil {
+			_ = httpListener.Close()
+			return fmt.Errorf("listen raw tcp on :%d: %w", tunnelprotocol.ServerRawTCPPort, err)
+		}
+		listeners = append(listeners, rawListener)
+		fmt.Printf("Raw TCP listener enabled on :%d\n", tunnelprotocol.ServerRawTCPPort)
+	}
+	defer closeListeners(listeners)
+
+	errc := make(chan error, 2)
+	if rawListener != nil {
 		go func() {
-			errc <- s.startRawTCPListener(2222)
+			errc <- s.serveRawTCP(rawListener)
 		}()
 	}
 
 	h2s := &http2.Server{}
 	server := &http.Server{
-		Addr:              addr,
 		Handler:           h2c.NewHandler(s, h2s),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 	go func() {
-		errc <- server.ListenAndServe()
+		errc <- server.Serve(httpListener)
 	}()
-	return <-errc
+	serveCount := 1
+	if rawListener != nil {
+		serveCount++
+	}
+	err = <-errc
+	closeListeners(listeners)
+	drainServeErrors(errc, serveCount-1)
+	return err
 }
 
-func (s *Server) startRawTCPListener(port int) error {
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("listen raw tcp on %s: %w", addr, err)
+func closeListeners(listeners []net.Listener) {
+	for _, listener := range listeners {
+		_ = listener.Close()
 	}
-	defer listener.Close()
-	fmt.Printf("Raw TCP listener enabled on %s\n", addr)
+}
 
+func drainServeErrors(errc <-chan error, count int) {
+	for i := 0; i < count; i++ {
+		<-errc
+	}
+}
+
+func (s *Server) serveRawTCP(listener net.Listener) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
