@@ -23,6 +23,7 @@ Sealtun is a local tunnel CLI for **Sealos Cloud** and **Kubernetes** users. It 
 - 🧭 **Guided UX and Safe Fixes**: Use `init` for first-run command/YAML recommendations, and `resources`, `watch`, or `doctor --fix --dry-run` to understand and conservatively repair tunnel state.
 - 🖥️ **Terminal Console**: Use `tui` / `console` in an interactive terminal to discover ports, create tunnels, and manage logs, events, resources, domains, policies, share links, and lifecycle actions.
 - 🔌 **Cluster Service Access**: On Linux, `sudo sealtun connect` lets TCP clients directly reach Service FQDNs, Service ClusterIPs, and Pod IPs without SOCKS or client-side proxy config.
+- 🕸️ **Cross-Region Mesh**: Use `mesh` to import a Kubernetes Service from one Sealos region into other regions as local ClusterIP Services for service-level HTTP/TCP communication.
 - 🧩 **Protocol Templates**: Use `template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` to generate commands and `sealtun.yaml` examples.
 - 🧾 **Declarative Config**: Use `apply -f sealtun.yaml` to declare tunnels in YAML and create or update them with stable names; use `export` to turn local sessions back into YAML.
 - 🌐 **Optimized for Sealos**: Native support for Sealos Cloud domains, certificates, and Kubernetes resources.

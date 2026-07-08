@@ -23,6 +23,7 @@ Sealtun 是一款面向 **Sealos Cloud** 和 **Kubernetes** 用户的本地隧�
 - 🧭 **引导与自动修复**：`init` 可根据登录状态和本地监听端口推荐命令/YAML；`resources`、`watch` 与 `doctor --fix --dry-run` 可帮助理解和保守修复隧道状态。
 - 🖥️ **终端控制台**：`tui` / `console` 可在交互式终端里发现端口、创建隧道，并管理日志、事件、资源、域名、策略、分享链接和生命周期操作。
 - 🔌 **集群内服务访问**：Linux 下 `sudo sealtun connect` 可直接访问 Service FQDN、Service ClusterIP 和 Pod IP 的 TCP 流量，无需 SOCKS 或客户端代理配置。
+- 🕸️ **跨区域 Mesh**：`mesh` 可把一个 Sealos 区域里的 Kubernetes Service 以本地 ClusterIP Service 形式导入到其他区域，支持服务级跨区域 HTTP/TCP 通信。
 - 🧩 **协议模板**：`template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` 可生成直接命令和 `sealtun.yaml` 示例。
 - 🧾 **声明式配置**：`apply -f sealtun.yaml` 可用 YAML 声明隧道，并以稳定名称幂等创建或更新；`export` 可把本地 session 导出回 YAML。
 - 🌐 **深度适配 Sealos**：原生使用 Sealos Cloud 的域名、证书和 Kubernetes 资源能力。

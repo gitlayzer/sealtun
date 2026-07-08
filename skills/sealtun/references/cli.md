@@ -1,6 +1,6 @@
 # Sealtun CLI Reference
 
-Use this for interactive Sealtun operation: install, shell completion, guided init, login, expose HTTPS, remote HTTP upstream targets, SSH, or generic TCP, access cluster-internal Services/Pods with connect, secure public HTTP traffic, observe, bind domains, stop/start, and clean up tunnels.
+Use this for interactive Sealtun operation: install, shell completion, guided init, login, expose HTTPS, remote HTTP upstream targets, SSH, or generic TCP, access cluster-internal Services/Pods with connect, build service-level cross-region Mesh, secure public HTTP traffic, observe, bind domains, stop/start, and clean up tunnels.
 
 ## Quick Recipes
 
@@ -16,6 +16,7 @@ Use these paths before listing every available flag:
 | "Expose SSH publicly" / "公网 SSH" | `sealtun expose 22 --protocol ssh` | Return `ssh <user>@<public-host> -p <node-port>`. Do not add HTTPS auth/domain features. |
 | "Expose Postgres/MySQL/Redis/MongoDB/MQTT" | `sealtun template postgres`; `sealtun expose 5432 --protocol tcp` | Common protocol templates map to generic TCP. Return `<host>:<node-port>`. |
 | "Access a cluster Service from my laptop" / "本机访问集群内服务" | `sealtun connect --check`; Linux `sudo sealtun connect` | Direct TCP access to Service FQDN, Service ClusterIP, and Pod IP. No SOCKS/proxy setup. |
+| "Let Pods in one Sealos region call a Service in another" / "不同区服务互通" | `sealtun mesh init`; `sealtun mesh login`; `sealtun mesh up`; `sealtun mesh service publish ...` | Service-level HTTP/TCP import. Not transparent Pod IP/CNI routing. |
 | "Secure this public URL" | HTTPS `expose`, `policy set`, or `share` with Basic Auth, Bearer token, IP rules, rate limit, audit, or temporary links | Prefer env-backed secrets. HTTP access controls do not protect SSH/TCP NodePort. |
 
 After any live operation, verify using the matching command: `list --check`, `inspect <id>`, `domain status/verify`, `share list`, or `doctor <id>`.
@@ -183,6 +184,46 @@ curl http://10.244.0.22:3000
 ```
 
 On macOS/Windows, say the transparent data plane is currently Linux-only.
+
+## Cross-region Mesh
+
+Use Mesh when the user wants Pods or workloads in one Sealos region to call an explicitly published Kubernetes Service in another Sealos region. Mesh is not for exposing a local port to the public internet and is not transparent Pod IP/CNI routing.
+
+```bash
+sealtun mesh init --home gzg --regions gzg,hzh,bja
+sealtun mesh login --regions gzg,hzh,bja
+sealtun mesh auth status
+sealtun mesh up
+
+sealtun mesh service publish api \
+  --from hzh \
+  --k8s-service default/api:8080 \
+  --protocol http \
+  --import gzg,bja
+
+sealtun mesh service list
+sealtun mesh service check api --from gzg
+sealtun mesh service unpublish api
+sealtun mesh down
+```
+
+Behavior:
+
+- `mesh init` creates `~/.sealtun/mesh/mesh.json` with the mesh registry and a shared gateway token.
+- `mesh login` stores one named profile per region, such as `mesh-gzg` and `mesh-hzh`.
+- `mesh up` deploys one Sealtun Mesh gateway per configured region using the same-version Sealtun image.
+- `mesh service publish` imports the source Service into selected regions as `mesh-<name>.<namespace>.svc.cluster.local:<port>`.
+- HTTP and TCP are supported. ICMP/ping, UDP, and transparent cross-cluster Pod IP routing are not supported.
+
+Verification:
+
+```bash
+sealtun mesh auth status
+sealtun mesh status
+sealtun mesh service check <name> --from <import-region>
+```
+
+`mesh service check` should report source gateway state, import Service state, and target Kubernetes Service readiness. If it fails, classify the issue as auth/profile, gateway resource, import Service, target Service, or remote ready Pods.
 
 Token constraints and behavior:
 

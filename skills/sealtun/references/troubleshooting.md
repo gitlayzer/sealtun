@@ -12,8 +12,9 @@ Start with the symptom, then confirm the layer before changing anything:
 | `ssh` connects then closes after auth starts | Local sshd/user auth | `ssh -vvv`, `logs <id>`, local sshd logs | Fix user/key/password/PAM on the machine running Sealtun |
 | TCP connection opens then closes | Local target protocol/auth | `inspect <id> --remote`, protocol client logs | Fix database/service bind/auth/TLS expectations |
 | Custom domain not ready | DNS/CNAME or certificate | `domain plan`, `domain verify`, `domain doctor` | Correct CNAME, then wait/verify certificate |
-| Resources tab shows missing or warning resources | Remote Kubernetes | `doctor <id>`, `events <id>`, `inspect <id> --remote` | Fix image/pod/service/ingress/cert issue named by diagnostics |
+| `resources` output shows missing or warning resources | Remote Kubernetes | `doctor <id>`, `events <id>`, `inspect <id> --remote` | Fix image/pod/service/ingress/cert issue named by diagnostics |
 | Basic Auth/Bearer/link/rate limit fails | HTTPS access policy | `inspect <id>`, `policy show <id>`, `policy audit <id>`, token length/expiry/IP/rate | Fix credential source, token, temporary link expiry, IP rules, or rate limit |
+| Cross-region Mesh import cannot be reached | Mesh profile, gateway, import Service, or source Service | `mesh auth status`, `mesh status`, `mesh service check <name> --from <region>` | Re-login missing region profile, run `mesh up`, fix import/source Service readiness |
 
 Do not jump straight to `cleanup --all`; it is destructive and only appropriate when the user intentionally wants all tracked remote resources removed.
 
@@ -154,6 +155,32 @@ Remote diagnostics inspect the Sealtun-managed Deployment, Service, Ingress, Pod
 Prefer `sealtun doctor <tunnel-id>` before asking the user to manually inspect Kubernetes. It summarizes local owner state, local port reachability, remote resource readiness, and next-step suggestions.
 
 Use `sealtun resources <tunnel-id>` for a read-only resource list and resource occupancy hints. It shows Deployment, Pod, HTTP Service, TCP NodePort Service, Ingress, Certificate, Issuer, and Secret metadata, but it does not estimate cloud billing and never displays Secret data.
+
+## Cross-region Mesh Problems
+
+Symptoms:
+
+- `mesh service check` reports missing gateway or import Service.
+- Pods in one region cannot access `mesh-<name>.<namespace>.svc.cluster.local:<port>`.
+- A region profile is missing or points to the wrong namespace.
+
+Actions:
+
+```bash
+sealtun mesh auth status
+sealtun mesh status
+sealtun mesh service list
+sealtun mesh service check <name> --from <import-region>
+sealtun mesh up
+```
+
+Mesh is service-level HTTP/TCP import, not transparent cross-cluster Pod IP/CNI routing. Do not debug it as generic Ingress or local `connect`. Check layers in order:
+
+1. The source and import regions must exist in `~/.sealtun/mesh/mesh.json`.
+2. Each region must have a valid `mesh-<region>` profile.
+3. Each region must have a ready Mesh gateway Deployment, Service, and Ingress.
+4. Each import region must have a `mesh-<service>` ClusterIP Service selecting the current Mesh gateway.
+5. The source region must have the target Kubernetes Service and ready backend Pods.
 
 ## Custom Domain, DNS, Certificate
 

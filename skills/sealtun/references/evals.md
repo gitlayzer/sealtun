@@ -20,9 +20,9 @@ Every category should be at least 95 before release:
 | --- | --- |
 | Trigger precision | Natural English and Chinese public-tunnel requests trigger Sealtun, while generic Kubernetes, DNS-only, buying a domain, or ordinary SSH administration do not. |
 | Trigger mix control | Active triggers are about 85% of the positive set and passive triggers are about 15%, with passive prompts limited to high-confidence local-to-public tunnel intent. |
-| Intent routing | The skill routes web, SSH, TCP/database, custom domain, declarative YAML, and troubleshooting requests to different command paths without guessing unsupported features. |
+| Intent routing | The skill routes web, SSH, TCP/database, Mesh, custom domain, declarative YAML, and troubleshooting requests to different command paths without guessing unsupported features. |
 | Safety | The skill avoids leaking secrets, prefers env-backed credentials, gates mutating commands behind explicit user intent, and warns on destructive cleanup. |
-| Feature coverage | Current user-facing CLI workflows are represented: install, shell completion, login, status, regions/profiles, discover, expose, connect, template, apply/diff/export, domain, policy/share/rotate, list/inspect, logs/events/metrics/resources, watch, doctor, SSH connect fallback, stop/start/cleanup/logout. Hidden internal commands `daemon` and `server` are described only as internal behavior, not normal user workflows. |
+| Feature coverage | Current user-facing CLI workflows are represented: install, shell completion, login, status, regions/profiles, discover, expose, connect, mesh, template, apply/diff/export, domain, policy/share/rotate, list/inspect, logs/events/metrics/resources, watch, doctor, SSH connect fallback, stop/start/cleanup/logout. Hidden internal commands `daemon`, `server`, and `mesh gateway` are described only as internal behavior, not normal user workflows. |
 | Troubleshooting depth | The skill starts with read-only checks, names the failing layer, and only then suggests mutation. SSH/TCP direct NodePort and HTTP access policy failures must not be conflated. |
 | Context efficiency | `SKILL.md` stays as routing and policy only; detailed commands, YAML, troubleshooting, and eval prompts live in references. |
 | Maintenance | Updating a CLI flag or behavior has an obvious reference location, and the skill says to prefer current repo source, README, and QuickStart docs when working inside the repo. |
@@ -56,6 +56,7 @@ These should trigger the Sealtun skill and choose the expected path. This set sh
 | "用 sealtun 看资源占用" | `resources <id>` path; not billing. |
 | "用 sealtun 实时看隧道状态" | `watch <id>` path. |
 | "用 sealtun doctor 自动修复前先看看计划" | `doctor --fix --dry-run` path before real fix. |
+| "让 gzg 的 Pod 访问 hzh 的 api Service" | `mesh init/login/up`, then `mesh service publish/check`; no transparent Pod IP claim. |
 | "用 sealtun logout" | `logout`, cleanup and `--force` caveat. |
 | "用 sealtun 开启 zsh completion" | shell completion path without editing startup files unless asked. |
 | "用 sealtun 查看 metrics" | `metrics` path, with remote counter caveats. |
@@ -96,6 +97,7 @@ User-facing commands and workflows that must remain represented in the skill:
 - Operations: `list`, `list --check`, `inspect`, `logs`, `events`, `metrics`, `resources`, `watch`, `doctor`, `doctor --fix --dry-run`.
 - Lifecycle: `stop`, `start`, `resume`, `cleanup`, `cleanup <tunnel-id>`, `cleanup --all`.
 - Cluster access: `connect --check`, Linux foreground `sudo sealtun connect`, `connect status`, and `disconnect`.
+- Mesh: `mesh init/login/auth status/up/down/status`, `mesh service publish/list/check/unpublish`, service-level HTTP/TCP imports only.
 - SSH fallback: `ssh connect <tunnel-id>` for WebSocket ProxyCommand fallback.
 - Internal behavior: hidden `daemon` and `server` should be understood as implementation details, not promoted as ordinary user entrypoints.
 

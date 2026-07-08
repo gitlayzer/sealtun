@@ -1,4 +1,4 @@
 interface:
   display_name: "Sealtun"
   short_description: "Expose local or HTTP upstream services, manage tunnels, and troubleshoot Sealtun"
-  default_prompt: "Use $sealtun for localhost or HTTP-upstream public URLs, HTTPS/SSH/TCP tunnels, sealtun.yaml, domains, access control, and diagnostics."
+  default_prompt: "Use $sealtun for Mesh, localhost or HTTP-upstream public URLs, HTTPS/SSH/TCP tunnels, sealtun.yaml, domains, access control, and diagnostics."

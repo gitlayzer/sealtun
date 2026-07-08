@@ -379,7 +379,51 @@ sudo sealtun disconnect
 
 限制：当前透明数据面仅支持 Linux + TCP，需要 root 权限和 `iptables`；不支持 ICMP/ping 和 UDP。macOS/Windows 会明确提示暂不支持。
 
-### 7. 观测和运维
+### 7. 跨区域 Mesh
+`sealtun mesh` 用来把一个 Sealos 区域里的 Kubernetes Service 导入到其他区域。导入后，目标区域里的 Pod 可以访问本地 ClusterIP Service，例如 `http://mesh-api.<namespace>.svc.cluster.local:8080`，流量会通过每个区域的 Sealtun Mesh gateway 转发到源区域 Service。
+
+Mesh v1 是服务级通信，不是透明 Pod IP/CNI 网络：它不会让不同集群的 Pod IP 直接互通，也不支持 ICMP/ping 或 UDP。
+
+初始化本地 Mesh registry，并为多个区域准备独立 profile：
+```bash
+sealtun mesh init --home gzg --regions gzg,hzh,bja
+sealtun mesh login --regions gzg,hzh,bja
+sealtun mesh auth status
+```
+
+配置会保存到 `~/.sealtun/mesh/mesh.json`，各区域登录态会保存为 `mesh-<region>` profile，例如 `mesh-gzg`、`mesh-hzh`。
+
+部署每个区域的 Mesh gateway：
+```bash
+sealtun mesh up
+```
+
+把 `hzh` 区域里的 `default/api:8080` 发布到其他区域：
+```bash
+sealtun mesh service publish api \
+  --from hzh \
+  --k8s-service default/api:8080 \
+  --protocol http \
+  --import gzg,bja
+```
+
+发布后，`gzg` 或 `bja` 区域里的 Pod 可以访问：
+```bash
+curl http://mesh-api.<namespace>.svc.cluster.local:8080
+```
+
+查看、检查和清理：
+```bash
+sealtun mesh status
+sealtun mesh service list
+sealtun mesh service check api --from gzg
+sealtun mesh service unpublish api
+sealtun mesh down
+```
+
+`mesh service check` 会分层检查源区域 gateway、导入区域 ClusterIP Service，以及目标区域 Kubernetes Service 和 ready Pod 数。Mesh gateway 使用当前同版本 `ghcr.io/gitlayzer/sealtun` 镜像，不需要额外维护一套容器。
+
+### 8. 观测和运维
 查看远端隧道 Pod 日志：
 ```bash
 sealtun logs <tunnel-id>
@@ -457,7 +501,7 @@ sealtun cleanup --all
 
 `metrics` 会聚合本地 session 状态、远端 Deployment/Pod/Ingress 状态，并在远端 Pod 支持时读取受 Bearer secret 保护的 `/_sealtun/metrics` 请求计数。TCP/SSH 四层隧道还会暴露 TCP 连接数、活跃连接数、字节数和错误数。
 
-### 8. 协议模板
+### 9. 协议模板
 不确定该怎么写命令或声明式配置时，可以先生成模板：
 
 ```bash
@@ -470,7 +514,7 @@ sealtun template mongodb
 
 模板会同时输出一次性 `sealtun expose` 命令和可提交到项目内的 `sealtun.yaml` 片段。`mysql`、`postgres`、`redis`、`mongodb`、`mqtt` 模板默认走通用 TCP 四层入口；HTTPS 模板才支持自定义域名和访问控制。
 
-### 9. 声明式配置
+### 10. 声明式配置
 创建 `sealtun.yaml`：
 ```yaml
 version: v1

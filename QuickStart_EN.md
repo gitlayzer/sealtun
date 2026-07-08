@@ -379,7 +379,51 @@ sudo sealtun disconnect
 
 Limitations: transparent data-plane support is Linux + TCP only and requires root plus `iptables`; ICMP/ping and UDP are not supported. macOS/Windows fail clearly as unsupported for now.
 
-### 7. Observe tunnels and operate them
+### 7. Cross-region Mesh
+`sealtun mesh` imports a Kubernetes Service from one Sealos region into other regions. After import, Pods in the importing region can call a local ClusterIP Service such as `http://mesh-api.<namespace>.svc.cluster.local:8080`; traffic is forwarded through the Sealtun Mesh gateways in each region to the source Service.
+
+Mesh v1 is service-level connectivity, not transparent Pod IP/CNI networking. It does not make Pod IPs directly routable across clusters and does not support ICMP/ping or UDP.
+
+Initialize the local Mesh registry and prepare one profile per region:
+```bash
+sealtun mesh init --home gzg --regions gzg,hzh,bja
+sealtun mesh login --regions gzg,hzh,bja
+sealtun mesh auth status
+```
+
+The registry is stored at `~/.sealtun/mesh/mesh.json`. Region credentials are saved as `mesh-<region>` profiles, for example `mesh-gzg` and `mesh-hzh`.
+
+Deploy Mesh gateways in every configured region:
+```bash
+sealtun mesh up
+```
+
+Publish `default/api:8080` from the `hzh` region into other regions:
+```bash
+sealtun mesh service publish api \
+  --from hzh \
+  --k8s-service default/api:8080 \
+  --protocol http \
+  --import gzg,bja
+```
+
+After publishing, Pods in `gzg` or `bja` can call:
+```bash
+curl http://mesh-api.<namespace>.svc.cluster.local:8080
+```
+
+Inspect, check, and clean up:
+```bash
+sealtun mesh status
+sealtun mesh service list
+sealtun mesh service check api --from gzg
+sealtun mesh service unpublish api
+sealtun mesh down
+```
+
+`mesh service check` verifies the source-region gateway, the import-region ClusterIP Service, and the target Kubernetes Service plus ready Pod count. Mesh gateways use the same-version `ghcr.io/gitlayzer/sealtun` image, so there is no separate gateway image to maintain.
+
+### 8. Observe tunnels and operate them
 Show remote tunnel pod logs:
 ```bash
 sealtun logs <tunnel-id>
@@ -457,7 +501,7 @@ sealtun cleanup --all
 
 `metrics` combines local session state, remote Deployment/Pod/Ingress readiness, and server-side request counters when the remote pod supports the Bearer-secret-protected `/_sealtun/metrics` endpoint. TCP/SSH tunnels also expose TCP connection, active connection, byte, and error counters.
 
-### 8. Protocol templates
+### 9. Protocol templates
 When you are unsure which command or declarative config to use, generate a template first:
 
 ```bash
@@ -470,7 +514,7 @@ sealtun template mongodb
 
 Templates print both a one-shot `sealtun expose` command and a `sealtun.yaml` snippet. `mysql`, `postgres`, `redis`, `mongodb`, and `mqtt` templates default to generic TCP L4 entries; only HTTPS templates support custom domains and access controls.
 
-### 9. Declarative config
+### 10. Declarative config
 Create `sealtun.yaml`:
 ```yaml
 version: v1
