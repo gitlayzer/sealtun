@@ -69,25 +69,34 @@ func ensureDaemonRunning() error {
 		return fmt.Errorf("start daemon: %w", err)
 	}
 	_ = logFile.Close()
+	return waitForDaemonStartup(cmd, 8*time.Second, 250*time.Millisecond, daemonstate.Alive)
+}
 
-	timer := time.NewTimer(8 * time.Second)
+func waitForDaemonStartup(cmd *exec.Cmd, timeout, pollInterval time.Duration, alive func() bool) error {
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- cmd.Wait()
+	}()
+
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-	ticker := time.NewTicker(250 * time.Millisecond)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for {
-		if daemonstate.Alive() {
-			_ = cmd.Process.Release()
+		if alive() {
 			return nil
 		}
-
-		if !session.ProcessAlive(cmd.Process.Pid) {
-			_ = cmd.Process.Release()
-			return fmt.Errorf("daemon exited before publishing state")
-		}
 		select {
+		case err := <-waitResult:
+			if alive() {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("daemon exited before publishing state: %w", err)
+			}
+			return fmt.Errorf("daemon exited before publishing state")
 		case <-timer.C:
-			_ = cmd.Process.Release()
-			return fmt.Errorf("daemon did not publish liveness within 8s")
+			return fmt.Errorf("daemon did not publish liveness within %s", timeout)
 		case <-ticker.C:
 		}
 	}

@@ -39,10 +39,9 @@ var daemonCmd = &cobra.Command{
 		if err := daemonstate.SaveState(os.Getpid()); err != nil {
 			return fmt.Errorf("save daemon state: %w", err)
 		}
-		heartbeatCtx, stopHeartbeat := context.WithCancel(ctx)
-		defer stopHeartbeat()
-		go runDaemonHeartbeat(heartbeatCtx)
+		stopHeartbeat := startDaemonHeartbeat(ctx, runDaemonHeartbeat)
 		defer func() {
+			stopHeartbeat()
 			_ = daemonstate.DeleteStateForPID(os.Getpid())
 		}()
 
@@ -217,6 +216,23 @@ func runDaemonHeartbeat(ctx context.Context) {
 				fmt.Printf("[!] daemon heartbeat failed: %v\n", err)
 			}
 		}
+	}
+}
+
+func startDaemonHeartbeat(parent context.Context, run func(context.Context)) func() {
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		run(ctx)
+	}()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			cancel()
+			<-done
+		})
 	}
 }
 
