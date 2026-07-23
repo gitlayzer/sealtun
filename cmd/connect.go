@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/labring/sealtun/pkg/clusterconnect"
 	"github.com/spf13/cobra"
@@ -37,6 +36,9 @@ var (
 	connectSaveState          = clusterconnect.SaveState
 	connectRemoveState        = clusterconnect.RemoveState
 	connectAcquireRuntimeLock = clusterconnect.AcquireRuntimeLock
+	connectNotifyContext      = signal.NotifyContext
+	connectStopStateProcess   = clusterconnect.StopStateProcess
+	connectCleanupState       = clusterconnect.CleanupTransparentState
 )
 
 var connectCmd = &cobra.Command{
@@ -99,6 +101,10 @@ func runConnectCheck(cmd *cobra.Command, opts connectOptions) error {
 	if err != nil {
 		return err
 	}
+	return runConnectCheckWithEnvironment(cmd, opts, env)
+}
+
+func runConnectCheckWithEnvironment(cmd *cobra.Command, opts connectOptions, env connectPreflighter) error {
 	ctx := connectCommandContext(cmd)
 	preflight, err := env.Preflight(ctx, clusterconnect.Options{
 		Mode:      opts.Mode,
@@ -107,16 +113,12 @@ func runConnectCheck(cmd *cobra.Command, opts connectOptions) error {
 	if opts.JSON {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(preflight)
-		if preflight != nil {
-			return nil
+		if encodeErr := enc.Encode(preflight); encodeErr != nil {
+			return encodeErr
 		}
 		return err
 	}
 	printConnectPreflight(cmd, preflight)
-	if preflight != nil {
-		return nil
-	}
 	return err
 }
 
@@ -183,7 +185,7 @@ func runConnectWithEnvironment(cmd *cobra.Command, opts connectOptions, env conn
 	}
 	defer connectRemoveState()
 
-	connectCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	connectCtx, stopSignals := connectNotifyContext(ctx, signalCleanupSignals()...)
 	defer stopSignals()
 	err = server.RunPlan(connectCtx, plan)
 	if err == nil || err == context.Canceled {
@@ -254,17 +256,17 @@ func runDisconnect(cmd *cobra.Command) error {
 		}
 		return err
 	}
-	stopErr := clusterconnect.StopStateProcess(*state)
+	stopErr := connectStopStateProcess(*state)
+	if stopErr != nil {
+		return stopErr
+	}
 	plan := &clusterconnect.TransparentPlan{
 		Namespace: state.Namespace,
 		Listen:    state.Listen,
 		Rules:     state.Rules,
 		Hosts:     state.Hosts,
 	}
-	cleanupErr := clusterconnect.CleanupTransparentState(plan)
-	if stopErr != nil {
-		return stopErr
-	}
+	cleanupErr := connectCleanupState(plan)
 	if cleanupErr != nil {
 		return cleanupErr
 	}

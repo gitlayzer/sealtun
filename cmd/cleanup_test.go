@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -75,5 +77,39 @@ func TestCleanupSpecificTunnelRejectsActiveSession(t *testing.T) {
 	err := cmd.RunE(&cmd, []string{"activecleanup"})
 	if err == nil || !strings.Contains(err.Error(), "refusing cleanup") {
 		t.Fatalf("expected active cleanup refusal, got %v", err)
+	}
+}
+
+func TestCleanupWaitsForTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "cleanlocked",
+		ConnectionState: session.ConnectionStateStopped,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "cleanlocked")
+	defer releaseLock()
+	previousCleanup := cleanupSessionResources
+	cleanupCalled := make(chan struct{}, 1)
+	want := fmt.Errorf("stop after lock")
+	cleanupSessionResources = func(context.Context, session.TunnelSession) error {
+		cleanupCalled <- struct{}{}
+		return want
+	}
+	t.Cleanup(func() { cleanupSessionResources = previousCleanup })
+
+	done := make(chan error, 1)
+	go func() {
+		cmd := *cleanupCmd
+		cmd.SetContext(context.Background())
+		done <- cmd.RunE(&cmd, []string{"cleanlocked"})
+	}()
+	assertOperationBlocked(t, cleanupCalled)
+	releaseLock()
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("cleanup error = %v, want %v", err, want)
 	}
 }

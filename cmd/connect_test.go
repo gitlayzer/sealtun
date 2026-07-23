@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"reflect"
 	"testing"
 
@@ -128,6 +129,96 @@ func TestRunConnectRejectsConcurrentRuntime(t *testing.T) {
 	})
 	if !errors.Is(err, want) {
 		t.Fatalf("runConnectWithEnvironment error = %v, want %v", err, want)
+	}
+}
+
+func TestRunConnectCheckReturnsPreflightErrorWithPayload(t *testing.T) {
+	want := errors.New("no compatible connect mode")
+	for _, asJSON := range []bool{false, true} {
+		t.Run(map[bool]string{false: "text", true: "json"}[asJSON], func(t *testing.T) {
+			env := &fakeConnectEnv{
+				preflight: &clusterconnect.Preflight{Mode: clusterconnect.ModeAuto},
+				err:       want,
+			}
+			err := runConnectCheckWithEnvironment(newTestConnectCommand(), connectOptions{JSON: asJSON}, env)
+			if !errors.Is(err, want) {
+				t.Fatalf("runConnectCheckWithEnvironment error = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+func TestRunConnectUsesCleanupSignalSet(t *testing.T) {
+	stubConnectRuntimeLock(t)
+	previousNotify := connectNotifyContext
+	previousSave := connectSaveState
+	previousRemove := connectRemoveState
+	t.Cleanup(func() {
+		connectNotifyContext = previousNotify
+		connectSaveState = previousSave
+		connectRemoveState = previousRemove
+	})
+
+	var gotSignals []os.Signal
+	connectNotifyContext = func(parent context.Context, signals ...os.Signal) (context.Context, context.CancelFunc) {
+		gotSignals = append([]os.Signal(nil), signals...)
+		return context.WithCancel(parent)
+	}
+	connectSaveState = func(clusterconnect.State) error { return nil }
+	connectRemoveState = func() error { return nil }
+
+	events := []string{}
+	server := &fakeConnectServer{
+		plan:   &clusterconnect.TransparentPlan{},
+		events: &events,
+	}
+	env := &fakeConnectEnv{preflight: &clusterconnect.Preflight{SelectedMode: clusterconnect.ModeTun}}
+	if err := runConnectWithEnvironment(newTestConnectCommand(), connectOptions{}, env, func(clusterconnect.TransparentOptions) connectPlanRunner {
+		return server
+	}); err != nil {
+		t.Fatalf("runConnectWithEnvironment returned error: %v", err)
+	}
+	if want := signalCleanupSignals(); !reflect.DeepEqual(gotSignals, want) {
+		t.Fatalf("cleanup signals = %v, want %v", gotSignals, want)
+	}
+}
+
+func TestRunDisconnectDoesNotCleanupWhenStopFails(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := clusterconnect.SaveState(clusterconnect.State{Mode: clusterconnect.ModeTun}); err != nil {
+		t.Fatalf("save connect state: %v", err)
+	}
+
+	previousStop := connectStopStateProcess
+	previousCleanup := connectCleanupState
+	previousRemove := connectRemoveState
+	t.Cleanup(func() {
+		connectStopStateProcess = previousStop
+		connectCleanupState = previousCleanup
+		connectRemoveState = previousRemove
+	})
+	want := errors.New("connect process did not stop")
+	connectStopStateProcess = func(clusterconnect.State) error { return want }
+	cleanupCalled := false
+	connectCleanupState = func(*clusterconnect.TransparentPlan) error {
+		cleanupCalled = true
+		return nil
+	}
+	removeCalled := false
+	connectRemoveState = func() error {
+		removeCalled = true
+		return nil
+	}
+
+	err := runDisconnect(newTestConnectCommand())
+	if !errors.Is(err, want) {
+		t.Fatalf("runDisconnect error = %v, want %v", err, want)
+	}
+	if cleanupCalled {
+		t.Fatal("transparent state was cleaned before the connect process stopped")
+	}
+	if removeCalled {
+		t.Fatal("connect state was removed after the process failed to stop")
 	}
 }
 

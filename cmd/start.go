@@ -15,46 +15,52 @@ var startCmd = &cobra.Command{
 	Short:   "Restart a stopped Sealtun tunnel",
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sess, err := findSession(args[0])
-		if err != nil {
-			return err
-		}
-		if sess.Secret == "" {
-			return fmt.Errorf("tunnel %s cannot be started because its local secret is unavailable; run cleanup and recreate the tunnel", sess.TunnelID)
-		}
-		if sessionExpired(*sess, time.Now()) {
-			return fmt.Errorf("tunnel %s has expired; run cleanup and recreate the tunnel", sess.TunnelID)
-		}
-
-		if err := startTunnelSession(cmd.Context(), sess); err != nil {
-			return err
-		}
-		ensureSessionPublicPort(cmd.Context(), sess)
-
-		if sess.PublicPort != 0 && (sess.Protocol == "ssh" || sess.Protocol == "tcp") {
-			endpoint := endpointDisplay(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort)
-			fmt.Fprintf(cmd.OutOrStdout(), "Started tunnel %s.\n", sess.TunnelID)
-			if sess.Protocol == "ssh" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  Public SSH host: %s\n", endpoint.Host)
-				fmt.Fprintf(cmd.OutOrStdout(), "  Public SSH port: %d\n", endpoint.Port)
-				fmt.Fprintf(cmd.OutOrStdout(), "  SSH command: %s\n", endpoint.Command)
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP host: %s\n", endpoint.Host)
-				fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP port: %d\n", endpoint.Port)
-				fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP endpoint: %s\n", endpointLabel(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort))
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "  Target: %s\n", sessionTargetLabel(*sess))
-			return nil
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Started tunnel %s.\n", sess.TunnelID)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Public URL: %s\n", endpointLabel(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort))
-		fmt.Fprintf(cmd.OutOrStdout(), "  Target: %s\n", sessionTargetLabel(*sess))
-		return nil
+		return withTunnelOperationLock(args[0], func() error {
+			return runStartTunnel(cmd, args[0])
+		})
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(startCmd)
+}
+
+func runStartTunnel(cmd *cobra.Command, tunnelID string) error {
+	sess, err := findSession(tunnelID)
+	if err != nil {
+		return err
+	}
+	if sess.Secret == "" {
+		return fmt.Errorf("tunnel %s cannot be started because its local secret is unavailable; run cleanup and recreate the tunnel", sess.TunnelID)
+	}
+	if sessionExpired(*sess, time.Now()) {
+		return fmt.Errorf("tunnel %s has expired; run cleanup and recreate the tunnel", sess.TunnelID)
+	}
+
+	if err := startTunnelSession(cmd.Context(), sess); err != nil {
+		return err
+	}
+	ensureSessionPublicPort(cmd.Context(), sess)
+
+	if sess.PublicPort != 0 && (sess.Protocol == "ssh" || sess.Protocol == "tcp") {
+		endpoint := endpointDisplay(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort)
+		fmt.Fprintf(cmd.OutOrStdout(), "Started tunnel %s.\n", sess.TunnelID)
+		if sess.Protocol == "ssh" {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Public SSH host: %s\n", endpoint.Host)
+			fmt.Fprintf(cmd.OutOrStdout(), "  Public SSH port: %d\n", endpoint.Port)
+			fmt.Fprintf(cmd.OutOrStdout(), "  SSH command: %s\n", endpoint.Command)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP host: %s\n", endpoint.Host)
+			fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP port: %d\n", endpoint.Port)
+			fmt.Fprintf(cmd.OutOrStdout(), "  Public TCP endpoint: %s\n", endpointLabel(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort))
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "  Target: %s\n", sessionTargetLabel(*sess))
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Started tunnel %s.\n", sess.TunnelID)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Public URL: %s\n", endpointLabel(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort))
+	fmt.Fprintf(cmd.OutOrStdout(), "  Target: %s\n", sessionTargetLabel(*sess))
+	return nil
 }
 
 func startTunnelSession(ctx context.Context, sess *session.TunnelSession) error {

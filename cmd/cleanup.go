@@ -21,22 +21,17 @@ var cleanupCmd = &cobra.Command{
 			return fmt.Errorf("--all cannot be used with a specific tunnel id")
 		}
 		if len(args) > 0 {
-			sess, err := findSession(args[0])
+			eligible, deleteFailed, err := cleanupTunnelWithLock(cmd, args[0], cleanupAll)
 			if err != nil {
-				return err
+				if deleteFailed {
+					return err
+				}
+				return fmt.Errorf("cleanup tunnel %s: %w", args[0], err)
 			}
-			if !cleanupAll && !sessionCleanupEligible(*sess, time.Minute) {
-				return fmt.Errorf("tunnel %s is not stopped, expired, stale, or error; refusing cleanup without --all", sess.TunnelID)
+			if !eligible {
+				return fmt.Errorf("tunnel %s is not stopped, expired, stale, or error; refusing cleanup without --all", args[0])
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-			defer cancel()
-			if err := cleanupSessionResources(ctx, *sess); err != nil {
-				return fmt.Errorf("cleanup tunnel %s: %w", sess.TunnelID, err)
-			}
-			if err := session.Delete(sess.TunnelID); err != nil {
-				return fmt.Errorf("delete local session %s: %w", sess.TunnelID, err)
-			}
-			fmt.Printf("Cleanup complete. Removed tunnel %s and its remote resources.\n", sess.TunnelID)
+			fmt.Printf("Cleanup complete. Removed tunnel %s and its remote resources.\n", args[0])
 			return nil
 		}
 		sessions, err := session.List()
@@ -48,16 +43,14 @@ var cleanupCmd = &cobra.Command{
 			removed := 0
 			failed := 0
 			for _, sess := range sessions {
-				ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-				if err := cleanupSessionResources(ctx, sess); err != nil {
-					cancel()
+				_, deleteFailed, err := cleanupTunnelWithLock(cmd, sess.TunnelID, true)
+				if err != nil {
+					if deleteFailed {
+						return err
+					}
 					failed++
 					fmt.Fprintf(cmd.ErrOrStderr(), "[!] Skipped tunnel %s: %v\n", sess.TunnelID, err)
 					continue
-				}
-				cancel()
-				if err := session.Delete(sess.TunnelID); err != nil {
-					return fmt.Errorf("delete local session %s: %w", sess.TunnelID, err)
 				}
 				removed++
 			}
@@ -73,14 +66,11 @@ var cleanupCmd = &cobra.Command{
 		skipped := 0
 		failed := 0
 		for _, sess := range sessions {
-			if !sessionCleanupEligible(sess, time.Minute) {
-				skipped++
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-			if err := cleanupSessionResources(ctx, sess); err != nil {
-				cancel()
+			eligible, deleteFailed, err := cleanupTunnelWithLock(cmd, sess.TunnelID, false)
+			if err != nil {
+				if deleteFailed {
+					return err
+				}
 				failed++
 				if errors.Is(err, errMissingSessionKubeconfig) {
 					fmt.Fprintf(cmd.ErrOrStderr(), "[!] Skipped cleanup-eligible tunnel %s: %v\n", sess.TunnelID, err)
@@ -89,9 +79,9 @@ var cleanupCmd = &cobra.Command{
 				fmt.Fprintf(cmd.ErrOrStderr(), "[!] Failed to clean up cleanup-eligible tunnel %s: %v\n", sess.TunnelID, err)
 				continue
 			}
-			cancel()
-			if err := session.Delete(sess.TunnelID); err != nil {
-				return fmt.Errorf("delete local session %s: %w", sess.TunnelID, err)
+			if !eligible {
+				skipped++
+				continue
 			}
 			cleaned++
 		}
@@ -107,4 +97,30 @@ var cleanupCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(cleanupCmd)
 	cleanupCmd.Flags().BoolVar(&cleanupAll, "all", false, "Force delete all locally tracked Sealtun tunnel resources and remove matching local session records")
+}
+
+func cleanupTunnelWithLock(cmd *cobra.Command, tunnelID string, force bool) (bool, bool, error) {
+	eligible := false
+	deleteFailed := false
+	err := withTunnelOperationLock(tunnelID, func() error {
+		sess, err := findSession(tunnelID)
+		if err != nil {
+			return err
+		}
+		if !force && !sessionCleanupEligible(*sess, time.Minute) {
+			return nil
+		}
+		eligible = true
+		ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+		defer cancel()
+		if err := cleanupSessionResources(ctx, *sess); err != nil {
+			return err
+		}
+		if err := session.Delete(sess.TunnelID); err != nil {
+			deleteFailed = true
+			return fmt.Errorf("delete local session %s: %w", sess.TunnelID, err)
+		}
+		return nil
+	})
+	return eligible, deleteFailed, err
 }

@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -165,5 +167,111 @@ func TestStartRollbackMarksErrorWhenPauseRollbackFails(t *testing.T) {
 	}
 	if !strings.Contains(latest.LastError, "daemon unavailable") {
 		t.Fatalf("expected original start failure in LastError, got %q", latest.LastError)
+	}
+}
+
+func TestStartWaitsForTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "startlocked",
+		Secret:          "secret",
+		ConnectionState: session.ConnectionStateStopped,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "startlocked")
+	defer releaseLock()
+	previousResume := resumeSessionResources
+	resumeCalled := make(chan struct{}, 1)
+	want := fmt.Errorf("stop after lock")
+	resumeSessionResources = func(context.Context, session.TunnelSession) error {
+		resumeCalled <- struct{}{}
+		return want
+	}
+	t.Cleanup(func() { resumeSessionResources = previousResume })
+
+	done := make(chan error, 1)
+	go func() {
+		cmd := *startCmd
+		cmd.SetContext(context.Background())
+		done <- cmd.RunE(&cmd, []string{"startlocked"})
+	}()
+	assertOperationBlocked(t, resumeCalled)
+	releaseLock()
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("start error = %v, want %v", err, want)
+	}
+}
+
+func TestStopWaitsForTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "stoplocked",
+		ConnectionState: session.ConnectionStateConnected,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "stoplocked")
+	defer releaseLock()
+	previousPause := pauseSessionResources
+	pauseCalled := make(chan struct{}, 1)
+	want := fmt.Errorf("stop after lock")
+	pauseSessionResources = func(context.Context, session.TunnelSession) error {
+		pauseCalled <- struct{}{}
+		return want
+	}
+	t.Cleanup(func() { pauseSessionResources = previousPause })
+
+	done := make(chan error, 1)
+	go func() {
+		cmd := *stopCmd
+		cmd.SetContext(context.Background())
+		done <- cmd.RunE(&cmd, []string{"stoplocked"})
+	}()
+	assertOperationBlocked(t, pauseCalled)
+	releaseLock()
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("stop error = %v, want %v", err, want)
+	}
+}
+
+func holdTunnelOperationLock(t *testing.T, tunnelID string) func() {
+	t.Helper()
+	held := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- withTunnelOperationLock(tunnelID, func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-held:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out acquiring test tunnel operation lock")
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			close(release)
+			if err := <-done; err != nil {
+				t.Errorf("release test tunnel operation lock: %v", err)
+			}
+		})
+	}
+}
+
+func assertOperationBlocked(t *testing.T, called <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-called:
+		t.Fatal("tunnel mutation started while the operation lock was held")
+	case <-time.After(100 * time.Millisecond):
 	}
 }
