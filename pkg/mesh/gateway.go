@@ -49,8 +49,9 @@ func RunGateway(ctx context.Context, opts GatewayOptions) error {
 
 	mux := http.NewServeMux()
 	gateway := &gatewayServer{
-		token:  opts.Token,
-		routes: routesByName(opts.Routes),
+		token:       opts.Token,
+		routes:      routesByName(opts.Routes),
+		dialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 	}
 	mux.HandleFunc("/_sealtun/mesh/healthz", gateway.handleHealthz)
 	mux.HandleFunc("/_sealtun/mesh/proxy/", gateway.handleProxy)
@@ -190,8 +191,9 @@ func ValidateGatewayRoutes(routes []GatewayRoute) error {
 }
 
 type gatewayServer struct {
-	token  string
-	routes map[string]GatewayRoute
+	token       string
+	routes      map[string]GatewayRoute
+	dialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 func routesByName(routes []GatewayRoute) map[string]GatewayRoute {
@@ -266,21 +268,30 @@ func (g *gatewayServer) handleTCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "route is not tcp", http.StatusBadRequest)
 		return
 	}
+	if !websocket.IsWebSocketUpgrade(r) {
+		http.Error(w, "websocket upgrade required", http.StatusBadRequest)
+		return
+	}
+	dialContext := g.dialContext
+	if dialContext == nil {
+		dialContext = (&net.Dialer{Timeout: 5 * time.Second}).DialContext
+	}
+	targetConn, err := dialContext(
+		r.Context(),
+		"tcp",
+		fmt.Sprintf("%s.%s.svc.cluster.local:%d", route.TargetService, route.TargetNamespace, route.TargetPort),
+	)
+	if err != nil {
+		http.Error(w, "mesh target unavailable", http.StatusBadGateway)
+		return
+	}
+	defer targetConn.Close()
 	ws, err := gatewayWebSocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer ws.Close()
 	stream := tunnel.NewWSConn(ws)
-	targetConn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(
-		r.Context(),
-		"tcp",
-		fmt.Sprintf("%s.%s.svc.cluster.local:%d", route.TargetService, route.TargetNamespace, route.TargetPort),
-	)
-	if err != nil {
-		return
-	}
-	defer targetConn.Close()
 	relay(r.Context(), targetConn, stream)
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/labring/sealtun/pkg/session"
 	"github.com/spf13/cobra"
 )
 
@@ -100,6 +101,39 @@ func TestTUIConfirmIgnoresEnterWhileActionIsRunning(t *testing.T) {
 	_, secondCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if secondCmd != nil {
 		t.Fatal("second Enter must not submit the action again while it is running")
+	}
+}
+
+func TestTUIStartWaitsForTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "tuistartlocked",
+		Secret:          "secret",
+		ConnectionState: session.ConnectionStateStopped,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "tuistartlocked")
+	defer releaseLock()
+	previousResume := resumeSessionResources
+	resumeCalled := make(chan struct{}, 1)
+	want := errors.New("stop after lock")
+	resumeSessionResources = func(context.Context, session.TunnelSession) error {
+		resumeCalled <- struct{}{}
+		return want
+	}
+	t.Cleanup(func() { resumeSessionResources = previousResume })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- (tuiCLIDataSource{}).Start(context.Background(), "tuistartlocked")
+	}()
+	assertOperationBlocked(t, resumeCalled)
+	releaseLock()
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("TUI start error = %v, want %v", err, want)
 	}
 }
 

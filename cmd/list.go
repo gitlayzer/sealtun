@@ -84,13 +84,13 @@ func collectListItemsWithContext(ctx context.Context, checkLocalPort bool) ([]li
 	if err != nil {
 		return nil, fmt.Errorf("load tunnel sessions: %w", err)
 	}
-	if err := refreshSessionsFromRemote(ctx, sessions, true); err != nil {
+	if err := refreshSessionsFromRemote(ctx, sessions); err != nil {
 		return nil, err
 	}
 	return listItemsFromSessions(sessions, checkLocalPort), nil
 }
 
-func refreshSessionsFromRemote(ctx context.Context, sessions []session.TunnelSession, ensurePublicPort bool) error {
+func refreshSessionsFromRemote(ctx context.Context, sessions []session.TunnelSession) error {
 	if len(sessions) == 0 {
 		return nil
 	}
@@ -112,10 +112,7 @@ func refreshSessionsFromRemote(ctx context.Context, sessions []session.TunnelSes
 					return
 				}
 				refreshCtx, cancel := context.WithTimeout(ctx, listRemoteRefreshTimeout)
-				refreshSessionFromRemote(refreshCtx, &sessions[index])
-				if ensurePublicPort {
-					ensureSessionPublicPort(refreshCtx, &sessions[index])
-				}
+				_ = refreshSessionFromRemote(refreshCtx, &sessions[index])
 				cancel()
 			}
 		}()

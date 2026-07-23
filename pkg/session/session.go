@@ -1,6 +1,7 @@
 package session
 
 import (
+	"crypto/cipher"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -153,6 +154,40 @@ func Update(session TunnelSession) error {
 	}
 
 	return saveLockedInDir(session, dir)
+}
+
+// UpdateAtomic applies a conditional mutation while holding the session file
+// lock and returns the resulting record.
+func UpdateAtomic(tunnelID string, mutate func(*TunnelSession) (bool, error)) (*TunnelSession, error) {
+	if err := validateTunnelID(tunnelID); err != nil {
+		return nil, err
+	}
+	if mutate == nil {
+		return nil, fmt.Errorf("session mutation is required")
+	}
+	dir, release, err := acquireSessionDir()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	current, err := getLockedFromConfigDir(filepath.Dir(dir), tunnelID)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := mutate(current)
+	if err != nil {
+		return nil, err
+	}
+	if current.TunnelID != tunnelID {
+		return nil, fmt.Errorf("session mutation changed tunnel id %q to %q", tunnelID, current.TunnelID)
+	}
+	if changed {
+		if err := saveLockedInDir(*current, dir); err != nil {
+			return nil, err
+		}
+	}
+	return current, nil
 }
 
 func acquireSessionDir() (string, func(), error) {
@@ -534,7 +569,7 @@ func listLockedFromConfigDir(root string) ([]TunnelSession, error) {
 	}
 
 	sessions := make([]TunnelSession, 0, len(entries))
-	var key []byte
+	var sessionAEAD cipher.AEAD
 	for _, entry := range entries {
 		if !isSessionJSONFile(entry) {
 			continue
@@ -547,15 +582,21 @@ func listLockedFromConfigDir(root string) ([]TunnelSession, error) {
 			}
 			return nil, err
 		}
-		if isEncryptedSessionData(data) && key == nil {
-			key, err = sessionEncryptionKeyFromConfigDir(root)
+		if isEncryptedSessionData(data) && sessionAEAD == nil {
+			key, keyErr := sessionEncryptionKeyFromConfigDir(root)
+			if keyErr != nil {
+				return nil, fmt.Errorf("load session encryption key: %w", keyErr)
+			}
+			sessionAEAD, err = newSessionAEAD(key)
 			if err != nil {
-				return nil, fmt.Errorf("load session encryption key: %w", err)
+				return nil, fmt.Errorf("initialize session decryption: %w", err)
 			}
 		}
-		data, err = decryptSessionDataWithKey(data, key)
-		if err != nil {
-			continue
+		if sessionAEAD != nil && isEncryptedSessionData(data) {
+			data, err = decryptSessionDataWithAEAD(data, sessionAEAD)
+			if err != nil {
+				continue
+			}
 		}
 
 		var sess TunnelSession

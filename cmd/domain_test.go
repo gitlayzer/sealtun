@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labring/sealtun/pkg/k8s"
 	"github.com/labring/sealtun/pkg/session"
 )
 
@@ -173,6 +174,68 @@ func TestConfigureSessionCustomDomainRejectsSSH(t *testing.T) {
 	}
 }
 
+func TestDomainMutationsWaitForTunnelOperationLock(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(context.Context, string) error
+	}{
+		{
+			name: "configure",
+			mutate: func(ctx context.Context, tunnelID string) error {
+				_, err := configureSessionCustomDomain(ctx, tunnelID, "dev.example.com")
+				return err
+			},
+		},
+		{
+			name: "clear",
+			mutate: func(ctx context.Context, tunnelID string) error {
+				_, err := clearSessionCustomDomain(ctx, tunnelID)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			tunnelID := "domain" + tt.name
+			if err := session.Save(session.TunnelSession{
+				TunnelID:     tunnelID,
+				Protocol:     "https",
+				Host:         "sealtun-" + tunnelID + "-ns.sealosgzg.site",
+				SealosHost:   "sealtun-" + tunnelID + "-ns.sealosgzg.site",
+				CustomDomain: "old.example.com",
+				Namespace:    "ns-demo",
+				CreatedAt:    time.Now().Format(time.RFC3339),
+			}); err != nil {
+				t.Fatalf("save session: %v", err)
+			}
+
+			releaseLock := holdTunnelOperationLock(t, tunnelID)
+			defer releaseLock()
+			previousCollect := collectSessionRemoteState
+			remoteCalled := make(chan struct{}, 1)
+			want := errors.New("remote refresh after lock")
+			collectSessionRemoteState = func(context.Context, session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+				remoteCalled <- struct{}{}
+				return nil, want
+			}
+			t.Cleanup(func() { collectSessionRemoteState = previousCollect })
+
+			done := make(chan error, 1)
+			go func() {
+				done <- tt.mutate(context.Background(), tunnelID)
+			}()
+			assertOperationBlocked(t, remoteCalled)
+			releaseLock()
+			if err := <-done; !errors.Is(err, want) {
+				t.Fatalf("mutation error = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
 func TestPlanSessionCustomDomainRejectsSSHBeforeK8sClient(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -330,6 +393,40 @@ func TestCollectDomainStatusRequiresCustomDomainForExplicitTunnel(t *testing.T) 
 	_, err := collectDomainStatusWithVerifier(context.Background(), "abc123", time.Second, verifyDomainForSession)
 	if err == nil || !strings.Contains(err.Error(), "no custom domain") {
 		t.Fatalf("expected no custom domain error, got %v", err)
+	}
+}
+
+func TestCollectDomainStatusRefreshesExplicitTunnelBeforeDomainCheck(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := session.Save(session.TunnelSession{
+		TunnelID:  "abc123",
+		Host:      "sealtun-abc123-ns.sealosgzg.site",
+		Namespace: "ns-demo",
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	originalCollector := collectSessionRemoteState
+	collectSessionRemoteState = func(context.Context, session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		return &k8s.TunnelRemoteState{
+			DeploymentOK: true,
+			Protocol:     "https",
+			SealosHost:   "sealtun-abc123-ns.sealosgzg.site",
+			CustomDomain: "api.example.com",
+		}, nil
+	}
+	t.Cleanup(func() { collectSessionRemoteState = originalCollector })
+
+	payload, err := collectDomainStatusWithVerifier(context.Background(), "abc123", time.Second, func(ctx context.Context, sess session.TunnelSession) *domainVerifyPayload {
+		return &domainVerifyPayload{TunnelID: sess.TunnelID, CustomDomain: sess.CustomDomain, Ready: true}
+	})
+	if err != nil {
+		t.Fatalf("collectDomainStatusWithVerifier returned error: %v", err)
+	}
+	if payload.CustomDomains != 1 || len(payload.Items) != 1 || payload.Items[0].CustomDomain != "api.example.com" {
+		t.Fatalf("explicit tunnel did not use refreshed custom domain: %#v", payload)
 	}
 }
 

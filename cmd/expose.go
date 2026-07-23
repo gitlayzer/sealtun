@@ -472,20 +472,33 @@ func recoverStaleSessions(ctx context.Context, out io.Writer) error {
 	}
 
 	for _, sess := range sessions {
-		if !sessionNeedsAutomaticRecovery(sess, time.Minute) {
-			continue
-		}
-
-		fmt.Fprintf(out, "[+] Found stale tunnel session %s in namespace %s. Cleaning up...\n", sess.TunnelID, sess.Namespace)
-		cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := cleanupSessionResources(cleanupCtx, sess)
-		cancel()
+		cleanupFailed := false
+		err := withTunnelOperationLockContext(ctx, sess.TunnelID, func() error {
+			current, err := findSession(sess.TunnelID)
+			if err != nil {
+				return err
+			}
+			if !sessionNeedsAutomaticRecovery(*current, time.Minute) {
+				return nil
+			}
+			fmt.Fprintf(out, "[+] Found stale tunnel session %s in namespace %s. Cleaning up...\n", current.TunnelID, current.Namespace)
+			cleanupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if err := cleanupSessionResources(cleanupCtx, *current); err != nil {
+				cleanupFailed = true
+				return err
+			}
+			if err := session.Delete(current.TunnelID); err != nil {
+				return fmt.Errorf("delete stale tunnel session %s: %w", current.TunnelID, err)
+			}
+			return nil
+		})
 		if err != nil {
-			fmt.Fprintf(out, "[!] Skipped stale tunnel %s cleanup: %v\n", sess.TunnelID, err)
-			continue
-		}
-		if err := session.Delete(sess.TunnelID); err != nil {
-			return fmt.Errorf("delete stale tunnel session %s: %w", sess.TunnelID, err)
+			if cleanupFailed {
+				fmt.Fprintf(out, "[!] Skipped stale tunnel %s cleanup: %v\n", sess.TunnelID, err)
+				continue
+			}
+			return err
 		}
 	}
 
@@ -493,6 +506,15 @@ func recoverStaleSessions(ctx context.Context, out io.Writer) error {
 }
 
 func cleanupTunnel(k8sClient *k8s.Client, tunnelID string) {
+	if err := withTunnelOperationLock(tunnelID, func() error {
+		cleanupTunnelLocked(k8sClient, tunnelID)
+		return nil
+	}); err != nil {
+		fmt.Printf("[!] Failed to lock tunnel %s for cleanup: %v\n", tunnelID, err)
+	}
+}
+
+func cleanupTunnelLocked(k8sClient *k8s.Client, tunnelID string) {
 	if tunnelCleanupShouldPreserve(tunnelID) {
 		fmt.Printf("\r[+] Tunnel %s is stopped. Preserving remote entry resources.\n", tunnelID)
 		return
@@ -517,11 +539,16 @@ func tunnelCleanupShouldPreserve(tunnelID string) bool {
 }
 
 func cleanupTunnelForCurrentOwner(k8sClient *k8s.Client, tunnelID string) {
-	if !foregroundSessionOwnedByCurrentProcess(tunnelID) {
-		fmt.Printf("\r[+] Tunnel %s is no longer owned by this foreground process. Preserving remote resources.\n", tunnelID)
-		return
+	if err := withTunnelOperationLock(tunnelID, func() error {
+		if !foregroundSessionOwnedByCurrentProcess(tunnelID) {
+			fmt.Printf("\r[+] Tunnel %s is no longer owned by this foreground process. Preserving remote resources.\n", tunnelID)
+			return nil
+		}
+		cleanupTunnelLocked(k8sClient, tunnelID)
+		return nil
+	}); err != nil {
+		fmt.Printf("[!] Failed to lock tunnel %s for owner cleanup: %v\n", tunnelID, err)
 	}
-	cleanupTunnel(k8sClient, tunnelID)
 }
 
 func foregroundSessionOwnedByCurrentProcess(tunnelID string) bool {

@@ -125,14 +125,9 @@ func setTunnelResources(parent context.Context, tunnelID string, input resourceS
 	if err != nil {
 		return nil, err
 	}
-	if sessionExpired(*sess, nowUTC()) {
-		return nil, fmt.Errorf("tunnel %s has expired; run cleanup and recreate the tunnel", sess.TunnelID)
-	}
-	next, err := mergeResourceSetInput(sess.ResourceConfig, input)
-	if err != nil {
-		return nil, err
-	}
-	return updateTunnelResourceConfig(parent, sess, next)
+	return updateTunnelResourceConfig(parent, sess, func(existing *session.ResourceConfig) (*session.ResourceConfig, error) {
+		return mergeResourceSetInput(existing, input)
+	})
 }
 
 func unsetTunnelResources(parent context.Context, tunnelID string) (*resourceUpdatePayload, error) {
@@ -140,20 +135,28 @@ func unsetTunnelResources(parent context.Context, tunnelID string) (*resourceUpd
 	if err != nil {
 		return nil, err
 	}
-	if sessionExpired(*sess, nowUTC()) {
-		return nil, fmt.Errorf("tunnel %s has expired; run cleanup and recreate the tunnel", sess.TunnelID)
-	}
-	return updateTunnelResourceConfig(parent, sess, defaultSessionResourceConfig())
+	return updateTunnelResourceConfig(parent, sess, func(*session.ResourceConfig) (*session.ResourceConfig, error) {
+		return defaultSessionResourceConfig(), nil
+	})
 }
 
-func updateTunnelResourceConfig(parent context.Context, sess *session.TunnelSession, config *session.ResourceConfig) (*resourceUpdatePayload, error) {
-	normalized, err := normalizeResourceConfig(config)
-	if err != nil {
-		return nil, err
-	}
+type resourceConfigResolver func(*session.ResourceConfig) (*session.ResourceConfig, error)
+
+func updateTunnelResourceConfig(parent context.Context, sess *session.TunnelSession, resolve resourceConfigResolver) (*resourceUpdatePayload, error) {
 	var payload *resourceUpdatePayload
-	err = withTunnelOperationLock(sess.TunnelID, func() error {
-		current, err := findSession(sess.TunnelID)
+	err := withTunnelOperationLock(sess.TunnelID, func() error {
+		current, err := findSessionSyncedLocked(parent, sess.TunnelID)
+		if err != nil {
+			return err
+		}
+		if sessionExpired(*current, nowUTC()) {
+			return fmt.Errorf("tunnel %s has expired; run cleanup and recreate the tunnel", current.TunnelID)
+		}
+		config, err := resolve(current.ResourceConfig)
+		if err != nil {
+			return err
+		}
+		normalized, err := normalizeResourceConfig(config)
 		if err != nil {
 			return err
 		}

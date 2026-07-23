@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,18 @@ func BenchmarkTokenMatchesAnyManyHashes(b *testing.B) {
 		if tokenMatchesAny("request-token", hashes) {
 			b.Fatal("unexpected token match")
 		}
+	}
+}
+
+func TestValidateTokenHashRejectsUppercaseHex(t *testing.T) {
+	const token = "uppercase-token-value"
+	hash, err := HashToken(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash = "sha256:" + strings.ToUpper(strings.TrimPrefix(hash, "sha256:"))
+	if err := validateTokenHash(hash); err == nil {
+		t.Fatal("uppercase hash passed validation but runtime matching requires canonical lowercase hex")
 	}
 }
 

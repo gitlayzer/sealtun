@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -143,28 +144,35 @@ func runApplyConfig(ctx context.Context, config *applyFile, dryRun bool) ([]appl
 		return nil, fmt.Errorf("failed to init k8s client: %w", err)
 	}
 
-	results := make([]applyResult, 0, len(config.Tunnels))
+	tunnelIDs := make([]string, 0, len(config.Tunnels))
 	for _, item := range config.Tunnels {
-		result, err := applyOneTunnel(ctx, item, authData, client, kubeconfig, dryRun)
+		tunnelID, err := applyTunnelID(item.Name)
 		if err != nil {
-			rollbackApplyResults(client, results)
-			return results, err
+			return nil, err
 		}
-		results = append(results, result)
+		tunnelIDs = append(tunnelIDs, tunnelID)
 	}
-	if !dryRun {
+
+	results := make([]applyResult, 0, len(config.Tunnels))
+	err = withTunnelOperationLocks(tunnelIDs, func() error {
+		for _, item := range config.Tunnels {
+			result, applyErr := applyOneTunnel(ctx, item, authData, client, kubeconfig, false)
+			if applyErr != nil {
+				return applyErrorWithRollback(applyErr, rollbackApplyResults(client, results))
+			}
+			results = append(results, result)
+		}
 		if err := ensureDaemonRunningFn(); err != nil {
-			rollbackApplyResults(client, results)
-			return results, fmt.Errorf("failed to start local daemon: %w", err)
+			return applyErrorWithRollback(fmt.Errorf("failed to start local daemon: %w", err), rollbackApplyResults(client, results))
 		}
 		for _, result := range results {
 			if err := waitForDaemonSession(result.TunnelID, daemonConnectTimeout); err != nil {
-				rollbackApplyResults(client, results)
-				return results, err
+				return applyErrorWithRollback(err, rollbackApplyResults(client, results))
 			}
 		}
-	}
-	return results, nil
+		return nil
+	})
+	return results, err
 }
 
 func loadApplyFile(path string) (*applyFile, error) {
@@ -253,7 +261,6 @@ func applyOneTunnel(ctx context.Context, item applyTunnel, authData *auth.AuthDa
 		existing, err := session.Get(normalized.TunnelID)
 		if err == nil {
 			alreadyExisted = true
-			existingSession = existing
 			currentNamespace := ""
 			if client != nil {
 				currentNamespace = client.Namespace()
@@ -261,6 +268,15 @@ func applyOneTunnel(ctx context.Context, item applyTunnel, authData *auth.AuthDa
 			if err := validateExistingApplySessionScope(*existing, authData, currentNamespace); err != nil {
 				return result, err
 			}
+			if client != nil {
+				if err := refreshSessionFromRemoteLocked(ctx, existing); err != nil {
+					return result, fmt.Errorf("tunnel %s: sync existing remote state: %w", normalized.TunnelID, err)
+				}
+			}
+			if strings.TrimSpace(existing.Secret) == "" {
+				return result, fmt.Errorf("tunnel %s already exists but its local secret is unavailable; stop or cleanup the old session before apply", existing.TunnelID)
+			}
+			existingSession = existing
 			if existing.Secret != "" {
 				secret = existing.Secret
 			}
@@ -447,9 +463,6 @@ func validateExistingApplySessionScope(existing session.TunnelSession, authData 
 			return fmt.Errorf("tunnel %s already belongs to namespace %s; current namespace is %s", existing.TunnelID, existing.Namespace, currentNamespace)
 		}
 	}
-	if strings.TrimSpace(existing.Secret) == "" {
-		return fmt.Errorf("tunnel %s already exists but its local secret is unavailable; stop or cleanup the old session before apply", existing.TunnelID)
-	}
 	return nil
 }
 
@@ -488,7 +501,8 @@ func rollbackExistingApplyTunnel(client *k8s.Client, previous session.TunnelSess
 	return firstErr
 }
 
-func rollbackApplyResults(client *k8s.Client, results []applyResult) {
+func rollbackApplyResults(client *k8s.Client, results []applyResult) error {
+	var rollbackErrors []error
 	for i := len(results) - 1; i >= 0; i-- {
 		result := results[i]
 		if result.TunnelID == "" {
@@ -497,16 +511,30 @@ func rollbackApplyResults(client *k8s.Client, results []applyResult) {
 		if result.NewTunnel {
 			if client != nil {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), tunnelCleanupTimeout)
-				_ = client.CleanupTunnel(cleanupCtx, result.TunnelID)
+				if err := client.CleanupTunnel(cleanupCtx, result.TunnelID); err != nil {
+					rollbackErrors = append(rollbackErrors, fmt.Errorf("cleanup tunnel %s: %w", result.TunnelID, err))
+				}
 				cancel()
 			}
-			_ = session.Delete(result.TunnelID)
+			if err := session.Delete(result.TunnelID); err != nil {
+				rollbackErrors = append(rollbackErrors, fmt.Errorf("delete local session %s: %w", result.TunnelID, err))
+			}
 			continue
 		}
 		if result.Previous != nil {
-			_ = rollbackExistingApplyTunnel(client, *result.Previous)
+			if err := rollbackExistingApplyTunnel(client, *result.Previous); err != nil {
+				rollbackErrors = append(rollbackErrors, fmt.Errorf("restore tunnel %s: %w", result.TunnelID, err))
+			}
 		}
 	}
+	return errors.Join(rollbackErrors...)
+}
+
+func applyErrorWithRollback(applyErr, rollbackErr error) error {
+	if rollbackErr == nil {
+		return applyErr
+	}
+	return errors.Join(applyErr, fmt.Errorf("rollback failed: %w", rollbackErr))
 }
 
 func normalizeApplyTunnel(item applyTunnel) (normalizedApplyTunnel, error) {
@@ -762,6 +790,9 @@ func applyTunnelID(name string) (string, error) {
 	}
 	if name != strings.ToLower(name) || !applyNamePattern.MatchString(name) {
 		return "", fmt.Errorf("invalid tunnel name %q: use lowercase DNS-compatible names, e.g. web or api-dev", name)
+	}
+	if strings.HasPrefix(name, "mesh-") {
+		return "", fmt.Errorf("invalid tunnel name %q: the mesh- prefix is reserved for Sealtun Mesh resources", name)
 	}
 	return name, nil
 }

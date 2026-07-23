@@ -96,14 +96,22 @@ func cleanupLogoutSessions(cmd *cobra.Command) error {
 	}
 
 	for _, sess := range sessions {
-		ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-		if err := cleanupSessionResources(ctx, sess); err != nil {
-			cancel()
+		if err := withTunnelOperationLockContext(cmd.Context(), sess.TunnelID, func() error {
+			current, err := findSession(sess.TunnelID)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+			defer cancel()
+			if err := cleanupSessionResources(ctx, *current); err != nil {
+				return fmt.Errorf("cleanup remote resources: %w", err)
+			}
+			if err := session.Delete(current.TunnelID); err != nil {
+				return fmt.Errorf("delete local session: %w", err)
+			}
+			return nil
+		}); err != nil {
 			return fmt.Errorf("cleanup tunnel %s before logout: %w (rerun with --force to only remove local credentials)", sess.TunnelID, err)
-		}
-		cancel()
-		if err := session.Delete(sess.TunnelID); err != nil {
-			return fmt.Errorf("delete local session %s before logout: %w", sess.TunnelID, err)
 		}
 	}
 	return nil

@@ -7,10 +7,40 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
 )
+
+func TestHandleTCPReturnsBadGatewayBeforeWebSocketUpgradeWhenTargetIsUnavailable(t *testing.T) {
+	gateway := &gatewayServer{
+		token: "secret",
+		routes: routesByName([]GatewayRoute{{
+			Name:            "database",
+			Protocol:        ProtocolTCP,
+			TargetService:   "database",
+			TargetNamespace: "default",
+			TargetPort:      5432,
+		}}),
+		dialContext: func(context.Context, string, string) (net.Conn, error) {
+			return nil, fmt.Errorf("target unavailable")
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://gateway/_sealtun/mesh/tcp/database", nil)
+	req.Header.Set(gatewayTokenHeader, "secret")
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	recorder := httptest.NewRecorder()
+
+	gateway.handleTCP(recorder, req)
+
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body=%q", recorder.Code, http.StatusBadGateway, recorder.Body.String())
+	}
+}
 
 func TestCloneTargetHeadersStripsMeshToken(t *testing.T) {
 	header := http.Header{}

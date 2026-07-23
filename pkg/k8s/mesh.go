@@ -400,6 +400,37 @@ func (c *Client) CleanupMeshImport(ctx context.Context, name string) error {
 	return err
 }
 
+// ReconcileMeshImports removes managed import Services that are no longer in
+// the desired registry. Unmanaged Services are never touched.
+func (c *Client) ReconcileMeshImports(ctx context.Context, desiredNames []string) error {
+	desired := make(map[string]struct{}, len(desiredNames))
+	for _, name := range desiredNames {
+		name = mesh.NormalizeName(name)
+		if err := mesh.ValidateName("mesh import service", name); err != nil {
+			return err
+		}
+		desired[mesh.ImportServiceName(name)] = struct{}{}
+	}
+	selector := klabels.Set{managedLabelKey: meshOwnerName}.AsSelector().String()
+	services, err := c.clientset.CoreV1().Services(c.namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return err
+	}
+	for i := range services.Items {
+		service := &services.Items[i]
+		if !managedLabelMatches(service.Labels, meshOwnerName) {
+			continue
+		}
+		if _, keep := desired[service.Name]; keep {
+			continue
+		}
+		if _, err := c.deleteNamedServiceIfOwned(ctx, service.Name, meshOwnerName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Client) MeshCheck(ctx context.Context, meshName string, service mesh.Service) (MeshCheck, error) {
 	out := MeshCheck{}
 	name := meshGatewayName(meshName)

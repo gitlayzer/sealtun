@@ -190,8 +190,6 @@ func collectTunnelDoctorPayload(ctx context.Context, tunnelID string) (*tunnelDo
 	if err != nil {
 		return nil, err
 	}
-	ensureSessionPublicPort(ctx, sess)
-
 	snapshot := classifySession(*sess, true)
 	endpoint := endpointLabel(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort)
 	payload := &tunnelDoctorPayload{
@@ -425,34 +423,38 @@ func executeDoctorFixAction(ctx context.Context, action doctorFixAction) error {
 	case "daemon-start":
 		return doctorFixEnsureDaemon()
 	case "start":
-		sess, err := findSession(action.TunnelID)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(sess.Secret) == "" {
-			return fmt.Errorf("tunnel %s cannot be started because its local secret is unavailable", sess.TunnelID)
-		}
-		if sessionExpired(*sess, time.Now()) {
-			return fmt.Errorf("tunnel %s has expired", sess.TunnelID)
-		}
-		return doctorFixStartTunnel(ctx, sess)
+		return withTunnelOperationLockContext(ctx, action.TunnelID, func() error {
+			sess, err := findSession(action.TunnelID)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(sess.Secret) == "" {
+				return fmt.Errorf("tunnel %s cannot be started because its local secret is unavailable", sess.TunnelID)
+			}
+			if sessionExpired(*sess, time.Now()) {
+				return fmt.Errorf("tunnel %s has expired", sess.TunnelID)
+			}
+			return doctorFixStartTunnel(ctx, sess)
+		})
 	case "cleanup":
-		sess, err := findSession(action.TunnelID)
-		if err != nil {
-			return err
-		}
-		if !sessionExpired(*sess, time.Now()) && !session.IsStaleWithOwner(*sess, time.Minute, sessionOwnerAlive(*sess)) {
-			return fmt.Errorf("refusing to cleanup non-stale active tunnel %s", sess.TunnelID)
-		}
-		if sess.Mode == "daemon" && !sessionExpired(*sess, time.Now()) {
-			return fmt.Errorf("refusing to cleanup daemon-managed active tunnel %s", sess.TunnelID)
-		}
-		cleanupCtx, cancel := context.WithTimeout(ctx, tunnelCleanupTimeout)
-		defer cancel()
-		if err := doctorFixCleanupResources(cleanupCtx, *sess); err != nil {
-			return err
-		}
-		return session.Delete(sess.TunnelID)
+		return withTunnelOperationLockContext(ctx, action.TunnelID, func() error {
+			sess, err := findSession(action.TunnelID)
+			if err != nil {
+				return err
+			}
+			if !sessionExpired(*sess, time.Now()) && !session.IsStaleWithOwner(*sess, time.Minute, sessionOwnerAlive(*sess)) {
+				return fmt.Errorf("refusing to cleanup non-stale active tunnel %s", sess.TunnelID)
+			}
+			if sess.Mode == "daemon" && !sessionExpired(*sess, time.Now()) {
+				return fmt.Errorf("refusing to cleanup daemon-managed active tunnel %s", sess.TunnelID)
+			}
+			cleanupCtx, cancel := context.WithTimeout(ctx, tunnelCleanupTimeout)
+			defer cancel()
+			if err := doctorFixCleanupResources(cleanupCtx, *sess); err != nil {
+				return err
+			}
+			return session.Delete(sess.TunnelID)
+		})
 	default:
 		return fmt.Errorf("unknown fix action %q", action.Action)
 	}

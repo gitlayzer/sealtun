@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -366,6 +367,34 @@ func TestServerAuditRetainsNewestEventsInOrder(t *testing.T) {
 	}
 	if payload.Events[len(payload.Events)-1].Reason != fmt.Sprintf("event-%d", maxAuditEvents+2) {
 		t.Fatalf("unexpected newest retained event: %q", payload.Events[len(payload.Events)-1].Reason)
+	}
+}
+
+func TestServerAuditBoundsRecordedPath(t *testing.T) {
+	const maxAuditPath = 2048
+	server := NewServerWithOptions("secret", 8080, "https", "3000", ServerOptions{
+		AccessPolicy: &accesspolicy.Policy{Audit: &accesspolicy.AuditConfig{Enabled: true}},
+	})
+	request := httptest.NewRequest(http.MethodGet, "https://example.test/"+strings.Repeat("a", maxAuditPath*4), nil)
+	server.recordRequestAudit(request, "deny", "no-auth", http.StatusUnauthorized, nil)
+
+	payload := server.auditPayload(0, 1)
+	if len(payload.Events) != 1 {
+		t.Fatalf("expected one audit event, got %d", len(payload.Events))
+	}
+	if got := len(payload.Events[0].Path); got > maxAuditPath {
+		t.Fatalf("audit path retained %d bytes, max is %d", got, maxAuditPath)
+	}
+}
+
+func TestProxyDialContextReturnsCanceledBeforeOpeningStream(t *testing.T) {
+	server := NewServer("secret", 8080, "https", "3000")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := server.proxyDialContext(ctx, "tcp", "tunnel-target")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
 	}
 }
 

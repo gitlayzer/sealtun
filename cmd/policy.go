@@ -163,7 +163,7 @@ func showPolicyWithContext(ctx context.Context, tunnelID string, now time.Time) 
 func setPolicy(ctx context.Context, tunnelID, rateLimit string, clearRateLimit, auditEnabled, auditDisabled bool) (*policyShowPayload, error) {
 	var payload *policyShowPayload
 	err := withTunnelOperationLock(tunnelID, func() error {
-		sess, err := findSessionRefreshed(ctx, tunnelID)
+		sess, err := findSessionSyncedLocked(ctx, tunnelID)
 		if err != nil {
 			return err
 		}

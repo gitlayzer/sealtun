@@ -47,6 +47,50 @@ func TestSaveListDelete(t *testing.T) {
 	}
 }
 
+func TestUpdateAtomicPersistsMutation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := Save(TunnelSession{TunnelID: "atomic123", ConnectionState: ConnectionStateConnected}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := UpdateAtomic("atomic123", func(current *TunnelSession) (bool, error) {
+		current.LastError = "latest daemon state"
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("UpdateAtomic returned error: %v", err)
+	}
+	if updated.LastError != "latest daemon state" {
+		t.Fatalf("returned session was not updated: %#v", updated)
+	}
+	persisted, err := Get("atomic123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.ConnectionState != ConnectionStateConnected || persisted.LastError != "latest daemon state" {
+		t.Fatalf("unexpected persisted session: %#v", persisted)
+	}
+}
+
+func TestUpdateAtomicRejectsTunnelIDChange(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := Save(TunnelSession{TunnelID: "atomic123"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := UpdateAtomic("atomic123", func(current *TunnelSession) (bool, error) {
+		current.TunnelID = "different"
+		return true, nil
+	}); err == nil {
+		t.Fatal("expected tunnel ID mutation to be rejected")
+	}
+	if _, err := Get("atomic123"); err != nil {
+		t.Fatalf("original session was lost: %v", err)
+	}
+}
+
 func TestListDoesNotCreateConfigDirWhenMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

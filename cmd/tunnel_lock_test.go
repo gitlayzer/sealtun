@@ -35,3 +35,38 @@ func TestWithTunnelOperationLockRejectsSymlink(t *testing.T) {
 		t.Fatal("operation callback ran for an unsafe lock path")
 	}
 }
+
+func TestWithTunnelOperationLocksDeduplicatesTunnelIDs(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	called := 0
+	err := withTunnelOperationLocks([]string{"second", "first", "second"}, func() error {
+		called++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("withTunnelOperationLocks returned error: %v", err)
+	}
+	if called != 1 {
+		t.Fatalf("callback called %d times, want 1", called)
+	}
+}
+
+func TestWithTunnelOperationLocksWaitsForEveryTunnel(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	releaseLock := holdTunnelOperationLock(t, "second")
+	defer releaseLock()
+
+	called := make(chan struct{}, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- withTunnelOperationLocks([]string{"second", "first"}, func() error {
+			called <- struct{}{}
+			return nil
+		})
+	}()
+	assertOperationBlocked(t, called)
+	releaseLock()
+	if err := <-done; err != nil {
+		t.Fatalf("withTunnelOperationLocks returned error: %v", err)
+	}
+}

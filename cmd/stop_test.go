@@ -170,6 +170,69 @@ func TestStartRollbackMarksErrorWhenPauseRollbackFails(t *testing.T) {
 	}
 }
 
+func TestStartRollsBackRemoteResourcesWhenLocalUpdateFails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	previousResume := resumeSessionResources
+	previousPause := pauseSessionResources
+	previousUpdate := startSessionUpdate
+	resumeCalled := false
+	pauseCalled := false
+	resumeSessionResources = func(context.Context, session.TunnelSession) error {
+		resumeCalled = true
+		return nil
+	}
+	pauseSessionResources = func(context.Context, session.TunnelSession) error {
+		pauseCalled = true
+		return nil
+	}
+	startSessionUpdate = func(session.TunnelSession) error {
+		return fmt.Errorf("local disk unavailable")
+	}
+	t.Cleanup(func() {
+		resumeSessionResources = previousResume
+		pauseSessionResources = previousPause
+		startSessionUpdate = previousUpdate
+	})
+
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "startsavefail",
+		Region:          "https://gzg.sealos.run",
+		Namespace:       "ns-test",
+		Protocol:        "https",
+		Host:            "startsavefail.example.com",
+		LocalPort:       "18084",
+		Secret:          "secret",
+		ConnectionState: session.ConnectionStateStopped,
+		CreatedAt:       time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	sess, err := findSession("startsavefail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = startTunnelSession(context.Background(), sess)
+	if err == nil || !strings.Contains(err.Error(), "local disk unavailable") {
+		t.Fatalf("expected local update failure, got %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected remote resources to be resumed")
+	}
+	if !pauseCalled {
+		t.Fatal("expected resumed remote resources to be rolled back")
+	}
+	latest, err := session.Get("startsavefail")
+	if err != nil {
+		t.Fatalf("load final session: %v", err)
+	}
+	if latest.ConnectionState != session.ConnectionStateStopped {
+		t.Fatalf("expected stopped state after rollback, got %q", latest.ConnectionState)
+	}
+}
+
 func TestStartWaitsForTunnelOperationLock(t *testing.T) {
 	t.Setenv("SEALTUN_HOME", t.TempDir())
 	if err := session.Save(session.TunnelSession{

@@ -52,6 +52,18 @@ jobs:
       - name: Run vet
         run: go vet ./...
 
+      - name: Run race tests
+        run: go test -race ./cmd ./pkg/session ./pkg/accesspolicy ./pkg/publicauth ./pkg/k8s ./pkg/clusterconnect ./pkg/tunnel ./pkg/mesh ./pkg/daemon
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
+
+      - name: Run gosec
+        run: $(go env GOPATH)/bin/gosec ./cmd ./pkg/... ./assets ./
+
+      - name: Verify module files are tidy
+        run: go mod tidy -diff
+
       - name: Check npm package builder syntax
         run: node --check scripts/build-npm-packages.mjs
 

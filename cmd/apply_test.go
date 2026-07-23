@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +133,15 @@ func TestNormalizeApplyTunnelRejectsUnsafeNames(t *testing.T) {
 		if _, err := normalizeApplyTunnel(applyTunnel{Name: name, LocalPort: 3000}); err == nil {
 			t.Fatalf("expected invalid apply tunnel name %q to fail", name)
 		}
+	}
+}
+
+func TestApplyTunnelIDRejectsMeshReservedPrefix(t *testing.T) {
+	t.Parallel()
+
+	_, err := applyTunnelID("mesh-global")
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("expected reserved mesh prefix error, got %v", err)
 	}
 }
 
@@ -903,7 +913,7 @@ func TestRollbackApplyResultsRestoresExistingLocalSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rollbackApplyResults(nil, []applyResult{{
+	if err := rollbackApplyResults(nil, []applyResult{{
 		TunnelID: "web",
 		Previous: &session.TunnelSession{
 			TunnelID:     previous.TunnelID,
@@ -917,7 +927,9 @@ func TestRollbackApplyResultsRestoresExistingLocalSession(t *testing.T) {
 			Secret:       previous.Secret,
 			Mode:         previous.Mode,
 		},
-	}})
+	}}); err != nil {
+		t.Fatalf("rollbackApplyResults returned error: %v", err)
+	}
 
 	current, err := session.Get("web")
 	if err != nil {
@@ -938,5 +950,54 @@ func TestRollbackApplyResultsRestoresExistingLocalSession(t *testing.T) {
 		if got != want {
 			t.Fatalf("expected restored %s %q, got %q", field, want, got)
 		}
+	}
+}
+
+func TestApplyOneTunnelPropagatesRemoteRefreshFailure(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:  "web",
+		Region:    "https://gzg.sealos.run",
+		Namespace: "default",
+		LocalPort: "3000",
+		Protocol:  "https",
+		Secret:    "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := errors.New("remote state unavailable")
+	previousCollect := collectSessionRemoteState
+	collectSessionRemoteState = func(context.Context, session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		return nil, want
+	}
+	t.Cleanup(func() { collectSessionRemoteState = previousCollect })
+
+	_, err := applyOneTunnel(context.Background(), applyTunnel{Name: "web", LocalPort: 3000}, &auth.AuthData{Region: "https://gzg.sealos.run"}, &k8s.Client{}, "", false)
+	if !errors.Is(err, want) {
+		t.Fatalf("apply error = %v, want %v", err, want)
+	}
+}
+
+func TestRollbackApplyResultsReturnsLocalRestoreFailure(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("SEALTUN_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, ".sealtun"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := rollbackApplyResults(nil, []applyResult{{
+		TunnelID: "web",
+		Previous: &session.TunnelSession{
+			TunnelID:  "web",
+			Region:    "https://gzg.sealos.run",
+			Namespace: "default",
+			LocalPort: "3000",
+			Protocol:  "https",
+			Secret:    "secret",
+		},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "restore tunnel web") {
+		t.Fatalf("expected rollback failure to be reported, got %v", err)
 	}
 }

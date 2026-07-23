@@ -112,7 +112,13 @@ func HashToken(token string) (string, error) {
 
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
-	return "sha256:" + hex.EncodeToString(sum[:])
+	var encoded [sha256.Size * 2]byte
+	hex.Encode(encoded[:], sum[:])
+	var out strings.Builder
+	out.Grow(len("sha256:") + len(encoded))
+	out.WriteString("sha256:")
+	_, _ = out.Write(encoded[:])
+	return out.String()
 }
 
 func Validate(policy *Policy) error {
@@ -444,6 +450,11 @@ func validateTokenHash(hash string) error {
 	value := strings.TrimPrefix(hash, "sha256:")
 	if len(value) != sha256.Size*2 {
 		return fmt.Errorf("invalid sha256 length")
+	}
+	for _, ch := range value {
+		if ch >= 'A' && ch <= 'F' {
+			return fmt.Errorf("sha256 hex must be lowercase")
+		}
 	}
 	if _, err := hex.DecodeString(value); err != nil {
 		return fmt.Errorf("invalid sha256 hex")

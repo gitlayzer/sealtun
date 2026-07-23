@@ -200,12 +200,8 @@ var meshDownCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("region %s: %w", region.Name, err)
 			}
-			for _, service := range config.Services {
-				if containsMeshRegion(service.Imports, region.Name) {
-					if err := client.CleanupMeshImport(cmd.Context(), service.Name); err != nil {
-						return fmt.Errorf("region %s cleanup import %s: %w", region.Name, service.Name, err)
-					}
-				}
+			if err := client.ReconcileMeshImports(cmd.Context(), nil); err != nil {
+				return fmt.Errorf("region %s cleanup imports: %w", region.Name, err)
 			}
 			if err := client.CleanupMesh(cmd.Context(), config.Name); err != nil {
 				return fmt.Errorf("region %s cleanup gateway: %w", region.Name, err)
@@ -509,6 +505,7 @@ func loadMeshConfig() (*mesh.Config, error) {
 
 func applyMeshConfig(ctx context.Context, store *mesh.Store, config mesh.Config, out interface{ Write([]byte) (int, error) }) error {
 	clients := map[string]*k8s.Client{}
+	desiredImports := map[string][]string{}
 	for i := range config.Regions {
 		profile, client, err := meshClientForRegion(config.Regions[i])
 		if err != nil {
@@ -551,6 +548,12 @@ func applyMeshConfig(ctx context.Context, store *mesh.Store, config mesh.Config,
 				return fmt.Errorf("region %s import %s: %w", regionName, service.Name, err)
 			}
 			fmt.Fprintf(out, "Imported %s into %s: %s\n", service.Name, regionName, dns)
+			desiredImports[regionName] = append(desiredImports[regionName], service.Name)
+		}
+	}
+	for _, region := range config.Regions {
+		if err := clients[region.Name].ReconcileMeshImports(ctx, desiredImports[region.Name]); err != nil {
+			return fmt.Errorf("region %s reconcile imports: %w", region.Name, err)
 		}
 	}
 	return nil
@@ -684,15 +687,6 @@ func resolveImportRegions(config *mesh.Config, value, from string) ([]string, er
 	}
 	sort.Strings(regions)
 	return regions, nil
-}
-
-func containsMeshRegion(regions []string, want string) bool {
-	for _, region := range regions {
-		if region == want {
-			return true
-		}
-	}
-	return false
 }
 
 func findMeshService(config mesh.Config, name string) (mesh.Service, bool) {

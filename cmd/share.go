@@ -160,7 +160,7 @@ func createShareLink(ctx context.Context, tunnelID, name string, ttl time.Durati
 	}
 	var payload *shareCreatePayload
 	err := withTunnelOperationLock(tunnelID, func() error {
-		sess, err := findSessionRefreshed(ctx, tunnelID)
+		sess, err := findSessionSyncedLocked(ctx, tunnelID)
 		if err != nil {
 			return err
 		}
@@ -250,7 +250,7 @@ func revokeShareLink(ctx context.Context, tunnelID, name string) error {
 		return fmt.Errorf("share name is required")
 	}
 	return withTunnelOperationLock(tunnelID, func() error {
-		sess, err := findSessionRefreshed(ctx, tunnelID)
+		sess, err := findSessionSyncedLocked(ctx, tunnelID)
 		if err != nil {
 			return err
 		}
@@ -291,7 +291,7 @@ func rotateShareLink(ctx context.Context, tunnelID, name string, ttl time.Durati
 	}
 	var payload *shareCreatePayload
 	err := withTunnelOperationLock(tunnelID, func() error {
-		sess, err := findSessionRefreshed(ctx, tunnelID)
+		sess, err := findSessionSyncedLocked(ctx, tunnelID)
 		if err != nil {
 			return err
 		}

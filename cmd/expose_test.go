@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -167,5 +168,53 @@ func TestForegroundCleanupRequiresCurrentProcessOwnership(t *testing.T) {
 	}
 	if foregroundSessionOwnedByCurrentProcess("foreown") {
 		t.Fatal("foreground cleanup must not own a session that has moved to daemon mode")
+	}
+}
+
+func TestRecoverStaleSessionsRechecksEligibilityAfterLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "recoverlocked",
+		Namespace:       "ns-demo",
+		Mode:            "daemon",
+		ConnectionState: session.ConnectionStateError,
+		ExpiresAt:       time.Now().Add(-time.Hour).Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "recoverlocked")
+	defer releaseLock()
+	previousCleanup := cleanupSessionResources
+	cleanupCalled := make(chan struct{}, 1)
+	cleanupSessionResources = func(context.Context, session.TunnelSession) error {
+		cleanupCalled <- struct{}{}
+		return nil
+	}
+	t.Cleanup(func() { cleanupSessionResources = previousCleanup })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- recoverStaleSessions(context.Background(), &bytes.Buffer{})
+	}()
+	assertOperationBlocked(t, cleanupCalled)
+
+	current, err := session.Get("recoverlocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.ExpiresAt = ""
+	current.ConnectionState = session.ConnectionStateStopped
+	if err := session.Update(*current); err != nil {
+		t.Fatal(err)
+	}
+	releaseLock()
+	if err := <-done; err != nil {
+		t.Fatalf("recoverStaleSessions returned error: %v", err)
+	}
+	select {
+	case <-cleanupCalled:
+		t.Fatal("recovery cleaned a tunnel that became ineligible while waiting for its lock")
+	default:
 	}
 }

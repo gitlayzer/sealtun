@@ -154,6 +154,27 @@ func TestEnsureMeshImportCreatesClusterIPServiceToGateway(t *testing.T) {
 	}
 }
 
+func TestReconcileMeshImportsRemovesOnlyStaleManagedImports(t *testing.T) {
+	clientset := fake.NewSimpleClientset(
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "mesh-keep", Namespace: "ns-test", Labels: managedLabels(meshOwnerName)}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "mesh-stale", Namespace: "ns-test", Labels: managedLabels(meshOwnerName)}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "mesh-unmanaged", Namespace: "ns-test"}},
+	)
+	client := &Client{clientset: clientset, namespace: "ns-test"}
+
+	if err := client.ReconcileMeshImports(context.Background(), []string{"keep"}); err != nil {
+		t.Fatalf("ReconcileMeshImports: %v", err)
+	}
+	for _, name := range []string{"mesh-keep", "mesh-unmanaged"} {
+		if _, err := clientset.CoreV1().Services("ns-test").Get(context.Background(), name, metav1.GetOptions{}); err != nil {
+			t.Fatalf("service %s should remain: %v", name, err)
+		}
+	}
+	if _, err := clientset.CoreV1().Services("ns-test").Get(context.Background(), "mesh-stale", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("stale managed import should be deleted, got %v", err)
+	}
+}
+
 func TestCleanupMeshRemovesGatewayResources(t *testing.T) {
 	ctx := context.Background()
 	clientset := fake.NewSimpleClientset()

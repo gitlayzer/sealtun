@@ -200,3 +200,71 @@ func TestReconcileDaemonWorkersWaitsForCanceledWorkerBeforeReplacement(t *testin
 		t.Fatalf("daemon workers overlapped: max active = %d", maxActive.Load())
 	}
 }
+
+func TestCleanupExpiredDaemonSessionRechecksAfterOperationLock(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tunnelID := "daemonexpired"
+	expired := session.TunnelSession{
+		TunnelID:        tunnelID,
+		Mode:            "daemon",
+		ConnectionState: session.ConnectionStateConnected,
+		ExpiresAt:       time.Now().Add(-time.Minute).Format(time.RFC3339),
+	}
+	if err := session.Save(expired); err != nil {
+		t.Fatalf("save expired session: %v", err)
+	}
+
+	cleanupCalled := make(chan struct{}, 1)
+	previousCleanup := cleanupSessionResources
+	cleanupSessionResources = func(context.Context, session.TunnelSession) error {
+		cleanupCalled <- struct{}{}
+		return nil
+	}
+	t.Cleanup(func() { cleanupSessionResources = previousCleanup })
+
+	releaseLock := holdTunnelOperationLock(t, tunnelID)
+	t.Cleanup(releaseLock)
+	type result struct {
+		latest  *session.TunnelSession
+		removed bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		latest, removed, err := cleanupExpiredDaemonSession(context.Background(), tunnelID)
+		done <- result{latest: latest, removed: removed, err: err}
+	}()
+
+	select {
+	case <-cleanupCalled:
+		t.Fatal("expired cleanup ran before acquiring the tunnel operation lock")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	expired.ExpiresAt = ""
+	if err := session.Update(expired); err != nil {
+		t.Fatalf("extend tunnel lifetime: %v", err)
+	}
+	releaseLock()
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("cleanup expired daemon session: %v", got.err)
+		}
+		if got.removed {
+			t.Fatal("renewed tunnel was removed")
+		}
+		if got.latest == nil || got.latest.ExpiresAt != "" {
+			t.Fatalf("latest session = %#v, want renewed session", got.latest)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expired cleanup did not finish after releasing the lock")
+	}
+
+	select {
+	case <-cleanupCalled:
+		t.Fatal("renewed tunnel resources were cleaned up")
+	default:
+	}
+}

@@ -47,6 +47,7 @@ type Server struct {
 	auditMu                    sync.Mutex
 	auditEvents                []accesspolicy.AuditEvent
 	auditStart                 int
+	streamOpenSlots            chan struct{}
 
 	mu            sync.RWMutex
 	activeSession *yamux.Session
@@ -91,15 +92,16 @@ func NewServerWithOptions(secret string, port int, protocol string, localPort st
 		targetHost = parsed.Host
 	}
 	s := &Server{
-		secret:       secret,
-		port:         port,
-		protocol:     protocol,
-		localPort:    localPort,
-		targetURL:    targetURL,
-		targetHost:   targetHost,
-		basicAuth:    opts.BasicAuth,
-		accessPolicy: opts.AccessPolicy,
-		rateLimiter:  rateLimiter,
+		secret:          secret,
+		port:            port,
+		protocol:        protocol,
+		localPort:       localPort,
+		targetURL:       targetURL,
+		targetHost:      targetHost,
+		basicAuth:       opts.BasicAuth,
+		accessPolicy:    opts.AccessPolicy,
+		rateLimiter:     rateLimiter,
+		streamOpenSlots: make(chan struct{}, maxConcurrentStreamOpens),
 		upgrader: websocket.Upgrader{
 			// The tunnel control/TCP WebSocket endpoints are only ever dialed by
 			// the non-browser Sealtun CLI client, which never sets an Origin
@@ -149,6 +151,9 @@ func (s *Server) reverseProxyTransport() http.RoundTripper {
 }
 
 func (s *Server) proxyDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	session := s.activeSession
 	s.mu.RUnlock()
@@ -157,7 +162,35 @@ func (s *Server) proxyDialContext(ctx context.Context, network, addr string) (ne
 		return nil, fmt.Errorf("local client is not connected")
 	}
 
-	return session.OpenStream()
+	select {
+	case s.streamOpenSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	type openResult struct {
+		conn net.Conn
+		err  error
+	}
+	result := make(chan openResult)
+	go func() {
+		defer func() { <-s.streamOpenSlots }()
+		stream, err := session.OpenStream()
+		select {
+		case result <- openResult{conn: stream, err: err}:
+		case <-ctx.Done():
+			if stream != nil {
+				_ = stream.Close()
+			}
+		}
+	}()
+
+	select {
+	case opened := <-result:
+		return opened.conn, opened.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +404,11 @@ func (k publicAuthKind) auditReason() string {
 	}
 }
 
-const maxAuditEvents = 1000
+const (
+	maxAuditEvents           = 1000
+	maxAuditPathBytes        = 2048
+	maxConcurrentStreamOpens = 128
+)
 
 func (s *Server) recordRequestAudit(r *http.Request, decision, reason string, status int, clientIP net.IP) {
 	if !accesspolicy.AuditEnabled(s.accessPolicy) {
@@ -391,6 +428,9 @@ func (s *Server) recordRequestAudit(r *http.Request, decision, reason string, st
 			event.Path = r.URL.EscapedPath()
 			if event.Path == "" {
 				event.Path = "/"
+			}
+			if len(event.Path) > maxAuditPathBytes {
+				event.Path = event.Path[:maxAuditPathBytes]
 			}
 		}
 	}

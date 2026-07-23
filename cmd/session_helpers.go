@@ -331,31 +331,47 @@ func sessionExpired(sess session.TunnelSession, now time.Time) bool {
 	return !now.Before(expiresAt)
 }
 
-func ensureSessionPublicPort(ctx context.Context, sess *session.TunnelSession) {
-	if sess == nil || (sess.Protocol != "ssh" && sess.Protocol != "tcp") || sess.PublicPort != 0 {
-		return
+func refreshSessionFromRemote(ctx context.Context, sess *session.TunnelSession) error {
+	if sess == nil || sess.TunnelID == "" || sess.Namespace == "" {
+		return nil
 	}
-	client, err := k8sClientForSession(*sess)
-	if err != nil {
-		return
-	}
-	port, err := client.WithNamespace(sess.Namespace).TunnelPublicPort(ctx, sess.TunnelID)
-	if err != nil || port == 0 {
-		return
-	}
-	sess.PublicPort = port
-	_ = session.Update(*sess)
+	tunnelID := sess.TunnelID
+	return withTunnelOperationLockContext(ctx, tunnelID, func() error {
+		current, err := findSession(tunnelID)
+		if err != nil {
+			return err
+		}
+		if err := refreshSessionFromRemoteLocked(ctx, current); err != nil {
+			return err
+		}
+		*sess = *current
+		return nil
+	})
 }
 
-func refreshSessionFromRemote(ctx context.Context, sess *session.TunnelSession) {
+// refreshSessionFromRemoteLocked requires the tunnel operation lock.
+func refreshSessionFromRemoteLocked(ctx context.Context, sess *session.TunnelSession) error {
 	if sess == nil || sess.TunnelID == "" || sess.Namespace == "" {
-		return
+		return nil
 	}
 	state, err := collectSessionRemoteState(ctx, *sess)
-	if err != nil || state == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("refresh tunnel %s from remote state: %w", sess.TunnelID, err)
 	}
+	if state == nil {
+		return nil
+	}
+	updated, err := session.UpdateAtomic(sess.TunnelID, func(current *session.TunnelSession) (bool, error) {
+		return mergeSessionRemoteState(current, state), nil
+	})
+	if err != nil {
+		return fmt.Errorf("persist refreshed tunnel %s: %w", sess.TunnelID, err)
+	}
+	*sess = *updated
+	return nil
+}
 
+func mergeSessionRemoteState(sess *session.TunnelSession, state *k8s.TunnelRemoteState) bool {
 	changed := false
 	if state.SealosHost != "" && state.SealosHost != sess.SealosHost {
 		sess.SealosHost = state.SealosHost
@@ -365,7 +381,8 @@ func refreshSessionFromRemote(ctx context.Context, sess *session.TunnelSession) 
 		sess.CustomDomain = state.CustomDomain
 		changed = true
 	}
-	if state.PublicPort != 0 && state.PublicPort != sess.PublicPort {
+	publicPortAuthoritative := state.PublicPort != 0 || (state.DeploymentOK && state.Protocol != "")
+	if publicPortAuthoritative && state.PublicPort != sess.PublicPort {
 		sess.PublicPort = state.PublicPort
 		changed = true
 	}
@@ -409,9 +426,7 @@ func refreshSessionFromRemote(ctx context.Context, sess *session.TunnelSession) 
 		sess.Host = wantHost
 		changed = true
 	}
-	if changed {
-		_ = session.Update(*sess)
-	}
+	return changed
 }
 
 func findSessionRefreshed(ctx context.Context, tunnelID string) (*session.TunnelSession, error) {
@@ -419,7 +434,19 @@ func findSessionRefreshed(ctx context.Context, tunnelID string) (*session.Tunnel
 	if err != nil {
 		return nil, err
 	}
-	refreshSessionFromRemote(ctx, sess)
+	_ = refreshSessionFromRemote(ctx, sess)
+	return sess, nil
+}
+
+// findSessionSyncedLocked requires the tunnel operation lock.
+func findSessionSyncedLocked(ctx context.Context, tunnelID string) (*session.TunnelSession, error) {
+	sess, err := findSession(tunnelID)
+	if err != nil {
+		return nil, err
+	}
+	if err := refreshSessionFromRemoteLocked(ctx, sess); err != nil {
+		return nil, err
+	}
 	return sess, nil
 }
 

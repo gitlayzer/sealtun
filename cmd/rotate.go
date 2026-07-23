@@ -58,7 +58,7 @@ func init() {
 func rotateTunnelServerSecret(ctx context.Context, tunnelID string) (*rotateServerSecretPayload, error) {
 	var payload *rotateServerSecretPayload
 	err := withTunnelOperationLock(tunnelID, func() error {
-		sess, err := findSessionRefreshed(ctx, tunnelID)
+		sess, err := findSessionSyncedLocked(ctx, tunnelID)
 		if err != nil {
 			return err
 		}

@@ -331,6 +331,137 @@ func TestCollectListItemsRefreshesRemoteHTTPSState(t *testing.T) {
 	}
 }
 
+func TestRefreshSessionFromRemoteClearsRemovedPublicPort(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	originalCollector := collectSessionRemoteState
+	collectSessionRemoteState = func(ctx context.Context, sess session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		return &k8s.TunnelRemoteState{
+			Protocol:     "tcp",
+			LocalPort:    "5432",
+			DeploymentOK: true,
+			PublicPort:   0,
+		}, nil
+	}
+	t.Cleanup(func() { collectSessionRemoteState = originalCollector })
+
+	sess := session.TunnelSession{
+		TunnelID:   "removed-port",
+		Namespace:  "ns-demo",
+		Protocol:   "tcp",
+		LocalPort:  "5432",
+		PublicPort: 35432,
+	}
+	if err := session.Save(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := refreshSessionFromRemoteLocked(context.Background(), &sess); err != nil {
+		t.Fatalf("refreshSessionFromRemoteLocked returned error: %v", err)
+	}
+	if sess.PublicPort != 0 {
+		t.Fatalf("stale public port was retained after remote removal: %d", sess.PublicPort)
+	}
+}
+
+func TestFindSessionSyncedPropagatesRemoteRefreshFailure(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:  "sync-failure",
+		Region:    "https://gzg.sealos.run",
+		Namespace: "ns-demo",
+		Protocol:  "https",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := errors.New("remote state unavailable")
+	originalCollector := collectSessionRemoteState
+	collectSessionRemoteState = func(context.Context, session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		return nil, want
+	}
+	t.Cleanup(func() { collectSessionRemoteState = originalCollector })
+
+	_, err := findSessionSyncedLocked(context.Background(), "sync-failure")
+	if !errors.Is(err, want) {
+		t.Fatalf("sync error = %v, want %v", err, want)
+	}
+}
+
+func TestReadRefreshRereadsSessionAfterTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "refreshlocked",
+		Region:          "https://gzg.sealos.run",
+		Namespace:       "ns-demo",
+		Protocol:        "https",
+		ConnectionState: session.ConnectionStateConnected,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := session.Get("refreshlocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "refreshlocked")
+	defer releaseLock()
+	remoteCalled := make(chan struct{}, 1)
+	var collectorErr error
+	previousCollect := collectSessionRemoteState
+	collectSessionRemoteState = func(context.Context, session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		remoteCalled <- struct{}{}
+		current, err := session.Get("refreshlocked")
+		if err != nil {
+			collectorErr = err
+			return nil, err
+		}
+		current.LastError = "daemon update during remote query"
+		collectorErr = session.Update(*current)
+		if collectorErr != nil {
+			return nil, collectorErr
+		}
+		return &k8s.TunnelRemoteState{DeploymentOK: true, Protocol: "https"}, nil
+	}
+	t.Cleanup(func() { collectSessionRemoteState = previousCollect })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- refreshSessionFromRemote(context.Background(), stale)
+	}()
+	assertOperationBlocked(t, remoteCalled)
+
+	current, err := session.Get("refreshlocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.ConnectionState = session.ConnectionStateStopped
+	if err := session.Update(*current); err != nil {
+		t.Fatal(err)
+	}
+	releaseLock()
+	if err := <-done; err != nil {
+		t.Fatalf("refreshSessionFromRemote returned error: %v", err)
+	}
+	if collectorErr != nil {
+		t.Fatalf("collector update failed: %v", collectorErr)
+	}
+	if stale.ConnectionState != session.ConnectionStateStopped {
+		t.Fatalf("refresh overwrote newer local state: %s", stale.ConnectionState)
+	}
+	if stale.LastError != "daemon update during remote query" {
+		t.Fatalf("refresh overwrote daemon state: %q", stale.LastError)
+	}
+	persisted, err := session.Get("refreshlocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.ConnectionState != session.ConnectionStateStopped {
+		t.Fatalf("persisted state was overwritten by stale refresh: %s", persisted.ConnectionState)
+	}
+	if persisted.LastError != "daemon update during remote query" {
+		t.Fatalf("persisted daemon state was overwritten: %q", persisted.LastError)
+	}
+}
+
 func TestCollectListItemsPropagatesContextCancellation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

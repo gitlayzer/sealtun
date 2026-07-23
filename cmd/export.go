@@ -88,7 +88,7 @@ func runExportWithContext(ctx context.Context, args []string, exportAllEnabled b
 		if err != nil {
 			return nil, nil, fmt.Errorf("load tunnel sessions: %w", err)
 		}
-		if err := refreshSessionsFromRemote(ctx, sessions, false); err != nil {
+		if err := refreshSessionsFromRemote(ctx, sessions); err != nil {
 			return nil, nil, err
 		}
 	default:

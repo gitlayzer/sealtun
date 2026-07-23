@@ -126,34 +126,40 @@ func (tuiCLIDataSource) Events(ctx context.Context, tunnelID string) (*eventsPay
 }
 
 func (tuiCLIDataSource) Start(ctx context.Context, tunnelID string) error {
-	sess, err := findSession(tunnelID)
-	if err != nil {
-		return err
-	}
-	return startTunnelSession(ctx, sess)
+	return withTunnelOperationLock(tunnelID, func() error {
+		sess, err := findSession(tunnelID)
+		if err != nil {
+			return err
+		}
+		return startTunnelSession(ctx, sess)
+	})
 }
 
 func (tuiCLIDataSource) Stop(ctx context.Context, tunnelID string) error {
-	sess, err := findSession(tunnelID)
-	if err != nil {
+	return withTunnelOperationLock(tunnelID, func() error {
+		sess, err := findSession(tunnelID)
+		if err != nil {
+			return err
+		}
+		_, err = stopTunnelSession(ctx, sess)
 		return err
-	}
-	_, err = stopTunnelSession(ctx, sess)
-	return err
+	})
 }
 
 func (tuiCLIDataSource) Cleanup(ctx context.Context, tunnelID string) error {
-	sess, err := findSession(tunnelID)
-	if err != nil {
-		return err
-	}
-	if !sessionCleanupEligible(*sess, time.Minute) {
-		return fmt.Errorf("tunnel %s is not stopped, expired, stale, or error", sess.TunnelID)
-	}
-	if err := cleanupSessionResources(ctx, *sess); err != nil {
-		return err
-	}
-	return session.Delete(sess.TunnelID)
+	return withTunnelOperationLock(tunnelID, func() error {
+		sess, err := findSession(tunnelID)
+		if err != nil {
+			return err
+		}
+		if !sessionCleanupEligible(*sess, time.Minute) {
+			return fmt.Errorf("tunnel %s is not stopped, expired, stale, or error", sess.TunnelID)
+		}
+		if err := cleanupSessionResources(ctx, *sess); err != nil {
+			return err
+		}
+		return session.Delete(sess.TunnelID)
+	})
 }
 
 func (tuiCLIDataSource) Create(ctx context.Context, args []string) error {

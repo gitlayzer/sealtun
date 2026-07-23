@@ -21,6 +21,8 @@ var startCmd = &cobra.Command{
 	},
 }
 
+var startSessionUpdate = session.Update
+
 func init() {
 	rootCmd.AddCommand(startCmd)
 }
@@ -40,7 +42,7 @@ func runStartTunnel(cmd *cobra.Command, tunnelID string) error {
 	if err := startTunnelSession(cmd.Context(), sess); err != nil {
 		return err
 	}
-	ensureSessionPublicPort(cmd.Context(), sess)
+	_ = refreshSessionFromRemoteLocked(cmd.Context(), sess)
 
 	if sess.PublicPort != 0 && (sess.Protocol == "ssh" || sess.Protocol == "tcp") {
 		endpoint := endpointDisplay(sess.Protocol, sess.Host, sess.SealosHost, sess.PublicPort)
@@ -74,8 +76,8 @@ func startTunnelSession(ctx context.Context, sess *session.TunnelSession) error 
 	sess.PID = 0
 	sess.ConnectionState = session.ConnectionStatePending
 	sess.LastError = ""
-	if err := session.Update(*sess); err != nil {
-		return fmt.Errorf("update local session %s: %w", sess.TunnelID, err)
+	if err := startSessionUpdate(*sess); err != nil {
+		return rollbackStartedTunnelSession(*sess, fmt.Errorf("update local session %s: %w", sess.TunnelID, err))
 	}
 
 	if err := ensureDaemonRunningFn(); err != nil {

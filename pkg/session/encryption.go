@@ -37,11 +37,7 @@ func encryptSessionData(plaintext []byte) ([]byte, error) {
 }
 
 func encryptSessionDataWithKey(plaintext, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := newSessionAEAD(key)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +71,25 @@ func decryptSessionDataWithKey(data, key []byte) ([]byte, error) {
 	if !isEncryptedSessionData(data) {
 		return data, nil
 	}
+	gcm, err := newSessionAEAD(key)
+	if err != nil {
+		return nil, err
+	}
+	return decryptSessionDataWithAEAD(data, gcm)
+}
+
+func newSessionAEAD(key []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func decryptSessionDataWithAEAD(data []byte, gcm cipher.AEAD) ([]byte, error) {
+	if !isEncryptedSessionData(data) {
+		return data, nil
+	}
 	payload := data[len(encryptedSessionMagic):]
 	sealed := make([]byte, base64.StdEncoding.DecodedLen(len(payload)))
 	n, err := base64.StdEncoding.Decode(sealed, payload)
@@ -83,14 +98,6 @@ func decryptSessionDataWithKey(data, key []byte) ([]byte, error) {
 	}
 	sealed = sealed[:n]
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
 	if len(sealed) < gcm.NonceSize() {
 		return nil, fmt.Errorf("encrypted session is truncated")
 	}

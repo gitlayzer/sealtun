@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -169,7 +170,7 @@ func (c *Client) EnsureTunnel(ctx context.Context, tunnelID string, secret strin
 }
 
 // EnsureTunnelWithOptions deploys the server module in kubernetes.
-func (c *Client) EnsureTunnelWithOptions(ctx context.Context, tunnelID string, secret string, protocol string, localPort string, opts TunnelOptions) (TunnelHosts, error) {
+func (c *Client) EnsureTunnelWithOptions(ctx context.Context, tunnelID string, secret string, protocol string, localPort string, opts TunnelOptions) (_ TunnelHosts, resultErr error) {
 	if err := validateTunnelID(tunnelID); err != nil {
 		return TunnelHosts{}, err
 	}
@@ -215,6 +216,7 @@ func (c *Client) EnsureTunnelWithOptions(ctx context.Context, tunnelID string, s
 	created := []createdResource{}
 	rollback := true
 	customSnapshotsCaptured := false
+	var authSecretRollback *authSecretRollback
 	var previousIssuer *unstructured.Unstructured
 	var previousCertificate *unstructured.Unstructured
 	var empty TunnelHosts
@@ -222,15 +224,28 @@ func (c *Client) EnsureTunnelWithOptions(ctx context.Context, tunnelID string, s
 		if rollback {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_ = c.cleanupCreated(cleanupCtx, created)
+			var rollbackErrs []error
+			if cleanupErr := c.cleanupCreated(cleanupCtx, created); cleanupErr != nil {
+				rollbackErrs = append(rollbackErrs, cleanupErr)
+			}
+			if restoreErr := c.restoreAuthSecret(cleanupCtx, name, authSecretRollback); restoreErr != nil {
+				rollbackErrs = append(rollbackErrs, restoreErr)
+			}
 			if customSnapshotsCaptured {
-				_ = c.restoreDynamicResource(cleanupCtx, issuerGVR, name, previousIssuer)
-				_ = c.restoreDynamicResource(cleanupCtx, certificateGVR, name, previousCertificate)
+				if restoreErr := c.restoreDynamicResource(cleanupCtx, issuerGVR, name, previousIssuer); restoreErr != nil {
+					rollbackErrs = append(rollbackErrs, restoreErr)
+				}
+				if restoreErr := c.restoreDynamicResource(cleanupCtx, certificateGVR, name, previousCertificate); restoreErr != nil {
+					rollbackErrs = append(rollbackErrs, restoreErr)
+				}
+			}
+			if len(rollbackErrs) > 0 {
+				resultErr = errors.Join(resultErr, fmt.Errorf("rollback tunnel resources: %w", errors.Join(rollbackErrs...)))
 			}
 		}
 	}()
 
-	authSecretCreated, digestSalt, err := c.ensureAuthSecret(ctx, name, secret, opts.BasicAuth, opts.AccessPolicy)
+	authSecretCreated, authSecretRollback, digestSalt, err := c.ensureAuthSecret(ctx, name, secret, opts.BasicAuth, opts.AccessPolicy)
 	if err != nil {
 		return empty, fmt.Errorf("failed to ensure tunnel auth secret: %w", err)
 	}
@@ -386,7 +401,12 @@ func serverConfigDigest(salt []byte, secret, targetURL string, basicAuth *BasicA
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basicAuth *BasicAuthOptions, policy *accesspolicy.Policy) (bool, []byte, error) {
+type authSecretRollback struct {
+	previous *corev1.Secret
+	applied  *corev1.Secret
+}
+
+func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basicAuth *BasicAuthOptions, policy *accesspolicy.Policy) (bool, *authSecretRollback, []byte, error) {
 	secretClient := c.clientset.CoreV1().Secrets(c.namespace)
 	existing, getErr := secretClient.Get(ctx, authSecretName(name), metav1.GetOptions{})
 
@@ -400,7 +420,7 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 	if len(salt) == 0 {
 		salt = make([]byte, 32)
 		if _, err := rand.Read(salt); err != nil {
-			return false, nil, fmt.Errorf("generate config digest salt: %w", err)
+			return false, nil, nil, fmt.Errorf("generate config digest salt: %w", err)
 		}
 	}
 
@@ -415,7 +435,7 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 	if !accesspolicy.Empty(policy) {
 		policyJSON, err := json.Marshal(policy)
 		if err != nil {
-			return false, nil, fmt.Errorf("marshal access policy: %w", err)
+			return false, nil, nil, fmt.Errorf("marshal access policy: %w", err)
 		}
 		data[accessPolicyKey] = policyJSON
 	}
@@ -431,14 +451,15 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 
 	if apierrors.IsNotFound(getErr) {
 		_, err := secretClient.Create(ctx, authSecret, metav1.CreateOptions{})
-		return err == nil, salt, err
+		return err == nil, nil, salt, err
 	} else if getErr == nil {
 		if err := rejectUnmanagedExisting("secret", authSecret.Name, name, existing.Labels); err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 		if authSecretUpToDate(authSecret, existing) {
-			return false, salt, nil
+			return false, nil, salt, nil
 		}
+		var rollback *authSecretRollback
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			current, err := secretClient.Get(ctx, authSecret.Name, metav1.GetOptions{})
 			if err != nil {
@@ -452,12 +473,38 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 			}
 			next := authSecret.DeepCopy()
 			next.ResourceVersion = current.ResourceVersion
-			_, err = secretClient.Update(ctx, next, metav1.UpdateOptions{})
+			updated, err := secretClient.Update(ctx, next, metav1.UpdateOptions{})
+			if err == nil {
+				rollback = &authSecretRollback{previous: current.DeepCopy(), applied: updated.DeepCopy()}
+			}
 			return err
 		})
-		return false, salt, err
+		return false, rollback, salt, err
 	}
-	return false, nil, getErr
+	return false, nil, nil, getErr
+}
+
+func (c *Client) restoreAuthSecret(ctx context.Context, owner string, rollback *authSecretRollback) error {
+	if rollback == nil || rollback.previous == nil || rollback.applied == nil {
+		return nil
+	}
+	client := c.clientset.CoreV1().Secrets(c.namespace)
+	current, err := client.Get(ctx, rollback.previous.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get auth secret for rollback: %w", err)
+	}
+	if err := rejectUnmanagedExisting("secret", current.Name, owner, current.Labels); err != nil {
+		return err
+	}
+	if !authSecretUpToDate(rollback.applied, current) {
+		return fmt.Errorf("auth secret %s changed after Sealtun updated it; refusing to overwrite the newer value", current.Name)
+	}
+	restore := rollback.previous.DeepCopy()
+	restore.ResourceVersion = current.ResourceVersion
+	if _, err := client.Update(ctx, restore, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("restore auth secret %s: %w", restore.Name, err)
+	}
+	return nil
 }
 
 func authSecretUpToDate(desired, current *corev1.Secret) bool {
@@ -779,14 +826,15 @@ func (c *Client) UpdateTunnelResources(ctx context.Context, tunnelID string, res
 		if err := rejectUnmanagedExisting("deployment", name, name, current.Labels); err != nil {
 			return err
 		}
-		if len(current.Spec.Template.Spec.Containers) == 0 {
-			return fmt.Errorf("deployment %s has no containers", name)
+		containerIndex := tunnelContainerIndex(current.Spec.Template.Spec.Containers, name)
+		if containerIndex < 0 {
+			return fmt.Errorf("deployment %s has no Sealtun container named %s", name, name)
 		}
-		if apiequality.Semantic.DeepEqual(current.Spec.Template.Spec.Containers[0].Resources, requirements) {
+		if apiequality.Semantic.DeepEqual(current.Spec.Template.Spec.Containers[containerIndex].Resources, requirements) {
 			return nil
 		}
 		next := current.DeepCopy()
-		next.Spec.Template.Spec.Containers[0].Resources = requirements
+		next.Spec.Template.Spec.Containers[containerIndex].Resources = requirements
 		_, err = deployClient.Update(ctx, next, metav1.UpdateOptions{})
 		return err
 	}); err != nil {
@@ -1631,6 +1679,9 @@ func (c *Client) deleteACMEKeySecret(ctx context.Context, name string, issuer *u
 	if err != nil || !ok || keyName == "" {
 		return err
 	}
+	if keyName != "letsencrypt-prod-"+name {
+		return nil
+	}
 	secretClient := c.clientset.CoreV1().Secrets(c.namespace)
 	secret, err := secretClient.Get(ctx, keyName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -1952,7 +2003,7 @@ func (c *Client) TunnelRemoteState(ctx context.Context, tunnelID string) (*Tunne
 		probeIngress = false
 	}
 	if probeServices {
-		if port, err := c.tunnelPublicPortFromServices(ctx, name); err != nil {
+		if port, err := c.tunnelPublicPortFromServices(ctx, name, state.Protocol); err != nil {
 			return nil, err
 		} else {
 			state.PublicPort = port
@@ -1963,6 +2014,9 @@ func (c *Client) TunnelRemoteState(ctx context.Context, tunnelID string) (*Tunne
 		ingress, err := c.clientset.NetworkingV1().Ingresses(c.namespace).Get(ctx, name, metav1.GetOptions{})
 		switch {
 		case err == nil:
+			if err := rejectUnmanagedExisting("ingress", name, name, ingress.Labels); err != nil {
+				return nil, err
+			}
 			diag := ingressDiagnostics(ingress)
 			state.SealosHost = inferSealosHost(diag.Hosts)
 			state.CustomDomain = inferCustomDomain(diag.Hosts, state.SealosHost)
@@ -1986,8 +2040,12 @@ func (c *Client) TunnelRemoteState(ctx context.Context, tunnelID string) (*Tunne
 	return state, nil
 }
 
-func (c *Client) tunnelPublicPortFromServices(ctx context.Context, name string) (int32, error) {
+func (c *Client) tunnelPublicPortFromServices(ctx context.Context, name, protocol string) (int32, error) {
 	serviceNames := []string{name, tcpServiceName(name)}
+	switch tunnelprotocol.Normalize(protocol) {
+	case tunnelprotocol.SSH, tunnelprotocol.TCP:
+		serviceNames = []string{tcpServiceName(name)}
+	}
 	var port int32
 	for _, serviceName := range serviceNames {
 		service, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, serviceName, metav1.GetOptions{})
@@ -1996,6 +2054,9 @@ func (c *Client) tunnelPublicPortFromServices(ctx context.Context, name string) 
 		}
 		if err != nil {
 			return 0, fmt.Errorf("get service %s: %w", serviceName, err)
+		}
+		if err := rejectUnmanagedExisting("service", serviceName, name, service.Labels); err != nil {
+			return 0, err
 		}
 		for _, item := range service.Spec.Ports {
 			if item.NodePort > 0 {
@@ -2017,6 +2078,9 @@ func (c *Client) fillTunnelRemoteStateFromAuthSecret(ctx context.Context, name s
 	}
 	if err != nil {
 		return fmt.Errorf("get auth secret %s: %w", authSecretName(name), err)
+	}
+	if err := rejectUnmanagedExisting("secret", authSecretName(name), name, secret.Labels); err != nil {
+		return err
 	}
 	state.AuthSecretOK = true
 	state.Secret = strings.TrimSpace(string(secret.Data[tunnelAuthSecretKey]))
@@ -2046,16 +2110,29 @@ func (c *Client) fillTunnelRemoteStateFromDeployment(ctx context.Context, name s
 	if err != nil {
 		return fmt.Errorf("get deployment %s: %w", name, err)
 	}
+	if err := rejectUnmanagedExisting("deployment", name, name, deployment.Labels); err != nil {
+		return err
+	}
 	state.DeploymentOK = true
-	if len(deployment.Spec.Template.Spec.Containers) == 0 {
+	containerIndex := tunnelContainerIndex(deployment.Spec.Template.Spec.Containers, name)
+	if containerIndex < 0 {
 		return nil
 	}
-	container := deployment.Spec.Template.Spec.Containers[0]
+	container := deployment.Spec.Template.Spec.Containers[containerIndex]
 	state.Protocol = deploymentArgValue(container.Args, "--protocol")
 	state.LocalPort = deploymentArgValue(container.Args, "--local-port")
 	state.TargetURL = deploymentArgValue(container.Args, "--target-url")
 	state.Resources = resourceConfigFromRequirements(container.Resources)
 	return nil
+}
+
+func tunnelContainerIndex(containers []corev1.Container, name string) int {
+	for i := range containers {
+		if containers[i].Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func deploymentArgValue(args []string, flag string) string {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -441,6 +442,39 @@ func TestDoctorFixDryRunDoesNotMutateStoppedSession(t *testing.T) {
 	}
 	if got.ConnectionState != session.ConnectionStateStopped {
 		t.Fatalf("dry-run mutated session state: %s", got.ConnectionState)
+	}
+}
+
+func TestDoctorFixStartWaitsForTunnelOperationLock(t *testing.T) {
+	t.Setenv("SEALTUN_HOME", t.TempDir())
+	if err := session.Save(session.TunnelSession{
+		TunnelID:        "doctorlocked",
+		Secret:          "secret",
+		Mode:            "daemon",
+		ConnectionState: session.ConnectionStateStopped,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	releaseLock := holdTunnelOperationLock(t, "doctorlocked")
+	defer releaseLock()
+	called := make(chan struct{}, 1)
+	want := errors.New("doctor start after lock")
+	previousStart := doctorFixStartTunnel
+	doctorFixStartTunnel = func(context.Context, *session.TunnelSession) error {
+		called <- struct{}{}
+		return want
+	}
+	t.Cleanup(func() { doctorFixStartTunnel = previousStart })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- executeDoctorFixAction(context.Background(), doctorFixAction{Action: "start", TunnelID: "doctorlocked"})
+	}()
+	assertOperationBlocked(t, called)
+	releaseLock()
+	if err := <-done; !errors.Is(err, want) {
+		t.Fatalf("doctor fix error = %v, want %v", err, want)
 	}
 }
 

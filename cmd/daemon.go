@@ -62,18 +62,22 @@ var daemonCmd = &cobra.Command{
 					continue
 				}
 				if sessionExpired(sess, time.Now()) {
-					fmt.Printf("[+] tunnel %s expired; cleaning up...\n", sess.TunnelID)
-					cleanupCtx, cancel := context.WithTimeout(ctx, tunnelCleanupTimeout)
-					err := cleanupSessionResources(cleanupCtx, sess)
-					cancel()
+					latest, removed, err := cleanupExpiredDaemonSession(ctx, sess.TunnelID)
 					if err != nil {
 						fmt.Printf("[!] expired tunnel %s cleanup failed: %v\n", sess.TunnelID, err)
 						continue
 					}
-					if err := session.Delete(sess.TunnelID); err != nil && !os.IsNotExist(err) {
-						fmt.Printf("[!] expired tunnel %s local cleanup failed: %v\n", sess.TunnelID, err)
+					if removed {
+						fmt.Printf("[+] expired tunnel %s cleaned up\n", sess.TunnelID)
+						continue
 					}
-					continue
+					if latest == nil {
+						continue
+					}
+					sess = *latest
+					if sess.Mode != "daemon" {
+						continue
+					}
 				}
 				if sess.ConnectionState == session.ConnectionStateStopped {
 					continue
@@ -106,6 +110,34 @@ var daemonCmd = &cobra.Command{
 			}
 		}
 	},
+}
+
+func cleanupExpiredDaemonSession(ctx context.Context, tunnelID string) (latest *session.TunnelSession, removed bool, err error) {
+	err = withTunnelOperationLockContext(ctx, tunnelID, func() error {
+		current, getErr := session.Get(tunnelID)
+		if os.IsNotExist(getErr) {
+			return nil
+		}
+		if getErr != nil {
+			return getErr
+		}
+		if current.Mode != "daemon" || !sessionExpired(*current, time.Now()) {
+			latest = current
+			return nil
+		}
+
+		cleanupCtx, cancel := context.WithTimeout(ctx, tunnelCleanupTimeout)
+		defer cancel()
+		if cleanupErr := cleanupSessionResources(cleanupCtx, *current); cleanupErr != nil {
+			return cleanupErr
+		}
+		if deleteErr := session.Delete(tunnelID); deleteErr != nil && !os.IsNotExist(deleteErr) {
+			return fmt.Errorf("delete local session: %w", deleteErr)
+		}
+		removed = true
+		return nil
+	})
+	return latest, removed, err
 }
 
 func reconcileDaemonWorkers(
