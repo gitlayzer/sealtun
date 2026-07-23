@@ -95,6 +95,66 @@ func TestNewClientRejectsSymlinkedKubeconfig(t *testing.T) {
 	}
 }
 
+func TestTunnelRemoteStateSkipsServicesForHTTPTunnel(t *testing.T) {
+	name := tunnelResourceName("abc123")
+	clientset := fake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Args: []string{"server", "--protocol", "https", "--local-port", "3000"},
+			}}}}},
+		},
+		&netv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec:       netv1.IngressSpec{Rules: []netv1.IngressRule{{Host: "sealtun-abc123-default.example.com"}}},
+		},
+	)
+	client := &Client{clientset: clientset, namespace: "default", domain: "example.com"}
+
+	state, err := client.TunnelRemoteState(context.Background(), "abc123")
+	if err != nil {
+		t.Fatalf("TunnelRemoteState returned error: %v", err)
+	}
+	if state.Protocol != "https" || state.SealosHost == "" {
+		t.Fatalf("unexpected HTTP remote state: %#v", state)
+	}
+	for _, action := range clientset.Actions() {
+		if action.GetResource().Resource == "services" {
+			t.Fatalf("HTTP remote state issued unnecessary service request: %s %s", action.GetVerb(), action.GetResource().Resource)
+		}
+	}
+}
+
+func TestTunnelRemoteStateSkipsIngressForTCPTunnel(t *testing.T) {
+	name := tunnelResourceName("abc123")
+	clientset := fake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Args: []string{"server", "--protocol", "tcp", "--local-port", "5432"},
+			}}}}},
+		},
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: tcpServiceName(name), Namespace: "default"},
+			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{NodePort: 35432}}},
+		},
+	)
+	client := &Client{clientset: clientset, namespace: "default", domain: "example.com"}
+
+	state, err := client.TunnelRemoteState(context.Background(), "abc123")
+	if err != nil {
+		t.Fatalf("TunnelRemoteState returned error: %v", err)
+	}
+	if state.Protocol != "tcp" || state.PublicPort != 35432 {
+		t.Fatalf("unexpected TCP remote state: %#v", state)
+	}
+	for _, action := range clientset.Actions() {
+		if action.GetResource().Resource == "ingresses" {
+			t.Fatalf("TCP remote state issued unnecessary ingress request: %s %s", action.GetVerb(), action.GetResource().Resource)
+		}
+	}
+}
+
 func TestEnsureTunnelCleansPartialResourcesOnFailure(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	clientset.PrependReactor("create", "ingresses", func(action ktesting.Action) (bool, runtime.Object, error) {
@@ -130,6 +190,34 @@ func TestEnsureTunnelCleansPartialResourcesOnFailure(t *testing.T) {
 	}
 	if len(secrets.Items) != 0 {
 		t.Fatalf("expected partial auth secret to be cleaned up, got %d", len(secrets.Items))
+	}
+}
+
+func TestEnsureTunnelSkipsUpdatesWhenManagedResourcesAreUnchanged(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	client := &Client{
+		clientset: clientset,
+		namespace: "default",
+		domain:    "example.com",
+	}
+
+	for i := 0; i < 2; i++ {
+		if _, err := client.EnsureTunnel(context.Background(), "abc123", "secret", "https", "3000"); err != nil {
+			t.Fatalf("EnsureTunnel call %d returned error: %v", i+1, err)
+		}
+		if i == 0 {
+			clientset.ClearActions()
+		}
+	}
+
+	var updates []string
+	for _, action := range clientset.Actions() {
+		if action.GetVerb() == "update" {
+			updates = append(updates, action.GetResource().Resource)
+		}
+	}
+	if len(updates) != 0 {
+		t.Fatalf("unchanged tunnel reconciliation issued update calls: %v", updates)
 	}
 }
 
@@ -1562,6 +1650,29 @@ func TestResumeTunnelScalesManagedDeploymentToOne(t *testing.T) {
 	}
 }
 
+func TestResumeTunnelSkipsUpdateWhenAlreadyRunning(t *testing.T) {
+	name := "sealtun-abc123"
+	replicas := int32(1)
+	clientset := fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: managedLabels(name)},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+	})
+	client := &Client{
+		clientset:     clientset,
+		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		namespace:     "default",
+	}
+
+	if err := client.ResumeTunnel(context.Background(), "abc123"); err != nil {
+		t.Fatalf("ResumeTunnel returned error: %v", err)
+	}
+	for _, action := range clientset.Actions() {
+		if action.GetVerb() == "update" {
+			t.Fatalf("already-running tunnel issued update for %s", action.GetResource().Resource)
+		}
+	}
+}
+
 func TestUpdateTunnelResourcesPreservesReplicas(t *testing.T) {
 	name := "sealtun-abc123"
 	replicas := int32(0)
@@ -1604,6 +1715,39 @@ func TestUpdateTunnelResourcesPreservesReplicas(t *testing.T) {
 	}
 	if got := container.Resources.Limits[corev1.ResourceMemory]; got.String() != "256Mi" {
 		t.Fatalf("expected updated memory limit, got %s", got.String())
+	}
+}
+
+func TestUpdateTunnelResourcesSkipsUpdateWhenUnchanged(t *testing.T) {
+	name := "sealtun-abc123"
+	replicas := int32(1)
+	requirements, err := resourceRequirementsForConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientset := fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: managedLabels(name)},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:      name,
+				Resources: requirements,
+			}}}},
+		},
+	})
+	client := &Client{
+		clientset:     clientset,
+		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		namespace:     "default",
+	}
+
+	if err := client.UpdateTunnelResources(context.Background(), "abc123", nil); err != nil {
+		t.Fatalf("UpdateTunnelResources returned error: %v", err)
+	}
+	for _, action := range clientset.Actions() {
+		if action.GetVerb() == "update" {
+			t.Fatalf("unchanged resources issued update for %s", action.GetResource().Resource)
+		}
 	}
 }
 
@@ -1684,6 +1828,55 @@ func TestCleanupTunnelSkipsUnmanagedSameNameResources(t *testing.T) {
 	}
 	if _, err := client.dynamicClient.Resource(issuerGVR).Namespace("default").Get(context.Background(), name, metav1.GetOptions{}); err != nil {
 		t.Fatalf("unmanaged issuer should remain: %v", err)
+	}
+}
+
+func TestCleanupTunnelKeepsUnprovenACMEAccountSecret(t *testing.T) {
+	name := "sealtun-abc123"
+	keyName := "letsencrypt-prod-" + name
+	clientset := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name:      keyName,
+		Namespace: "default",
+	}})
+	client := &Client{
+		clientset:     clientset,
+		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		namespace:     "default",
+	}
+
+	if err := client.CleanupTunnel(context.Background(), "abc123"); err != nil {
+		t.Fatalf("CleanupTunnel returned error: %v", err)
+	}
+	if _, err := clientset.CoreV1().Secrets("default").Get(context.Background(), keyName, metav1.GetOptions{}); err != nil {
+		t.Fatalf("unproven ACME account secret should remain: %v", err)
+	}
+}
+
+func TestCleanupTunnelDeletesACMEAccountSecretOwnedByManagedIssuer(t *testing.T) {
+	name := "sealtun-abc123"
+	keyName := "letsencrypt-prod-" + name
+	clientset := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name:      keyName,
+		Namespace: "default",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "cert-manager.io/v1",
+			Kind:       "Issuer",
+			Name:       name,
+		}},
+	}})
+	issuer := (&Client{namespace: "default"}).customDomainIssuer(name)
+	issuer.SetNamespace("default")
+	client := &Client{
+		clientset:     clientset,
+		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), issuer),
+		namespace:     "default",
+	}
+
+	if err := client.CleanupTunnel(context.Background(), "abc123"); err != nil {
+		t.Fatalf("CleanupTunnel returned error: %v", err)
+	}
+	if _, err := clientset.CoreV1().Secrets("default").Get(context.Background(), keyName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("owned ACME account secret should be deleted, got %v", err)
 	}
 }
 

@@ -82,54 +82,7 @@ var daemonCmd = &cobra.Command{
 				desired[sess.TunnelID] = sess
 			}
 
-			mu.Lock()
-			for tunnelID, mt := range managed {
-				select {
-				case <-mt.done:
-					delete(managed, tunnelID)
-				default:
-				}
-			}
-
-			for tunnelID, managedTunnel := range managed {
-				desiredSession, ok := desired[tunnelID]
-				if !ok {
-					managedTunnel.cancel()
-					delete(managed, tunnelID)
-					continue
-				}
-				if managedTunnel.fingerprint != daemonTunnelFingerprint(desiredSession) {
-					managedTunnel.cancel()
-					delete(managed, tunnelID)
-				}
-			}
-
-			for tunnelID, sess := range desired {
-				if _, ok := managed[tunnelID]; ok {
-					continue
-				}
-
-				tunnelCtx, cancel := context.WithCancel(ctx)
-				mt := &managedTunnel{
-					cancel:      cancel,
-					done:        make(chan struct{}),
-					fingerprint: daemonTunnelFingerprint(sess),
-				}
-				managed[tunnelID] = mt
-
-				go func(sess session.TunnelSession, mt *managedTunnel) {
-					defer func() {
-						close(mt.done)
-						mu.Lock()
-						if managed[sess.TunnelID] == mt {
-							delete(managed, sess.TunnelID)
-						}
-						mu.Unlock()
-					}()
-					runDaemonTunnel(tunnelCtx, sess)
-				}(sess, mt)
-			}
-			mu.Unlock()
+			reconcileDaemonWorkers(ctx, &mu, managed, desired, runDaemonTunnel)
 
 			return nil
 		}
@@ -154,6 +107,60 @@ var daemonCmd = &cobra.Command{
 			}
 		}
 	},
+}
+
+func reconcileDaemonWorkers(
+	ctx context.Context,
+	mu *sync.Mutex,
+	managed map[string]*managedTunnel,
+	desired map[string]session.TunnelSession,
+	run func(context.Context, session.TunnelSession),
+) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	for tunnelID, mt := range managed {
+		select {
+		case <-mt.done:
+			delete(managed, tunnelID)
+		default:
+		}
+	}
+
+	for tunnelID, mt := range managed {
+		desiredSession, ok := desired[tunnelID]
+		if !ok || mt.fingerprint != daemonTunnelFingerprint(desiredSession) {
+			// Keep the worker registered until it exits. This prevents a replacement
+			// connection from racing the canceled worker's final session update.
+			mt.cancel()
+		}
+	}
+
+	for tunnelID, sess := range desired {
+		if _, ok := managed[tunnelID]; ok {
+			continue
+		}
+
+		tunnelCtx, cancel := context.WithCancel(ctx)
+		mt := &managedTunnel{
+			cancel:      cancel,
+			done:        make(chan struct{}),
+			fingerprint: daemonTunnelFingerprint(sess),
+		}
+		managed[tunnelID] = mt
+
+		go func(sess session.TunnelSession, mt *managedTunnel) {
+			defer func() {
+				close(mt.done)
+				mu.Lock()
+				if managed[sess.TunnelID] == mt {
+					delete(managed, sess.TunnelID)
+				}
+				mu.Unlock()
+			}()
+			run(tunnelCtx, sess)
+		}(sess, mt)
+	}
 }
 
 func init() {
@@ -214,6 +221,12 @@ func runDaemonHeartbeat(ctx context.Context) {
 }
 
 func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
+	reconnectTimer := time.NewTimer(time.Hour)
+	if !reconnectTimer.Stop() {
+		<-reconnectTimer.C
+	}
+	defer reconnectTimer.Stop()
+
 	for {
 		current, err := session.Get(sess.TunnelID)
 		if err != nil {
@@ -299,10 +312,11 @@ func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
 			}
 		}
 
+		reconnectTimer.Reset(2 * time.Second)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(2 * time.Second):
+		case <-reconnectTimer.C:
 		}
 	}
 }

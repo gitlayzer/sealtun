@@ -72,6 +72,8 @@ var domainStatusTimeout = 15 * time.Second
 var domainDoctorTimeout = 15 * time.Second
 var lookupCNAME = net.DefaultResolver.LookupCNAME
 
+var customDomainLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
 const domainStatusConcurrency = 4
 
 var domainCmd = &cobra.Command{
@@ -90,23 +92,7 @@ var domainSetCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		customDomain, err := validateCustomDomain(args[1])
-		if err != nil {
-			return err
-		}
-		if customDomain == "" {
-			return fmt.Errorf("custom domain is required")
-		}
-		payload, err := configureSessionCustomDomain(cmd.Context(), args[0], customDomain)
-		if payload != nil {
-			if printErr := printDomainPayload(cmd, payload); printErr != nil {
-				return printErr
-			}
-		}
-		if err != nil {
-			return err
-		}
-		return nil
+		return runDomainAdd(cmd, args, false, 0)
 	},
 }
 
@@ -123,7 +109,7 @@ var domainPlanCmd = &cobra.Command{
 		if customDomain == "" {
 			return fmt.Errorf("custom domain is required")
 		}
-		payload, err := planSessionCustomDomain(args[0], customDomain)
+		payload, err := planSessionCustomDomainWithContext(cmd.Context(), args[0], customDomain)
 		if payload != nil {
 			if printErr := printDomainPayload(cmd, payload); printErr != nil {
 				return printErr
@@ -139,55 +125,59 @@ var domainAddCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		customDomain, err := validateCustomDomain(args[1])
-		if err != nil {
-			return err
+		return runDomainAdd(cmd, args, domainAddWait, domainAddTimeout)
+	},
+}
+
+func runDomainAdd(cmd *cobra.Command, args []string, wait bool, timeout time.Duration) error {
+	customDomain, err := validateCustomDomain(args[1])
+	if err != nil {
+		return err
+	}
+	if customDomain == "" {
+		return fmt.Errorf("custom domain is required")
+	}
+	if wait {
+		if timeout <= 0 {
+			return fmt.Errorf("--timeout must be greater than 0 when --wait is set")
 		}
-		if customDomain == "" {
-			return fmt.Errorf("custom domain is required")
-		}
-		if domainAddWait {
-			if domainAddTimeout <= 0 {
-				return fmt.Errorf("--timeout must be greater than 0 when --wait is set")
-			}
-			plan, err := planSessionCustomDomain(args[0], customDomain)
-			if plan != nil && !domainJSON {
-				if printErr := printDomainPayload(cmd, plan); printErr != nil {
-					return printErr
-				}
-			}
-			if err != nil {
-				return err
-			}
-			waitOut := cmd.OutOrStdout()
-			if domainJSON {
-				waitOut = cmd.ErrOrStderr()
-			}
-			fmt.Fprintf(waitOut, "Waiting for DNS CNAME readiness (timeout %s)...\n", domainAddTimeout)
-			if err := waitForDomainCNAMEReady(cmd.Context(), customDomain, plan.SealosHost, domainAddTimeout); err != nil {
-				return err
-			}
-		}
-		payload, err := configureSessionCustomDomain(cmd.Context(), args[0], customDomain)
-		if payload != nil && !(domainJSON && domainAddWait) {
-			if printErr := printDomainPayload(cmd, payload); printErr != nil {
+		plan, err := planSessionCustomDomainWithContext(cmd.Context(), args[0], customDomain)
+		if plan != nil && !domainJSON {
+			if printErr := printDomainPayload(cmd, plan); printErr != nil {
 				return printErr
 			}
 		}
 		if err != nil {
 			return err
 		}
-		if domainAddWait {
-			verify, verifyErr := waitForSessionDomain(cmd.Context(), args[0], domainAddTimeout)
-			if verify != nil {
-				if printErr := printDomainVerifyPayload(cmd, verify); printErr != nil {
-					return printErr
-				}
-			}
-			return domainVerifyResultError(verify, verifyErr)
+		waitOut := cmd.OutOrStdout()
+		if domainJSON {
+			waitOut = cmd.ErrOrStderr()
 		}
+		fmt.Fprintf(waitOut, "Waiting for DNS CNAME readiness (timeout %s)...\n", timeout)
+		if err := waitForDomainCNAMEReady(cmd.Context(), customDomain, plan.SealosHost, timeout); err != nil {
+			return err
+		}
+	}
+	payload, err := configureSessionCustomDomain(cmd.Context(), args[0], customDomain)
+	if payload != nil && !(domainJSON && wait) {
+		if printErr := printDomainPayload(cmd, payload); printErr != nil {
+			return printErr
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if !wait {
 		return nil
-	},
+	}
+	verify, verifyErr := waitForSessionDomain(cmd.Context(), args[0], timeout)
+	if verify != nil {
+		if printErr := printDomainVerifyPayload(cmd, verify); printErr != nil {
+			return printErr
+		}
+	}
+	return domainVerifyResultError(verify, verifyErr)
 }
 
 var domainClearCmd = &cobra.Command{
@@ -276,6 +266,7 @@ var domainDoctorCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(domainCmd)
+	markDeprecated(domainSetCmd, "sealtun domain add <tunnel-id> <domain>")
 	domainCmd.AddCommand(domainPlanCmd)
 	domainCmd.AddCommand(domainAddCmd)
 	domainCmd.AddCommand(domainSetCmd)
@@ -293,11 +284,15 @@ func init() {
 }
 
 func planSessionCustomDomain(tunnelID, customDomain string) (*domainPayload, error) {
+	return planSessionCustomDomainWithContext(context.Background(), tunnelID, customDomain)
+}
+
+func planSessionCustomDomainWithContext(ctx context.Context, tunnelID, customDomain string) (*domainPayload, error) {
 	sess, err := findSession(tunnelID)
 	if err != nil {
 		return nil, err
 	}
-	refreshSessionFromRemote(context.Background(), sess)
+	refreshSessionFromRemote(ctx, sess)
 	if !sessionSupportsCustomDomain(*sess) {
 		return nil, fmt.Errorf("custom domains are only supported for https tunnels")
 	}
@@ -919,9 +914,8 @@ func validateCustomDomain(value string) (string, error) {
 	if !strings.Contains(value, ".") {
 		return "", fmt.Errorf("invalid custom domain %q: custom domain must contain at least two labels", value)
 	}
-	labelPattern := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	for _, label := range strings.Split(value, ".") {
-		if !labelPattern.MatchString(label) {
+		if !customDomainLabelPattern.MatchString(label) {
 			return "", fmt.Errorf("invalid custom domain %q: label %q is not DNS compatible", value, label)
 		}
 	}

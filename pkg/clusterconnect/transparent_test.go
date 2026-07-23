@@ -2,8 +2,12 @@ package clusterconnect
 
 import (
 	"context"
+	"errors"
+	"net"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,6 +15,29 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
+
+type fakeTransparentListener struct {
+	acceptErr error
+	closed    chan struct{}
+	once      sync.Once
+}
+
+func (l *fakeTransparentListener) Accept() (net.Conn, error) {
+	if l.acceptErr != nil {
+		return nil, l.acceptErr
+	}
+	<-l.closed
+	return nil, net.ErrClosed
+}
+
+func (l *fakeTransparentListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *fakeTransparentListener) Addr() net.Addr {
+	return &net.TCPAddr{}
+}
 
 func TestTransparentPlanIncludesServiceAndPodRoutes(t *testing.T) {
 	client := fake.NewSimpleClientset(
@@ -73,6 +100,46 @@ func TestTransparentServerRunPlanValidatesPlan(t *testing.T) {
 				t.Fatalf("expected %q error, got %v", tt.want, err)
 			}
 		})
+	}
+}
+
+func TestTransparentServerServeListenerReturnsUnexpectedAcceptError(t *testing.T) {
+	want := errors.New("connection closed by platform")
+	listener := &fakeTransparentListener{acceptErr: want, closed: make(chan struct{})}
+	server := &TransparentServer{}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.serveListener(context.Background(), listener)
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, want) {
+			t.Fatalf("serveListener error = %v, want %v", err, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("serveListener did not stop its context watcher after accept failed")
+	}
+}
+
+func TestTransparentServerServeListenerStopsOnContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	listener := &fakeTransparentListener{closed: make(chan struct{})}
+	server := &TransparentServer{}
+	done := make(chan error, 1)
+	go func() {
+		done <- server.serveListener(ctx, listener)
+	}()
+
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("serveListener error = %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("serveListener did not stop after context cancellation")
 	}
 }
 

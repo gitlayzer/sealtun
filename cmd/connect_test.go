@@ -12,6 +12,7 @@ import (
 )
 
 func TestRunConnectSavesStateBeforeRunAndRemovesAfterRun(t *testing.T) {
+	stubConnectRuntimeLock(t)
 	previousSave := connectSaveState
 	previousRemove := connectRemoveState
 	t.Cleanup(func() {
@@ -77,6 +78,7 @@ func TestRunConnectSavesStateBeforeRunAndRemovesAfterRun(t *testing.T) {
 }
 
 func TestRunConnectDoesNotSaveStateWhenPlanFails(t *testing.T) {
+	stubConnectRuntimeLock(t)
 	previousSave := connectSaveState
 	previousRemove := connectRemoveState
 	t.Cleanup(func() {
@@ -111,6 +113,29 @@ func TestRunConnectDoesNotSaveStateWhenPlanFails(t *testing.T) {
 	if want := []string{"plan"}; !reflect.DeepEqual(events, want) {
 		t.Fatalf("unexpected event order: got %v want %v", events, want)
 	}
+}
+
+func TestRunConnectRejectsConcurrentRuntime(t *testing.T) {
+	previous := connectAcquireRuntimeLock
+	t.Cleanup(func() { connectAcquireRuntimeLock = previous })
+	want := errors.New("runtime lock held")
+	connectAcquireRuntimeLock = func() (func(), error) { return nil, want }
+
+	env := &fakeConnectEnv{}
+	err := runConnectWithEnvironment(newTestConnectCommand(), connectOptions{}, env, func(clusterconnect.TransparentOptions) connectPlanRunner {
+		t.Fatal("server factory should not be called while runtime lock is held")
+		return nil
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("runConnectWithEnvironment error = %v, want %v", err, want)
+	}
+}
+
+func stubConnectRuntimeLock(t *testing.T) {
+	t.Helper()
+	previous := connectAcquireRuntimeLock
+	connectAcquireRuntimeLock = func() (func(), error) { return func() {}, nil }
+	t.Cleanup(func() { connectAcquireRuntimeLock = previous })
 }
 
 type fakeConnectEnv struct {

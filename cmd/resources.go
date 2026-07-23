@@ -92,6 +92,7 @@ var resourcesUnsetCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(resourcesCmd)
 	resourcesCmd.AddCommand(resourcesSetCmd, resourcesUnsetCmd)
+	markAlphaTree(resourcesCmd)
 	resourcesCmd.Flags().BoolVar(&resourcesJSON, "json", false, "Output resources as JSON")
 	resourcesSetCmd.Flags().StringVar(&resourcesSetRequestCPU, "request-cpu", "", "Set pod CPU request, e.g. 10m")
 	resourcesSetCmd.Flags().StringVar(&resourcesSetRequestMemory, "request-memory", "", "Set pod memory request, e.g. 32Mi")
@@ -120,7 +121,7 @@ type resourceUpdatePayload struct {
 }
 
 func setTunnelResources(parent context.Context, tunnelID string, input resourceSetInput) (*resourceUpdatePayload, error) {
-	sess, err := activeScopedSession(tunnelID)
+	sess, err := activeScopedSession(parent, tunnelID)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +136,7 @@ func setTunnelResources(parent context.Context, tunnelID string, input resourceS
 }
 
 func unsetTunnelResources(parent context.Context, tunnelID string) (*resourceUpdatePayload, error) {
-	sess, err := activeScopedSession(tunnelID)
+	sess, err := activeScopedSession(parent, tunnelID)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +313,7 @@ func resourceConfigChanged(current, desired *session.ResourceConfig) bool {
 }
 
 func collectTunnelResources(parent context.Context, tunnelID string) (*k8s.TunnelResourceList, error) {
-	sess, err := activeScopedSession(tunnelID)
+	sess, err := activeScopedSession(parent, tunnelID)
 	if err != nil {
 		return nil, err
 	}
@@ -325,8 +326,8 @@ func collectTunnelResources(parent context.Context, tunnelID string) (*k8s.Tunne
 	return client.WithNamespace(sess.Namespace).TunnelResources(ctx, sess.TunnelID)
 }
 
-func activeScopedSession(tunnelID string) (*session.TunnelSession, error) {
-	sess, err := findSessionRefreshed(context.Background(), tunnelID)
+func activeScopedSession(ctx context.Context, tunnelID string) (*session.TunnelSession, error) {
+	sess, err := findSessionRefreshed(ctx, tunnelID)
 	if err != nil {
 		return nil, err
 	}

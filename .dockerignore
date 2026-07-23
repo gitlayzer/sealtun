@@ -1,6 +1,9 @@
 .git
 .github
 .DS_Store
+.workflow
+.workbuddy
+outputs
 
 sealtun
 dist
@@ -13,4 +16,3 @@ packages
 
 coverage.out
 *.test
-

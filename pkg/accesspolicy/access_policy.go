@@ -17,6 +17,13 @@ import (
 const TemporaryTokenQueryParam = "_sealtun_token" // #nosec G101 -- query parameter name, not a credential value.
 const minTokenLength = 8
 
+const (
+	rateLimiterPruneThreshold = 1024
+	rateLimiterPruneInterval  = time.Second
+	rateLimiterMaxBuckets     = 65536
+	rateLimiterOverflowKey    = "\x00overflow"
+)
+
 var ipMatcherCache sync.Map
 
 type Policy struct {
@@ -46,9 +53,10 @@ type RateLimitSpec struct {
 }
 
 type RateLimiter struct {
-	mu      sync.Mutex
-	spec    RateLimitSpec
-	buckets map[string]rateLimitBucket
+	mu        sync.Mutex
+	spec      RateLimitSpec
+	buckets   map[string]rateLimitBucket
+	lastPrune time.Time
 }
 
 type rateLimitBucket struct {
@@ -99,8 +107,12 @@ func HashToken(token string) (string, error) {
 	if len(token) < minTokenLength {
 		return "", fmt.Errorf("token must be at least %d characters", minTokenLength)
 	}
+	return hashToken(token), nil
+}
+
+func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func Validate(policy *Policy) error {
@@ -202,20 +214,31 @@ func (l *RateLimiter) Allow(key string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	bucket := l.buckets[key]
+	l.pruneLocked(now)
+	bucket, exists := l.buckets[key]
+	if !exists && len(l.buckets) >= rateLimiterMaxBuckets-1 {
+		// Do not evict active clients: eviction would let an attacker reset its
+		// own limit by cycling high-cardinality keys. New clients share one
+		// bounded overflow bucket, which fails closed once its limit is reached.
+		key = rateLimiterOverflowKey
+		bucket = l.buckets[key]
+	}
 	if bucket.WindowStart.IsZero() || now.Sub(bucket.WindowStart) >= l.spec.Window || now.Before(bucket.WindowStart) {
 		bucket = rateLimitBucket{WindowStart: now, Count: 0}
 	}
 	bucket.Count++
 	l.buckets[key] = bucket
-	l.pruneLocked(now)
 	return bucket.Count <= l.spec.Limit
 }
 
 func (l *RateLimiter) pruneLocked(now time.Time) {
-	if len(l.buckets) <= 1024 {
+	if len(l.buckets) <= rateLimiterPruneThreshold {
 		return
 	}
+	if !l.lastPrune.IsZero() && now.Sub(l.lastPrune) < rateLimiterPruneInterval {
+		return
+	}
+	l.lastPrune = now
 	for key, bucket := range l.buckets {
 		if now.Sub(bucket.WindowStart) >= 2*l.spec.Window {
 			delete(l.buckets, key)
@@ -285,12 +308,17 @@ func TokenAuthorized(policy *Policy, r *http.Request, now time.Time) bool {
 	if queryToken == "" {
 		return false
 	}
+	queryToken = strings.TrimSpace(queryToken)
+	if len(queryToken) < minTokenLength {
+		return false
+	}
+	queryTokenHash := hashToken(queryToken)
 	for _, token := range policy.TemporaryTokens {
 		expiresAt, err := time.Parse(time.RFC3339, token.ExpiresAt)
 		if err != nil || !now.Before(expiresAt) {
 			continue
 		}
-		if tokenMatches(queryToken, token.TokenHash) {
+		if tokenHashMatches(queryTokenHash, token.TokenHash) {
 			return true
 		}
 	}
@@ -436,18 +464,19 @@ func bearerTokenFromRequest(r *http.Request) string {
 }
 
 func tokenMatchesAny(token string, hashes []string) bool {
+	token = strings.TrimSpace(token)
+	if len(token) < minTokenLength {
+		return false
+	}
+	tokenHash := hashToken(token)
 	for _, hash := range hashes {
-		if tokenMatches(token, hash) {
+		if tokenHashMatches(tokenHash, hash) {
 			return true
 		}
 	}
 	return false
 }
 
-func tokenMatches(token, hash string) bool {
-	tokenHash, err := HashToken(token)
-	if err != nil {
-		return false
-	}
+func tokenHashMatches(tokenHash, hash string) bool {
 	return subtle.ConstantTimeCompare([]byte(tokenHash), []byte(strings.TrimSpace(hash))) == 1
 }

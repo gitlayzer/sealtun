@@ -2,10 +2,10 @@ package clusterconnect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -193,7 +193,7 @@ func (s *TransparentServer) RunPlan(ctx context.Context, plan *TransparentPlan) 
 	s.printf("  Listening: %s\n", plan.Listen)
 	s.printf("  TCP routes: %d\n", len(plan.Rules))
 	s.printf("  Host entries: %d\n", len(plan.Hosts))
-	s.printf("Press Ctrl-C or run `sealtun disconnect` from another terminal to stop.\n")
+	s.printf("Press Ctrl-C or run `sealtun connect disconnect` from another terminal to stop.\n")
 	return s.listenAndServe(ctx, plan.Listen)
 }
 
@@ -203,15 +203,32 @@ func (s *TransparentServer) listenAndServe(ctx context.Context, listen string) e
 		return err
 	}
 	defer ln.Close()
+	return s.serveListener(ctx, ln)
+}
+
+func (s *TransparentServer) serveListener(ctx context.Context, ln net.Listener) error {
+	stop := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
+		defer close(stopped)
+		select {
+		case <-ctx.Done():
+			_ = ln.Close()
+		case <-stop:
+		}
+	}()
+	defer func() {
+		close(stop)
+		<-stopped
 	}()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if ctx.Err() != nil || strings.Contains(err.Error(), "closed") {
+			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			if errors.Is(err, net.ErrClosed) {
+				return fmt.Errorf("transparent listener closed unexpectedly: %w", err)
 			}
 			return err
 		}
@@ -296,15 +313,4 @@ func copyBoth(a net.Conn, b net.Conn) {
 		done <- struct{}{}
 	}()
 	<-done
-}
-
-func ensureRootOwnedPrivateFile(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a regular file", path)
-	}
-	return nil
 }

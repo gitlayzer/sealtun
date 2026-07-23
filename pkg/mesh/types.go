@@ -92,19 +92,38 @@ func (c *Config) Normalize() error {
 	if err := ValidateName("home region", c.HomeRegion); err != nil {
 		return err
 	}
+	regionNames := make(map[string]struct{}, len(c.Regions))
 	for i := range c.Regions {
 		if err := c.Regions[i].Normalize(); err != nil {
 			return err
 		}
+		if _, exists := regionNames[c.Regions[i].Name]; exists {
+			return fmt.Errorf("duplicate mesh region %q", c.Regions[i].Name)
+		}
+		regionNames[c.Regions[i].Name] = struct{}{}
 	}
+	serviceNames := make(map[string]struct{}, len(c.Services))
+	listenPorts := make(map[int32]string, len(c.Services))
 	for i := range c.Services {
 		if err := c.Services[i].Normalize(); err != nil {
 			return err
 		}
+		service := c.Services[i]
+		if _, exists := serviceNames[service.Name]; exists {
+			return fmt.Errorf("duplicate mesh service %q", service.Name)
+		}
+		serviceNames[service.Name] = struct{}{}
+		port := ImportPort(service.Name)
+		if existing, exists := listenPorts[port]; exists {
+			return fmt.Errorf("mesh services %q and %q map to the same gateway listen port %d; rename one service", existing, service.Name, port)
+		}
+		listenPorts[port] = service.Name
 	}
 	sort.Slice(c.Regions, func(i, j int) bool { return c.Regions[i].Name < c.Regions[j].Name })
 	sort.Slice(c.Services, func(i, j int) bool { return c.Services[i].Name < c.Services[j].Name })
-	c.UpdatedAt = nowString()
+	if c.UpdatedAt == "" {
+		c.UpdatedAt = nowString()
+	}
 	return nil
 }
 
@@ -119,7 +138,9 @@ func (r *Region) Normalize() error {
 	}
 	r.Namespace = strings.TrimSpace(r.Namespace)
 	r.GatewayHost = NormalizeHostname(r.GatewayHost)
-	r.UpdatedAt = nowString()
+	if r.UpdatedAt == "" {
+		r.UpdatedAt = nowString()
+	}
 	return nil
 }
 
@@ -165,7 +186,9 @@ func (s *Service) Normalize() error {
 	if s.CreatedAt == "" {
 		s.CreatedAt = nowString()
 	}
-	s.UpdatedAt = nowString()
+	if s.UpdatedAt == "" {
+		s.UpdatedAt = nowString()
+	}
 	return nil
 }
 
@@ -230,29 +253,53 @@ func (c *Config) UpsertRegion(region Region) error {
 	if err := region.Normalize(); err != nil {
 		return err
 	}
-	for i := range c.Regions {
-		if c.Regions[i].Name == region.Name {
-			c.Regions[i] = region
-			return c.Normalize()
+	region.UpdatedAt = nowString()
+	next := *c
+	next.Regions = append([]Region(nil), c.Regions...)
+	updated := false
+	for i := range next.Regions {
+		if next.Regions[i].Name == region.Name {
+			next.Regions[i] = region
+			updated = true
+			break
 		}
 	}
-	c.Regions = append(c.Regions, region)
-	return c.Normalize()
+	if !updated {
+		next.Regions = append(next.Regions, region)
+	}
+	next.UpdatedAt = nowString()
+	if err := next.Normalize(); err != nil {
+		return err
+	}
+	*c = next
+	return nil
 }
 
 func (c *Config) UpsertService(service Service) error {
 	if err := service.Normalize(); err != nil {
 		return err
 	}
-	for i := range c.Services {
-		if c.Services[i].Name == service.Name {
-			service.CreatedAt = c.Services[i].CreatedAt
-			c.Services[i] = service
-			return c.Normalize()
+	service.UpdatedAt = nowString()
+	next := *c
+	next.Services = append([]Service(nil), c.Services...)
+	updated := false
+	for i := range next.Services {
+		if next.Services[i].Name == service.Name {
+			service.CreatedAt = next.Services[i].CreatedAt
+			next.Services[i] = service
+			updated = true
+			break
 		}
 	}
-	c.Services = append(c.Services, service)
-	return c.Normalize()
+	if !updated {
+		next.Services = append(next.Services, service)
+	}
+	next.UpdatedAt = nowString()
+	if err := next.Normalize(); err != nil {
+		return err
+	}
+	*c = next
+	return nil
 }
 
 func (c *Config) RemoveService(name string) bool {
@@ -260,6 +307,7 @@ func (c *Config) RemoveService(name string) bool {
 	for i := range c.Services {
 		if c.Services[i].Name == name {
 			c.Services = append(c.Services[:i], c.Services[i+1:]...)
+			c.UpdatedAt = nowString()
 			_ = c.Normalize()
 			return true
 		}

@@ -1,11 +1,31 @@
 package accesspolicy
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+func BenchmarkTokenMatchesAnyManyHashes(b *testing.B) {
+	hashes := make([]string, 64)
+	for i := range hashes {
+		hash, err := HashToken(fmt.Sprintf("stored-token-%02d", i))
+		if err != nil {
+			b.Fatal(err)
+		}
+		hashes[i] = hash
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if tokenMatchesAny("request-token", hashes) {
+			b.Fatal("unexpected token match")
+		}
+	}
+}
 
 func TestNetworkAllowedUsesDenyBeforeAllow(t *testing.T) {
 	policy := &Policy{
@@ -143,6 +163,20 @@ func TestRateLimiterAllowsWithinWindowAndResets(t *testing.T) {
 	}
 	if !limiter.Allow("198.51.100.1", now.Add(20*time.Second)) {
 		t.Fatal("separate client key should have its own bucket")
+	}
+}
+
+func TestRateLimiterBoundsUniqueClientBuckets(t *testing.T) {
+	limiter := NewRateLimiter(RateLimitSpec{Limit: 2, Window: time.Hour})
+	now := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < rateLimiterMaxBuckets+100; i++ {
+		limiter.Allow(fmt.Sprintf("client-%d", i), now)
+	}
+	if got := len(limiter.buckets); got > rateLimiterMaxBuckets {
+		t.Fatalf("rate limiter retained %d buckets, max is %d", got, rateLimiterMaxBuckets)
+	}
+	if limiter.Allow("another-new-client", now) {
+		t.Fatal("overflow clients should share a fail-closed bucket after its limit is exhausted")
 	}
 }
 

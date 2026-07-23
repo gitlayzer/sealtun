@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +29,10 @@ func TestEncryptSessionDataRoundTrip(t *testing.T) {
 	withTempConfigHome(t)
 
 	plaintext := []byte(`{"tunnelId":"abc123","secret":"top-secret"}`)
-	encrypted := encryptSessionData(plaintext)
+	encrypted, err := encryptSessionData(plaintext)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
 
 	if string(encrypted) == string(plaintext) {
 		t.Fatal("expected ciphertext to differ from plaintext")
@@ -88,6 +92,61 @@ func TestSessionEncryptionKeyIsStablePerHome(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("expected key file mode 0600, got %o", perm)
+	}
+}
+
+func TestSaveFailsClosedWhenSessionKeyIsCorrupt(t *testing.T) {
+	withTempConfigHome(t)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("resolve home: %v", err)
+	}
+	root := filepath.Join(home, ".sealtun")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatalf("create config root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, sessionKeyFileName), []byte("corrupt"), 0o600); err != nil {
+		t.Fatalf("write corrupt session key: %v", err)
+	}
+
+	err = Save(TunnelSession{TunnelID: "failclosed", Secret: "must-not-reach-disk"})
+	if err == nil {
+		t.Fatal("expected Save to reject a corrupt session key")
+	}
+	data, readErr := os.ReadFile(filepath.Join(root, sessionsDirName, "failclosed.json"))
+	if readErr == nil && containsBytes(data, []byte("must-not-reach-disk")) {
+		t.Fatal("session secret was written as plaintext after encryption failed")
+	}
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatalf("read session file: %v", readErr)
+	}
+}
+
+func BenchmarkListFromConfigDirEncrypted(b *testing.B) {
+	home := b.TempDir()
+	b.Setenv("HOME", home)
+	for i := 0; i < 64; i++ {
+		if err := Save(TunnelSession{
+			TunnelID:   fmt.Sprintf("session-%02d", i),
+			Kubeconfig: "apiVersion: v1\nkind: Config\n",
+			Secret:     "benchmark-secret",
+		}); err != nil {
+			b.Fatalf("save fixture %d: %v", i, err)
+		}
+	}
+	root := filepath.Join(home, ".sealtun")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sessions, err := ListFromConfigDir(root)
+		if err != nil {
+			b.Fatalf("list sessions: %v", err)
+		}
+		if len(sessions) != 64 {
+			b.Fatalf("got %d sessions, want 64", len(sessions))
+		}
 	}
 }
 

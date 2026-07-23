@@ -2,6 +2,8 @@
 
 Use this for interactive Sealtun operation: install, shell completion, guided init, login, expose HTTPS, remote HTTP upstream targets, SSH, or generic TCP, access cluster-internal Services/Pods with connect, build service-level cross-region Mesh, secure public HTTP traffic, observe, bind domains, stop/start, and clean up tunnels.
 
+Stability rule: prefer Stable commands. `init`, `tui`/`console`, `connect`, `mesh`, `ssh connect`, and standalone `discover`, `template`, `export`, `events`, `metrics`, `resources`, and `watch` are Alpha and may change or be removed without compatibility guarantees; disclose this before recommending them. `repair`, `domain set`, and top-level `disconnect` are Deprecated aliases; use `doctor <id> --fix`, `domain add`, and `connect disconnect` for new commands.
+
 ## Quick Recipes
 
 Use these paths before listing every available flag:
@@ -9,14 +11,14 @@ Use these paths before listing every available flag:
 | Request | Commands | Notes |
 | --- | --- | --- |
 | "I want my local app on the internet" / "让本地项目跑在公网" | `sealtun status`; interactive/dev: `sealtun up`; terminal console: `sealtun tui`; scripted/exact: `sealtun expose <port>` | `up` reuses current project state or discovers/asks for a port. TUI is for interactive management. Defaults to HTTPS and daemon mode. |
-| "Open a terminal UI" / "用 TUI 管理隧道" | `sealtun tui` or `sealtun console` | Requires an interactive terminal. Use Tunnels to select a session, press `o` for Tunnel Actions, Create for local ports, and Tools for global commands. |
+| "Open a terminal UI" / "用 TUI 管理隧道" | Alpha `sealtun tui` or `sealtun console` | Disclose Alpha status. Requires an interactive terminal. Use Tunnels to select a session, press `o` for Tunnel Actions, Create for local ports, and Tools for global commands. |
 | "Expose this remote HTTP address" / "把远端地址端口转公网" | dev: `sealtun up --target http://host:port`; scripts: `sealtun expose --target http://host:port` | HTTPS-only. The target must be reachable from the machine running Sealtun. |
-| "Help me get started" / "第一次怎么用" | `sealtun status`; `sealtun init`; `sealtun init --apply` only if creation is requested | `init` is read-only by default and prints a recommended command plus YAML. |
+| "Help me get started" / "第一次怎么用" | `sealtun status`; stable `sealtun up`; Alpha `sealtun init` only for a read-only command/YAML recommendation | `init` is read-only by default; disclose Alpha status. |
 | "Give my local app a public domain" / "给本地服务一个公网域名" | `sealtun expose <port> --domain <domain>` or `sealtun domain plan <id> <domain>` | If the tunnel already exists, plan first, then add/set only when mutation is requested. |
 | "Expose SSH publicly" / "公网 SSH" | `sealtun expose 22 --protocol ssh` | Return `ssh <user>@<public-host> -p <node-port>`. Do not add HTTPS auth/domain features. |
-| "Expose Postgres/MySQL/Redis/MongoDB/MQTT" | `sealtun template postgres`; `sealtun expose 5432 --protocol tcp` | Common protocol templates map to generic TCP. Return `<host>:<node-port>`. |
-| "Access a cluster Service from my laptop" / "本机访问集群内服务" | `sealtun connect --check`; Linux `sudo sealtun connect` | Direct TCP access to Service FQDN, Service ClusterIP, and Pod IP. No SOCKS/proxy setup. |
-| "Let Pods in one Sealos region call a Service in another" / "不同区服务互通" | `sealtun mesh init`; `sealtun mesh login`; `sealtun mesh up`; `sealtun mesh service publish ...` | Service-level HTTP/TCP import. Not transparent Pod IP/CNI routing. |
+| "Expose Postgres/MySQL/Redis/MongoDB/MQTT" | Alpha `sealtun template postgres`; stable `sealtun expose 5432 --protocol tcp` | Disclose template Alpha status. Common protocol templates map to generic TCP. Return `<host>:<node-port>`. |
+| "Access a cluster Service from my laptop" / "本机访问集群内服务" | Alpha `sealtun connect --check`; Linux `sudo sealtun connect` | Disclose Alpha status. Direct TCP access to Service FQDN, Service ClusterIP, and Pod IP. No SOCKS/proxy setup. |
+| "Let Pods in one Sealos region call a Service in another" / "不同区服务互通" | Alpha `sealtun mesh init`; `sealtun mesh login`; `sealtun mesh up`; `sealtun mesh service publish ...` | Disclose Alpha status. Service-level HTTP/TCP import, not transparent Pod IP/CNI routing. |
 | "Secure this public URL" | HTTPS `expose`, `policy set`, or `share` with Basic Auth, Bearer token, IP rules, rate limit, audit, or temporary links | Prefer env-backed secrets. HTTP access controls do not protect SSH/TCP NodePort. |
 
 After any live operation, verify using the matching command: `list --check`, `inspect <id>`, `domain status/verify`, `share list`, or `doctor <id>`.
@@ -44,7 +46,7 @@ sealtun completion powershell
 
 Use the generated script according to the user's shell. If the user only asks whether completion exists, show the matching command instead of editing shell startup files.
 
-## Terminal Console
+## Terminal Console (Alpha)
 
 ```bash
 sealtun tui
@@ -56,11 +58,11 @@ Use the TUI when the user wants an interactive terminal workspace instead of man
 
 - Keyboard focus starts on the left menu. Use up/down to switch sections, `enter`/`right`/`tab` to enter content, and `left`/`esc`/`tab` to return to the menu.
 - `Tunnels`: list current tunnel sessions. Press `enter` to inspect, or `o` to open `Tunnel Actions`.
-- `Tunnel Actions`: object-level inspect, doctor, logs, metrics, events, resources, export, domain, policy, share, resource tuning, repair, rotate, start, stop, and cleanup actions. Mutations show the equivalent CLI command and require confirmation.
+- `Tunnel Actions`: object-level inspect, doctor, logs, metrics, events, resources, export, domain, policy, share, resource tuning, doctor fix, rotate, start, stop, and cleanup actions. Mutations show the equivalent CLI command and require confirmation.
 - `Create`: discover local listening ports and create basic HTTPS, SSH, or TCP tunnels from discovered ports.
 - `Tools`: global-only status, discover, init, template, connect check, domain status, doctor dry-run, export-all, and YAML apply dry-run/diff/apply operations.
 
-The TUI requires stdin/stdout to be a real terminal. Real transparent networking with `connect`, login/profile switching, and shell completion remain explicit CLI flows.
+Disclose Alpha status before recommending the TUI. It requires stdin/stdout to be a real terminal. Real transparent networking with Alpha `connect`, login/profile switching, and shell completion remain explicit CLI flows.
 
 ## Login, Regions, Profiles
 
@@ -150,9 +152,9 @@ sealtun expose 3000 --bearer-token share-secret
 sealtun expose 3000 --temporary-access-token review-link-secret --temporary-access-ttl 1h
 ```
 
-## Access Cluster Services From Local Tools
+## Access Cluster Services From Local Tools (Alpha)
 
-`connect` is the reverse direction of `expose`: local tools can directly access Services or Pods inside the active Sealos/Kubernetes namespace. It does not create a public URL and does not expose anything to the internet.
+Disclose Alpha status first. `connect` is the reverse direction of `expose`: local tools can directly access Services or Pods inside the active Sealos/Kubernetes namespace. It does not create a public URL and does not expose anything to the internet.
 
 ```bash
 sealtun connect --check
@@ -162,7 +164,7 @@ sudo sealtun connect --namespace ns-3rgvtt74
 sudo sealtun connect --mode tun --listen 127.0.0.1:15443
 sealtun connect status
 sealtun connect status --json
-sudo sealtun disconnect
+sudo sealtun connect disconnect
 ```
 
 Current behavior:
@@ -170,7 +172,7 @@ Current behavior:
 - Uses only the active Sealtun login and active kubeconfig namespace.
 - `connect --check` reports capability and expected blockers.
 - Linux starts transparent TCP mode by temporarily updating local `iptables` and `/etc/hosts`.
-- `connect` runs in the foreground; stop with Ctrl-C or `sudo sealtun disconnect`, which cleans up the managed rules and hosts block.
+- Alpha `connect` runs in the foreground; stop with Ctrl-C or `sudo sealtun connect disconnect`, which cleans up the managed rules and hosts block.
 - Supports Service FQDN, Service ClusterIP, and Pod IP access for TCP clients.
 - Does not support ICMP/ping or UDP.
 - Do not suggest SOCKS, HTTP CONNECT, `ALL_PROXY`, or `socks5h` setup as a Sealtun user-facing solution.
@@ -185,9 +187,9 @@ curl http://10.244.0.22:3000
 
 On macOS/Windows, say the transparent data plane is currently Linux-only.
 
-## Cross-region Mesh
+## Cross-region Mesh (Alpha)
 
-Use Mesh when the user wants Pods or workloads in one Sealos region to call an explicitly published Kubernetes Service in another Sealos region. Mesh is not for exposing a local port to the public internet and is not transparent Pod IP/CNI routing.
+Disclose Alpha status first. Use Mesh when the user wants Pods or workloads in one Sealos region to call an explicitly published Kubernetes Service in another Sealos region. Mesh is not for exposing a local port to the public internet and is not transparent Pod IP/CNI routing.
 
 ```bash
 sealtun mesh init --home gzg --regions gzg,hzh,bja
@@ -258,7 +260,7 @@ sealtun expose 3000 --domain app.example.com --wait-domain --domain-timeout 5m
 sealtun domain plan <tunnel-id> app.example.com
 sealtun domain add <tunnel-id> app.example.com
 sealtun domain add <tunnel-id> app.example.com --wait --timeout 5m
-sealtun domain set <tunnel-id> app.example.com
+sealtun domain add <tunnel-id> app.example.com
 sealtun domain verify <tunnel-id>
 sealtun domain verify <tunnel-id> --wait --timeout 5m
 sealtun domain status
@@ -274,9 +276,9 @@ CNAME app.example.com -> <sealos-host>
 
 Only after CNAME ownership verification does Sealtun write the custom host to Ingress and manage cert-manager resources.
 
-Prefer `domain plan` when the user only needs DNS guidance. Use `domain add --wait` when the user explicitly wants Sealtun to wait for DNS, attach the domain, and wait for certificate readiness. `domain set` remains the direct attach command when DNS is already known to be ready.
+Prefer `domain plan` when the user only needs DNS guidance. Use `domain add` when DNS is ready, or `domain add --wait` when the user explicitly wants Sealtun to wait for DNS, attach the domain, and wait for certificate readiness. `domain set` is a Deprecated compatibility alias.
 
-## Protocol Templates
+## Protocol Templates (Alpha)
 
 ```bash
 sealtun template https --name web --port 3000 --domain app.example.com
@@ -289,7 +291,7 @@ sealtun template mongodb
 sealtun template mqtt
 ```
 
-Use templates when the user asks how to expose a common protocol or wants a starter `sealtun.yaml`. Templates are read-only and print both a one-shot `sealtun expose` command and a YAML snippet. `mysql`, `postgres`, `redis`, `mongodb`, and `mqtt` map to generic `tcp`; only `https` templates accept `--domain`.
+Disclose Alpha status before recommending templates. They are read-only and print both a one-shot `sealtun expose` command and a YAML snippet. `mysql`, `postgres`, `redis`, `mongodb`, and `mqtt` map to generic `tcp`; only `https` templates accept `--domain`.
 
 ## SSH Over Sealtun
 
@@ -304,14 +306,14 @@ ssh <user>@<public-host> -p <node-port>
 
 Use SSH mode only when the user wants to expose a local SSH server or direct TCP SSH entry. It prints `Public SSH host`, `Public SSH port`, and an `ssh <user>@<public-host> -p <node-port>` command. Do not promise a custom domain for SSH; users connect with the generated host plus NodePort.
 
-When direct NodePort is unavailable, use the WebSocket ProxyCommand fallback:
+When direct NodePort is unavailable and the user explicitly accepts an Alpha path, use the WebSocket ProxyCommand fallback:
 
 ```bash
 sealtun expose 22
 ssh -o ProxyCommand='sealtun ssh connect <tunnel-id>' <user>@sealtun
 ```
 
-`sealtun ssh connect <tunnel-id>` opens `wss://<sealos-host>/_sealtun/tcp` with the tunnel's internal secret, then bridges stdin/stdout to the remote server's active yamux session.
+Alpha `sealtun ssh connect <tunnel-id>` opens `wss://<sealos-host>/_sealtun/tcp` with the tunnel's internal secret, then bridges stdin/stdout to the remote server's active yamux session. Disclose Alpha status and prefer direct SSH NodePort output when available.
 
 ## Generic TCP Over Sealtun
 
@@ -324,6 +326,8 @@ sealtun expose 5432 --protocol tcp
 The command prints `Public TCP host`, `Public TCP port`, and `Public TCP endpoint` as `<public-host>:<node-port>`. Basic Auth, Bearer tokens, temporary links, IP policies, and custom domains are HTTPS proxy-layer features and are rejected for TCP tunnels.
 
 ## Observe And Manage
+
+Stable operations are `status`, `list`, `inspect`, `logs`, and `doctor`. The standalone `discover`, `resources`, `watch`, `metrics`, and `events` commands are Alpha; disclose this before recommending them.
 
 ```bash
 sealtun status
@@ -373,8 +377,8 @@ sealtun doctor <tunnel-id> --report
 sealtun doctor <tunnel-id> --report --report-file ./doctor.md
 sealtun doctor --fix --dry-run
 sealtun doctor --fix
-sealtun repair <tunnel-id> --dry-run
-sealtun repair <tunnel-id>
+sealtun doctor <tunnel-id> --fix --dry-run
+sealtun doctor <tunnel-id> --fix
 ```
 
 `sealtun discover` scans only local TCP listening ports. It does not probe external networks or create tunnels. For a remote HTTP upstream, use `sealtun expose --target http://host:port`. Standard local hints are `22 -> ssh`, `3306 -> mysql/tcp`, `5432 -> postgres/tcp`, `6379 -> redis/tcp`, `27017 -> mongodb/tcp`, `1883 -> mqtt/tcp`, and other listening ports default to HTTPS/web.
@@ -383,7 +387,7 @@ sealtun repair <tunnel-id>
 
 `sealtun watch` refreshes tunnel or global status until interrupted. Use `--json` for newline-delimited events when another tool needs to consume state changes.
 
-`doctor --fix --dry-run` prints conservative automatic fixes without executing them. `doctor --fix` may start stopped tunnels, clean expired/stale sessions, or start the local daemon. It must not run `cleanup --all`, logout, DNS provider changes, or cleanup active tunnels. `repair <tunnel-id>` is the single-tunnel wrapper around this safe repair flow; prefer `repair <id> --dry-run` before execution.
+`doctor --fix --dry-run` prints conservative automatic fixes without executing them. `doctor --fix` may start stopped tunnels, clean expired/stale sessions, or start the local daemon. It must not run `cleanup --all`, logout, DNS provider changes, or cleanup active tunnels. `repair <tunnel-id>` remains a Deprecated compatibility wrapper and should not be recommended for new usage.
 
 Use `doctor <tunnel-id>` for "why can't I connect" issues. It checks the local session, owner process or daemon, local target port, remote resources where credentials are available, and prints next-step suggestions. Use `doctor --fix --dry-run` before any automatic fix. Use `doctor <id> --report` to create a redacted Markdown report for support or issue triage; it should not include tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
 

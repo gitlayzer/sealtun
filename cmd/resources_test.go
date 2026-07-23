@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -90,7 +91,7 @@ func TestActiveScopedSessionRejectsOutsideScope(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := activeScopedSession("otherns"); err == nil || !strings.Contains(err.Error(), "outside the active scope") {
+	if _, err := activeScopedSession(context.Background(), "otherns"); err == nil || !strings.Contains(err.Error(), "outside the active scope") {
 		t.Fatalf("expected active scope rejection, got %v", err)
 	}
 }

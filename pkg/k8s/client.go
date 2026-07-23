@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,13 +19,13 @@ import (
 
 	"github.com/labring/sealtun/pkg/accesspolicy"
 	"github.com/labring/sealtun/pkg/auth"
-	"github.com/labring/sealtun/pkg/mesh"
 	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
 	"github.com/labring/sealtun/pkg/publicauth"
 	"github.com/labring/sealtun/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,293 +40,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/retry"
 )
-
-type Client struct {
-	clientset     kubernetes.Interface
-	dynamicClient dynamic.Interface
-	namespace     string
-	domain        string // inferred sealos domain
-}
-
-type CleanupSummary struct {
-	Deployments  int
-	Services     int
-	Ingresses    int
-	Certificates int
-	Issuers      int
-	Secrets      int
-}
-
-type TunnelOptions struct {
-	CustomDomain string
-	SealosHost   string
-	TargetURL    string
-	BasicAuth    *BasicAuthOptions
-	AccessPolicy *accesspolicy.Policy
-	Resources    *ResourceConfig
-}
-
-type ResourceConfig struct {
-	Requests ResourceValues
-	Limits   ResourceValues
-}
-
-type ResourceValues struct {
-	CPU    string
-	Memory string
-}
-
-type MeshGatewaySpec struct {
-	MeshName string
-	Token    string
-	Routes   []mesh.GatewayRoute
-}
-
-type MeshGatewayStatus struct {
-	Name      string
-	Host      string
-	Namespace string
-}
-
-type MeshImportSpec struct {
-	Name       string
-	MeshName   string
-	Protocol   string
-	Port       int32
-	TargetPort int32
-}
-
-type MeshCheck struct {
-	GatewayDeploymentReady bool
-	GatewayServiceExists   bool
-	GatewayIngressHost     string
-	ImportServiceExists    bool
-	Warnings               []string
-}
-
-const (
-	DefaultRequestCPU    = "10m"
-	DefaultRequestMemory = "32Mi"
-	DefaultLimitCPU      = "200m"
-	DefaultLimitMemory   = "128Mi"
-)
-
-func DefaultResourceConfig() *ResourceConfig {
-	return &ResourceConfig{
-		Requests: ResourceValues{CPU: DefaultRequestCPU, Memory: DefaultRequestMemory},
-		Limits:   ResourceValues{CPU: DefaultLimitCPU, Memory: DefaultLimitMemory},
-	}
-}
-
-func EffectiveResourceConfig(config *ResourceConfig) *ResourceConfig {
-	if config == nil {
-		return DefaultResourceConfig()
-	}
-	defaults := DefaultResourceConfig()
-	out := &ResourceConfig{
-		Requests: ResourceValues{
-			CPU:    defaultResourceValue(config.Requests.CPU, defaults.Requests.CPU),
-			Memory: defaultResourceValue(config.Requests.Memory, defaults.Requests.Memory),
-		},
-		Limits: ResourceValues{
-			CPU:    defaultResourceValue(config.Limits.CPU, defaults.Limits.CPU),
-			Memory: defaultResourceValue(config.Limits.Memory, defaults.Limits.Memory),
-		},
-	}
-	return out
-}
-
-func defaultResourceValue(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return strings.TrimSpace(value)
-}
-
-type BasicAuthOptions struct {
-	Username     string
-	PasswordHash string
-}
-
-type TunnelHosts struct {
-	PublicHost   string
-	SealosHost   string
-	CustomDomain string
-	PublicPort   int32
-}
-
-type TunnelDiagnostics struct {
-	Namespace   string                  `json:"namespace"`
-	Name        string                  `json:"name"`
-	Deployment  DeploymentDiagnostics   `json:"deployment"`
-	Service     ServiceDiagnostics      `json:"service"`
-	Ingress     IngressDiagnostics      `json:"ingress"`
-	Certificate *CertificateDiagnostics `json:"certificate,omitempty"`
-	Pods        []PodDiagnostics        `json:"pods,omitempty"`
-	Events      []EventDiagnostic       `json:"events,omitempty"`
-	Warnings    []string                `json:"warnings,omitempty"`
-}
-
-type TunnelRemoteState struct {
-	PublicHost   string               `json:"publicHost,omitempty"`
-	SealosHost   string               `json:"sealosHost,omitempty"`
-	CustomDomain string               `json:"customDomain,omitempty"`
-	PublicPort   int32                `json:"publicPort,omitempty"`
-	Secret       string               `json:"secret,omitempty"`
-	Protocol     string               `json:"protocol,omitempty"`
-	LocalPort    string               `json:"localPort,omitempty"`
-	TargetURL    string               `json:"targetUrl,omitempty"`
-	BasicAuth    *BasicAuthOptions    `json:"basicAuth,omitempty"`
-	AccessPolicy *accesspolicy.Policy `json:"accessPolicy,omitempty"`
-	Resources    *ResourceConfig      `json:"resources,omitempty"`
-	AuthSecretOK bool                 `json:"-"`
-	DeploymentOK bool                 `json:"-"`
-}
-
-type DeploymentDiagnostics struct {
-	Exists            bool                  `json:"exists"`
-	ReadyReplicas     int32                 `json:"readyReplicas"`
-	AvailableReplicas int32                 `json:"availableReplicas"`
-	DesiredReplicas   int32                 `json:"desiredReplicas"`
-	UpdatedReplicas   int32                 `json:"updatedReplicas"`
-	Conditions        []ConditionDiagnostic `json:"conditions,omitempty"`
-}
-
-type ServiceDiagnostics struct {
-	Exists    bool     `json:"exists"`
-	Type      string   `json:"type,omitempty"`
-	ClusterIP string   `json:"clusterIp,omitempty"`
-	Ports     []string `json:"ports,omitempty"`
-}
-
-type IngressDiagnostics struct {
-	Exists    bool     `json:"exists"`
-	ClassName string   `json:"className,omitempty"`
-	Hosts     []string `json:"hosts,omitempty"`
-	Paths     []string `json:"paths,omitempty"`
-	TLSHosts  []string `json:"tlsHosts,omitempty"`
-}
-
-type CertificateDiagnostics struct {
-	Exists     bool                  `json:"exists"`
-	Ready      bool                  `json:"ready"`
-	SecretName string                `json:"secretName,omitempty"`
-	DNSNames   []string              `json:"dnsNames,omitempty"`
-	Conditions []ConditionDiagnostic `json:"conditions,omitempty"`
-}
-
-type PodDiagnostics struct {
-	Name          string                `json:"name"`
-	Phase         string                `json:"phase"`
-	Ready         bool                  `json:"ready"`
-	RestartCount  int32                 `json:"restartCount"`
-	Reason        string                `json:"reason,omitempty"`
-	Message       string                `json:"message,omitempty"`
-	ContainerInfo []ContainerDiagnostic `json:"containers,omitempty"`
-	Conditions    []ConditionDiagnostic `json:"conditions,omitempty"`
-}
-
-type ContainerDiagnostic struct {
-	Name         string `json:"name"`
-	Ready        bool   `json:"ready"`
-	RestartCount int32  `json:"restartCount"`
-	State        string `json:"state,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	Message      string `json:"message,omitempty"`
-	Image        string `json:"image,omitempty"`
-}
-
-type ConditionDiagnostic struct {
-	Type    string `json:"type"`
-	Status  string `json:"status"`
-	Reason  string `json:"reason,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
-type EventDiagnostic struct {
-	Type           string `json:"type,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	Message        string `json:"message,omitempty"`
-	Object         string `json:"object,omitempty"`
-	Count          int32  `json:"count,omitempty"`
-	FirstTimestamp string `json:"firstTimestamp,omitempty"`
-	LastTimestamp  string `json:"lastTimestamp,omitempty"`
-}
-
-type TunnelResourceList struct {
-	Namespace string           `json:"namespace"`
-	TunnelID  string           `json:"tunnelId"`
-	Resources []TunnelResource `json:"resources,omitempty"`
-	Warnings  []string         `json:"warnings,omitempty"`
-}
-
-type TunnelResource struct {
-	Kind      string            `json:"kind"`
-	Name      string            `json:"name"`
-	Status    string            `json:"status"`
-	Age       string            `json:"age,omitempty"`
-	Namespace string            `json:"namespace"`
-	Managed   bool              `json:"managed"`
-	Labels    map[string]string `json:"labels,omitempty"`
-	Warnings  []string          `json:"warnings,omitempty"`
-	CostHints []string          `json:"costHints,omitempty"`
-}
-
-type TunnelLogOptions struct {
-	TailLines    int64
-	SinceSeconds int64
-	Follow       bool
-}
-
-type resourceKind string
-
-const (
-	resourceDeployment  resourceKind = "deployment"
-	resourceService     resourceKind = "service"
-	resourceTCPService  resourceKind = "tcp-service"
-	resourceIngress     resourceKind = "ingress"
-	resourceIssuer      resourceKind = "issuer"
-	resourceCertificate resourceKind = "certificate"
-	resourceSecret      resourceKind = "secret"
-)
-
-const (
-	managedLabelKey       = "cloud.sealos.io/app-deploy-manager"
-	managedDomainLabelKey = "cloud.sealos.io/app-deploy-manager-domain"
-	serverConfigDigestKey = "sealtun.labring.com/server-config"
-	tunnelAuthSecretKey   = "secret"
-	basicAuthUserKey      = "basicAuthUsername"
-	basicAuthPasswordKey  = "basicAuthPasswordHash"
-	accessPolicyKey       = "accessPolicy"
-	configDigestSaltKey   = "configDigestSalt"
-	meshConfigDigestKey   = "sealtun.labring.com/mesh-config"
-	meshRoutesKey         = "routes.json"
-	meshTokenKey          = "token"
-)
-
-var reservedCustomDomainSuffixes = []string{
-	"cloud.sealos.app",
-	"cloud.sealos.io",
-	"sealosbja.site",
-	"sealosgzg.site",
-	"sealoshzh.site",
-	"usw-1.sealos.app",
-}
-
-var (
-	tunnelIDPattern       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,53}[a-z0-9])?$`)
-	dnsLabelPattern       = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	releaseVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
-)
-
-const serverRunAsUserID int64 = 1001
-
-const meshOwnerName = "sealtun-mesh"
-
-type createdResource struct {
-	kind resourceKind
-	name string
-}
 
 // NewClient initializes a Kubernetes client from the sealtun config
 func NewClient(kubeconfigPath string, authData *auth.AuthData) (*Client, error) {
@@ -472,7 +184,7 @@ func (c *Client) EnsureTunnelWithOptions(ctx context.Context, tunnelID string, s
 	}
 	protocol = tunnelprotocol.Normalize(protocol)
 
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	opts.CustomDomain = normalizeHostname(opts.CustomDomain)
 	opts.SealosHost = normalizeHostname(opts.SealosHost)
 	if opts.SealosHost == "" {
@@ -601,6 +313,10 @@ func authSecretName(name string) string {
 	return name + "-auth"
 }
 
+func tunnelResourceName(tunnelID string) string {
+	return "sealtun-" + tunnelID
+}
+
 func managedLabels(name string) map[string]string {
 	return map[string]string{
 		"app":           name,
@@ -717,6 +433,12 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 		_, err := secretClient.Create(ctx, authSecret, metav1.CreateOptions{})
 		return err == nil, salt, err
 	} else if getErr == nil {
+		if err := rejectUnmanagedExisting("secret", authSecret.Name, name, existing.Labels); err != nil {
+			return false, nil, err
+		}
+		if authSecretUpToDate(authSecret, existing) {
+			return false, salt, nil
+		}
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			current, err := secretClient.Get(ctx, authSecret.Name, metav1.GetOptions{})
 			if err != nil {
@@ -724,6 +446,9 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 			}
 			if err := rejectUnmanagedExisting("secret", authSecret.Name, name, current.Labels); err != nil {
 				return err
+			}
+			if authSecretUpToDate(authSecret, current) {
+				return nil
 			}
 			next := authSecret.DeepCopy()
 			next.ResourceVersion = current.ResourceVersion
@@ -733,6 +458,13 @@ func (c *Client) ensureAuthSecret(ctx context.Context, name, secret string, basi
 		return false, salt, err
 	}
 	return false, nil, getErr
+}
+
+func authSecretUpToDate(desired, current *corev1.Secret) bool {
+	return desired != nil && current != nil &&
+		desired.Type == current.Type &&
+		apiequality.Semantic.DeepEqual(desired.Data, current.Data) &&
+		mapContains(current.Labels, desired.Labels)
 }
 
 func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, localPort, targetURL string, salt []byte, basicAuth *BasicAuthOptions, policy *accesspolicy.Policy, resources *ResourceConfig) (bool, error) {
@@ -878,6 +610,9 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 		if err := rejectUnmanagedExisting("deployment", name, name, existing.Labels); err != nil {
 			return false, err
 		}
+		if deploymentUpToDate(deployment, existing) {
+			return false, nil
+		}
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			current, err := deployClient.Get(ctx, name, metav1.GetOptions{})
 			if err != nil {
@@ -886,6 +621,9 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 			if err := rejectUnmanagedExisting("deployment", name, name, current.Labels); err != nil {
 				return err
 			}
+			if deploymentUpToDate(deployment, current) {
+				return nil
+			}
 			next := deployment.DeepCopy()
 			next.ResourceVersion = current.ResourceVersion
 			_, err = deployClient.Update(ctx, next, metav1.UpdateOptions{})
@@ -893,6 +631,70 @@ func (c *Client) ensureDeployment(ctx context.Context, name, secret, protocol, l
 		})
 	}
 	return false, err
+}
+
+func deploymentUpToDate(desired, current *appsv1.Deployment) bool {
+	if desired == nil || current == nil || !mapContains(current.Labels, desired.Labels) {
+		return false
+	}
+	if !apiequality.Semantic.DeepEqual(desired.Spec.Replicas, current.Spec.Replicas) ||
+		!apiequality.Semantic.DeepEqual(desired.Spec.Selector, current.Spec.Selector) ||
+		!mapContains(current.Spec.Template.Labels, desired.Spec.Template.Labels) ||
+		!mapContains(current.Spec.Template.Annotations, desired.Spec.Template.Annotations) {
+		return false
+	}
+	if !apiequality.Semantic.DeepEqual(desired.Spec.Template.Spec.AutomountServiceAccountToken, current.Spec.Template.Spec.AutomountServiceAccountToken) {
+		return false
+	}
+	for _, desiredContainer := range desired.Spec.Template.Spec.Containers {
+		var currentContainer *corev1.Container
+		for i := range current.Spec.Template.Spec.Containers {
+			if current.Spec.Template.Spec.Containers[i].Name == desiredContainer.Name {
+				currentContainer = &current.Spec.Template.Spec.Containers[i]
+				break
+			}
+		}
+		if currentContainer == nil || !managedContainerUpToDate(&desiredContainer, currentContainer) {
+			return false
+		}
+	}
+	for _, desiredVolume := range desired.Spec.Template.Spec.Volumes {
+		found := false
+		for i := range current.Spec.Template.Spec.Volumes {
+			if current.Spec.Template.Spec.Volumes[i].Name == desiredVolume.Name {
+				found = apiequality.Semantic.DeepDerivative(desiredVolume, current.Spec.Template.Spec.Volumes[i])
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func managedContainerUpToDate(desired, current *corev1.Container) bool {
+	if desired == nil || current == nil {
+		return false
+	}
+	return desired.Image == current.Image &&
+		desired.ImagePullPolicy == current.ImagePullPolicy &&
+		apiequality.Semantic.DeepEqual(desired.Args, current.Args) &&
+		apiequality.Semantic.DeepEqual(desired.Env, current.Env) &&
+		apiequality.Semantic.DeepEqual(desired.Ports, current.Ports) &&
+		apiequality.Semantic.DeepEqual(desired.Resources, current.Resources) &&
+		apiequality.Semantic.DeepEqual(desired.VolumeMounts, current.VolumeMounts) &&
+		apiequality.Semantic.DeepDerivative(desired.SecurityContext, current.SecurityContext) &&
+		apiequality.Semantic.DeepDerivative(desired.ReadinessProbe, current.ReadinessProbe)
+}
+
+func mapContains(current, desired map[string]string) bool {
+	for key, value := range desired {
+		if current[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func imageTagForVersion(value string) string {
@@ -962,7 +764,7 @@ func (c *Client) UpdateTunnelResources(ctx context.Context, tunnelID string, res
 	if err := validateTunnelID(tunnelID); err != nil {
 		return err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	requirements, err := resourceRequirementsForConfig(resources)
 	if err != nil {
 		return err
@@ -979,6 +781,9 @@ func (c *Client) UpdateTunnelResources(ctx context.Context, tunnelID string, res
 		}
 		if len(current.Spec.Template.Spec.Containers) == 0 {
 			return fmt.Errorf("deployment %s has no containers", name)
+		}
+		if apiequality.Semantic.DeepEqual(current.Spec.Template.Spec.Containers[0].Resources, requirements) {
+			return nil
 		}
 		next := current.DeepCopy()
 		next.Spec.Template.Spec.Containers[0].Resources = requirements
@@ -1041,232 +846,38 @@ func (c *Client) applyService(ctx context.Context, service *corev1.Service, owne
 		service.Spec.InternalTrafficPolicy = existing.Spec.InternalTrafficPolicy
 		service.Spec.TrafficDistribution = existing.Spec.TrafficDistribution
 		preserveExistingNodePorts(&service.Spec, existing.Spec)
+		if serviceUpToDate(service, existing) {
+			return false, nil
+		}
 		_, err = svcClient.Update(ctx, service, metav1.UpdateOptions{})
 	}
 	return false, err
 }
 
-func meshGatewayName(meshName string) string {
-	name := mesh.NormalizeName(meshName)
-	if name == "" {
-		name = mesh.DefaultName
+func serviceUpToDate(desired, current *corev1.Service) bool {
+	if desired == nil || current == nil || !mapContains(current.Labels, desired.Labels) {
+		return false
 	}
-	return "sealtun-mesh-" + name
-}
-
-func meshGatewaySelector(owner string) map[string]string {
-	return map[string]string{
-		"app":           mesh.DefaultGatewayName,
-		managedLabelKey: owner,
+	if desired.Spec.Type != current.Spec.Type || !apiequality.Semantic.DeepEqual(desired.Spec.Selector, current.Spec.Selector) {
+		return false
 	}
-}
-
-func meshGatewayLabels(owner string) map[string]string {
-	return meshGatewaySelector(owner)
-}
-
-func (c *Client) ensureMeshSecret(ctx context.Context, name, token string) error {
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: c.namespace,
-			Labels:    managedLabels(name),
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{meshTokenKey: []byte(token)},
+	if len(desired.Spec.Ports) != len(current.Spec.Ports) {
+		return false
 	}
-	client := c.clientset.CoreV1().Secrets(c.namespace)
-	existing, err := client.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Create(ctx, secret, metav1.CreateOptions{})
-		return err
+	for i := range desired.Spec.Ports {
+		want := desired.Spec.Ports[i]
+		got := current.Spec.Ports[i]
+		if want.Protocol == "" {
+			want.Protocol = corev1.ProtocolTCP
+		}
+		if got.Protocol == "" {
+			got.Protocol = corev1.ProtocolTCP
+		}
+		if !apiequality.Semantic.DeepEqual(want, got) {
+			return false
+		}
 	}
-	if err != nil {
-		return err
-	}
-	if err := rejectUnmanagedExisting("secret", name, name, existing.Labels); err != nil {
-		return err
-	}
-	secret.ResourceVersion = existing.ResourceVersion
-	_, err = client.Update(ctx, secret, metav1.UpdateOptions{})
-	return err
-}
-
-func (c *Client) ensureMeshConfigMap(ctx context.Context, name string, routesJSON []byte) error {
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: c.namespace,
-			Labels:    managedLabels(name),
-		},
-		Data: map[string]string{meshRoutesKey: string(routesJSON)},
-	}
-	client := c.clientset.CoreV1().ConfigMaps(c.namespace)
-	existing, err := client.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Create(ctx, configMap, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if err := rejectUnmanagedExisting("configmap", name, name, existing.Labels); err != nil {
-		return err
-	}
-	configMap.ResourceVersion = existing.ResourceVersion
-	_, err = client.Update(ctx, configMap, metav1.UpdateOptions{})
-	return err
-}
-
-func (c *Client) ensureMeshDeployment(ctx context.Context, name, configDigest string) error {
-	replicas := int32(1)
-	f := false
-	t := true
-	u := serverRunAsUserID
-	image, err := serverImageForVersion(version.Version)
-	if err != nil {
-		return err
-	}
-	requirements, err := resourceRequirementsForConfig(DefaultResourceConfig())
-	if err != nil {
-		return err
-	}
-	labels := meshGatewayLabels(name)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.namespace, Labels: labels},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: meshGatewaySelector(name)},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
-					Annotations: map[string]string{meshConfigDigestKey: configDigest},
-				},
-				Spec: corev1.PodSpec{
-					AutomountServiceAccountToken: &f,
-					Containers: []corev1.Container{
-						{
-							Name:            mesh.DefaultGatewayName,
-							Image:           image,
-							ImagePullPolicy: corev1.PullAlways,
-							Args: []string{
-								"mesh", "gateway",
-								"--listen", fmt.Sprintf(":%d", mesh.DefaultGatewayPort),
-								"--routes-env", "SEALTUN_MESH_ROUTES",
-								"--token-env", "SEALTUN_MESH_TOKEN",
-							},
-							Env: []corev1.EnvVar{
-								{
-									Name: "SEALTUN_MESH_ROUTES",
-									ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: name},
-										Key:                  meshRoutesKey,
-									}},
-								},
-								{
-									Name: "SEALTUN_MESH_TOKEN",
-									ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{Name: name},
-										Key:                  meshTokenKey,
-									}},
-								},
-							},
-							Ports:     []corev1.ContainerPort{{Name: "http", ContainerPort: mesh.DefaultGatewayPort}},
-							Resources: requirements,
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "tmp", MountPath: "/tmp"},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: &f,
-								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-								ReadOnlyRootFilesystem:   &t,
-								RunAsNonRoot:             &t,
-								RunAsUser:                &u,
-								RunAsGroup:               &u,
-								SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler:        corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/_sealtun/mesh/healthz", Port: intstr.FromInt32(mesh.DefaultGatewayPort)}},
-								InitialDelaySeconds: 1,
-								PeriodSeconds:       2,
-							},
-						},
-					},
-					Volumes: []corev1.Volume{{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}},
-				},
-			},
-		},
-	}
-	client := c.clientset.AppsV1().Deployments(c.namespace)
-	existing, err := client.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Create(ctx, deployment, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if err := rejectUnmanagedExisting("deployment", name, name, existing.Labels); err != nil {
-		return err
-	}
-	deployment.ResourceVersion = existing.ResourceVersion
-	_, err = client.Update(ctx, deployment, metav1.UpdateOptions{})
-	return err
-}
-
-func (c *Client) ensureMeshGatewayService(ctx context.Context, name string) (bool, error) {
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.namespace, Labels: managedLabels(name)},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: meshGatewaySelector(name),
-			Ports:    []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromInt32(mesh.DefaultGatewayPort)}},
-		},
-	}
-	return c.applyService(ctx, service, name)
-}
-
-func (c *Client) ensureMeshGatewayIngress(ctx context.Context, name, host string) (bool, error) {
-	pathType := netv1.PathTypePrefix
-	ingressClass := "nginx"
-	ingress := c.generateIngress(name, host, "", []string{"/"}, &pathType, &ingressClass)
-	return c.applyIngress(ctx, ingress)
-}
-
-func (c *Client) deleteMeshConfigMap(ctx context.Context, name string) error {
-	client := c.clientset.CoreV1().ConfigMaps(c.namespace)
-	resource, err := client.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !managedLabelMatches(resource.Labels, name) {
-		return nil
-	}
-	if err := client.Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) deleteMeshSecret(ctx context.Context, name string) error {
-	client := c.clientset.CoreV1().Secrets(c.namespace)
-	resource, err := client.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !managedLabelMatches(resource.Labels, name) {
-		return nil
-	}
-	if err := client.Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	return nil
+	return true
 }
 
 func httpServiceSpec(labels map[string]string) corev1.ServiceSpec {
@@ -1385,215 +996,14 @@ func (c *Client) sealosHost(name string) string {
 }
 
 func (c *Client) SealosHost(tunnelID string) string {
-	return c.sealosHost(fmt.Sprintf("sealtun-%s", tunnelID))
-}
-
-func (c *Client) MeshGatewayHost(meshName string) string {
-	name := meshGatewayName(meshName)
-	return c.sealosHost(name)
-}
-
-func (c *Client) EnsureMeshGateway(ctx context.Context, spec MeshGatewaySpec) (MeshGatewayStatus, error) {
-	spec.MeshName = mesh.NormalizeName(spec.MeshName)
-	if spec.MeshName == "" {
-		spec.MeshName = mesh.DefaultName
-	}
-	if err := mesh.ValidateName("mesh name", spec.MeshName); err != nil {
-		return MeshGatewayStatus{}, err
-	}
-	if strings.TrimSpace(spec.Token) == "" {
-		return MeshGatewayStatus{}, fmt.Errorf("mesh gateway token is required")
-	}
-	for _, route := range spec.Routes {
-		if err := mesh.ValidateRoute(route); err != nil {
-			return MeshGatewayStatus{}, err
-		}
-	}
-	name := meshGatewayName(spec.MeshName)
-	host := c.MeshGatewayHost(spec.MeshName)
-	if err := validateSealosHost(host); err != nil {
-		return MeshGatewayStatus{}, err
-	}
-	routesJSON, err := json.Marshal(spec.Routes)
-	if err != nil {
-		return MeshGatewayStatus{}, err
-	}
-	configDigest := meshConfigDigest(spec.Token, routesJSON)
-	if err := c.ensureMeshSecret(ctx, name, spec.Token); err != nil {
-		return MeshGatewayStatus{}, fmt.Errorf("ensure mesh secret: %w", err)
-	}
-	if err := c.ensureMeshConfigMap(ctx, name, routesJSON); err != nil {
-		return MeshGatewayStatus{}, fmt.Errorf("ensure mesh config: %w", err)
-	}
-	if err := c.ensureMeshDeployment(ctx, name, configDigest); err != nil {
-		return MeshGatewayStatus{}, fmt.Errorf("ensure mesh deployment: %w", err)
-	}
-	if _, err := c.ensureMeshGatewayService(ctx, name); err != nil {
-		return MeshGatewayStatus{}, fmt.Errorf("ensure mesh gateway service: %w", err)
-	}
-	if _, err := c.ensureMeshGatewayIngress(ctx, name, host); err != nil {
-		return MeshGatewayStatus{}, fmt.Errorf("ensure mesh gateway ingress: %w", err)
-	}
-	return MeshGatewayStatus{Name: name, Host: host, Namespace: c.namespace}, nil
-}
-
-func meshConfigDigest(token string, routesJSON []byte) string {
-	hash := sha256.New()
-	_, _ = hash.Write([]byte(strings.TrimSpace(token)))
-	_, _ = hash.Write([]byte{0})
-	_, _ = hash.Write(routesJSON)
-	return hex.EncodeToString(hash.Sum(nil))
-}
-
-func (c *Client) EnsureMeshImport(ctx context.Context, spec MeshImportSpec) (string, error) {
-	name := mesh.ImportServiceName(spec.Name)
-	if err := mesh.ValidateName("mesh import service", name); err != nil {
-		return "", err
-	}
-	if err := mesh.ValidateProtocol(spec.Protocol); err != nil {
-		return "", err
-	}
-	if spec.Port < 1 || spec.Port > 65535 {
-		return "", fmt.Errorf("invalid mesh import port %d", spec.Port)
-	}
-	if spec.TargetPort < 1 || spec.TargetPort > 65535 {
-		return "", fmt.Errorf("invalid mesh import target port %d", spec.TargetPort)
-	}
-	owner := meshGatewayName(spec.MeshName)
-	labels := managedLabels(meshOwnerName)
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: c.namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: meshGatewaySelector(owner),
-			Ports: []corev1.ServicePort{
-				{
-					Name:       mesh.NormalizeProtocol(spec.Protocol),
-					Port:       spec.Port,
-					TargetPort: intstr.FromInt32(spec.TargetPort),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
-	}
-	if _, err := c.applyService(ctx, service, meshOwnerName); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", name, c.namespace, spec.Port), nil
-}
-
-func (c *Client) CleanupMeshImport(ctx context.Context, name string) error {
-	_, err := c.deleteNamedServiceIfOwned(ctx, mesh.ImportServiceName(name), meshOwnerName)
-	return err
-}
-
-func (c *Client) MeshCheck(ctx context.Context, meshName string, service mesh.Service) (MeshCheck, error) {
-	out := MeshCheck{}
-	name := meshGatewayName(meshName)
-	deployment, err := c.clientset.AppsV1().Deployments(c.namespace).Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		out.Warnings = append(out.Warnings, "mesh gateway deployment is missing")
-	} else if err != nil {
-		return out, err
-	} else {
-		out.GatewayDeploymentReady = deployment.Status.ReadyReplicas > 0
-		if !out.GatewayDeploymentReady {
-			out.Warnings = append(out.Warnings, fmt.Sprintf("mesh gateway deployment has %d ready replicas", deployment.Status.ReadyReplicas))
-		}
-	}
-	if _, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, name, metav1.GetOptions{}); apierrors.IsNotFound(err) {
-		out.Warnings = append(out.Warnings, "mesh gateway service is missing")
-	} else if err != nil {
-		return out, err
-	} else {
-		out.GatewayServiceExists = true
-	}
-	if ingress, err := c.clientset.NetworkingV1().Ingresses(c.namespace).Get(ctx, name, metav1.GetOptions{}); apierrors.IsNotFound(err) {
-		out.Warnings = append(out.Warnings, "mesh gateway ingress is missing")
-	} else if err != nil {
-		return out, err
-	} else if len(ingress.Spec.Rules) > 0 {
-		out.GatewayIngressHost = ingress.Spec.Rules[0].Host
-	}
-	importName := mesh.ImportServiceName(service.Name)
-	if _, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, importName, metav1.GetOptions{}); apierrors.IsNotFound(err) {
-		out.Warnings = append(out.Warnings, fmt.Sprintf("mesh import service %s is missing", importName))
-	} else if err != nil {
-		return out, err
-	} else {
-		out.ImportServiceExists = true
-	}
-	return out, nil
-}
-
-func (c *Client) KubernetesServiceReady(ctx context.Context, namespace, serviceName string) (bool, int, error) {
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
-		namespace = c.namespace
-	}
-	serviceName = strings.TrimSpace(serviceName)
-	if serviceName == "" {
-		return false, 0, fmt.Errorf("service name is required")
-	}
-	service, err := c.clientset.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, 0, nil
-	}
-	if err != nil {
-		return false, 0, err
-	}
-	selector := klabels.Set(service.Spec.Selector).AsSelector()
-	if selector.Empty() {
-		return true, 0, nil
-	}
-	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
-	if err != nil {
-		return false, 0, err
-	}
-	ready := 0
-	for _, pod := range pods.Items {
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-				ready++
-				break
-			}
-		}
-	}
-	return true, ready, nil
-}
-
-func (c *Client) CleanupMesh(ctx context.Context, meshName string) error {
-	name := meshGatewayName(meshName)
-	var firstErr error
-	if deleted, err := c.deleteDeploymentIfOwned(ctx, name); err != nil {
-		recordFirstErr(&firstErr, err)
-	} else if !deleted {
-		_ = deleted
-	}
-	if _, err := c.deleteNamedServiceIfOwned(ctx, name, name); err != nil {
-		recordFirstErr(&firstErr, err)
-	}
-	if _, err := c.deleteIngressIfOwned(ctx, name, name); err != nil {
-		recordFirstErr(&firstErr, err)
-	}
-	if err := c.deleteMeshConfigMap(ctx, name); err != nil {
-		recordFirstErr(&firstErr, err)
-	}
-	if err := c.deleteMeshSecret(ctx, name); err != nil {
-		recordFirstErr(&firstErr, err)
-	}
-	return firstErr
+	return c.sealosHost(tunnelResourceName(tunnelID))
 }
 
 func (c *Client) TunnelPublicPort(ctx context.Context, tunnelID string) (int32, error) {
 	if err := validateTunnelID(tunnelID); err != nil {
 		return 0, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	service, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, tcpServiceName(name), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return 0, fmt.Errorf("remote service %s is missing", tcpServiceName(name))
@@ -1780,9 +1190,19 @@ func (c *Client) applyIngress(ctx context.Context, ingress *netv1.Ingress) (bool
 			return false, fmt.Errorf("ingress %s already exists but is not managed by Sealtun", ingress.Name)
 		}
 		ingress.ResourceVersion = existing.ResourceVersion
+		if ingressUpToDate(ingress, existing) {
+			return false, nil
+		}
 		_, err = ingClient.Update(ctx, ingress, metav1.UpdateOptions{})
 	}
 	return false, err
+}
+
+func ingressUpToDate(desired, current *netv1.Ingress) bool {
+	return desired != nil && current != nil &&
+		mapContains(current.Labels, desired.Labels) &&
+		mapContains(current.Annotations, desired.Annotations) &&
+		apiequality.Semantic.DeepEqual(desired.Spec, current.Spec)
 }
 
 var (
@@ -1981,7 +1401,7 @@ func (c *Client) ConfigureCustomDomain(ctx context.Context, tunnelID, sealosHost
 	if err := validateTunnelID(tunnelID); err != nil {
 		return TunnelHosts{}, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	customDomain = normalizeHostname(customDomain)
 	if sealosHost == "" {
 		sealosHost = c.sealosHost(name)
@@ -2035,7 +1455,7 @@ func (c *Client) ClearCustomDomain(ctx context.Context, tunnelID, sealosHost str
 	if err := validateTunnelID(tunnelID); err != nil {
 		return TunnelHosts{}, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	if sealosHost == "" {
 		sealosHost = c.sealosHost(name)
 	}
@@ -2179,9 +1599,13 @@ func secretOwnedByManagedCertificate(secret *corev1.Secret, owner string, cert *
 func (c *Client) cleanupCustomDomainResources(ctx context.Context, name string) error {
 	var firstErr error
 	var cert *unstructured.Unstructured
+	var issuer *unstructured.Unstructured
 	var err error
 	if cert, err = c.getDynamicResource(ctx, certificateGVR, name); err != nil {
 		firstErr = err
+	}
+	if issuer, err = c.getDynamicResource(ctx, issuerGVR, name); err != nil {
+		recordFirstErr(&firstErr, err)
 	}
 	_, _, err = c.deleteManagedDynamicResourceIfExists(ctx, certificateGVR, name)
 	if err != nil {
@@ -2193,22 +1617,47 @@ func (c *Client) cleanupCustomDomainResources(ctx context.Context, name string) 
 	if _, _, err := c.deleteManagedDynamicResourceIfExists(ctx, issuerGVR, name); err != nil {
 		recordFirstErr(&firstErr, err)
 	}
-	// The ACME account key secret is created by cert-manager (not us) from the
-	// Issuer's privateKeySecretRef, so it carries no managed label. Delete it by
-	// its deterministic per-tunnel name to avoid leaking it on teardown.
-	if err := c.deleteACMEKeySecret(ctx, name); err != nil {
+	if err := c.deleteACMEKeySecret(ctx, name, issuer); err != nil {
 		recordFirstErr(&firstErr, err)
 	}
 	return firstErr
 }
 
-func (c *Client) deleteACMEKeySecret(ctx context.Context, name string) error {
-	keyName := "letsencrypt-prod-" + name
-	err := c.clientset.CoreV1().Secrets(c.namespace).Delete(ctx, keyName, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
+func (c *Client) deleteACMEKeySecret(ctx context.Context, name string, issuer *unstructured.Unstructured) error {
+	if issuer == nil || !managedLabelMatches(issuer.GetLabels(), name) {
+		return nil
+	}
+	keyName, ok, err := unstructured.NestedString(issuer.Object, "spec", "acme", "privateKeySecretRef", "name")
+	if err != nil || !ok || keyName == "" {
+		return err
+	}
+	secretClient := c.clientset.CoreV1().Secrets(c.namespace)
+	secret, err := secretClient.Get(ctx, keyName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !managedLabelMatches(secret.Labels, name) && !secretOwnedByManagedIssuer(secret, name) {
+		return nil
+	}
+	if err := secretClient.Delete(ctx, keyName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return nil
+}
+
+func secretOwnedByManagedIssuer(secret *corev1.Secret, issuerName string) bool {
+	if secret == nil {
+		return false
+	}
+	for _, ref := range secret.OwnerReferences {
+		if ref.Name == issuerName && ref.Kind == "Issuer" && strings.HasPrefix(ref.APIVersion, "cert-manager.io/") {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) deleteDeploymentIfOwned(ctx context.Context, name string) (bool, error) {
@@ -2328,7 +1777,7 @@ func (c *Client) ScaleTunnel(ctx context.Context, tunnelID string, replicas int3
 	if replicas < 0 {
 		return fmt.Errorf("replicas must be >= 0")
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 
 	deployClient := c.clientset.AppsV1().Deployments(c.namespace)
 	existing, err := deployClient.Get(ctx, name, metav1.GetOptions{})
@@ -2341,9 +1790,9 @@ func (c *Client) ScaleTunnel(ctx context.Context, tunnelID string, replicas int3
 	if err := rejectUnmanagedExisting("deployment", name, name, existing.Labels); err != nil {
 		return err
 	}
-
-	next := existing.DeepCopy()
-	next.Spec.Replicas = &replicas
+	if deploymentReplicaCount(existing) == replicas {
+		return nil
+	}
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		current, err := deployClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -2351,6 +1800,9 @@ func (c *Client) ScaleTunnel(ctx context.Context, tunnelID string, replicas int3
 		}
 		if err := rejectUnmanagedExisting("deployment", name, name, current.Labels); err != nil {
 			return err
+		}
+		if deploymentReplicaCount(current) == replicas {
+			return nil
 		}
 		next := current.DeepCopy()
 		next.Spec.Replicas = &replicas
@@ -2362,11 +1814,18 @@ func (c *Client) ScaleTunnel(ctx context.Context, tunnelID string, replicas int3
 	return nil
 }
 
+func deploymentReplicaCount(deployment *appsv1.Deployment) int32 {
+	if deployment == nil || deployment.Spec.Replicas == nil {
+		return 1
+	}
+	return *deployment.Spec.Replicas
+}
+
 func (c *Client) CleanupTunnel(ctx context.Context, tunnelID string) error {
 	if err := validateTunnelID(tunnelID); err != nil {
 		return err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 
 	var firstErr error
 	if err := c.cleanupCustomDomainResources(ctx, name); err != nil {
@@ -2428,9 +1887,13 @@ func (c *Client) CleanupManaged(ctx context.Context, tunnelIDs []string) (*Clean
 		}
 		seen[tunnelID] = struct{}{}
 
-		name := fmt.Sprintf("sealtun-%s", tunnelID)
+		name := tunnelResourceName(tunnelID)
 		var cert *unstructured.Unstructured
+		var issuer *unstructured.Unstructured
 		if cert, err = c.getDynamicResource(ctx, certificateGVR, name); err != nil {
+			recordFirstErr(&firstErr, err)
+		}
+		if issuer, err = c.getDynamicResource(ctx, issuerGVR, name); err != nil {
 			recordFirstErr(&firstErr, err)
 		}
 		_, deleted, err := c.deleteManagedDynamicResourceIfExists(ctx, certificateGVR, name)
@@ -2455,7 +1918,7 @@ func (c *Client) CleanupManaged(ctx context.Context, tunnelIDs []string) (*Clean
 		} else if deleted {
 			summary.Issuers++
 		}
-		if err := c.deleteACMEKeySecret(ctx, name); err != nil && firstErr == nil {
+		if err := c.deleteACMEKeySecret(ctx, name, issuer); err != nil && firstErr == nil {
 			firstErr = err
 		}
 		if err := c.cleanupCoreResources(ctx, name, summary); err != nil && firstErr == nil {
@@ -2474,29 +1937,41 @@ func (c *Client) TunnelRemoteState(ctx context.Context, tunnelID string) (*Tunne
 	if err := validateTunnelID(tunnelID); err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	state := &TunnelRemoteState{}
-
-	if port, err := c.tunnelPublicPortFromServices(ctx, name); err != nil {
+	if err := c.fillTunnelRemoteStateFromDeployment(ctx, name, state); err != nil {
 		return nil, err
-	} else {
-		state.PublicPort = port
 	}
 
-	ingress, err := c.clientset.NetworkingV1().Ingresses(c.namespace).Get(ctx, name, metav1.GetOptions{})
-	switch {
-	case err == nil:
-		diag := ingressDiagnostics(ingress)
-		state.SealosHost = inferSealosHost(diag.Hosts)
-		state.CustomDomain = inferCustomDomain(diag.Hosts, state.SealosHost)
-	case !apierrors.IsNotFound(err):
-		return nil, fmt.Errorf("get ingress %s: %w", name, err)
+	probeServices := true
+	probeIngress := true
+	switch tunnelprotocol.Normalize(state.Protocol) {
+	case tunnelprotocol.HTTPS:
+		probeServices = false
+	case tunnelprotocol.SSH, tunnelprotocol.TCP:
+		probeIngress = false
+	}
+	if probeServices {
+		if port, err := c.tunnelPublicPortFromServices(ctx, name); err != nil {
+			return nil, err
+		} else {
+			state.PublicPort = port
+		}
+	}
+
+	if probeIngress {
+		ingress, err := c.clientset.NetworkingV1().Ingresses(c.namespace).Get(ctx, name, metav1.GetOptions{})
+		switch {
+		case err == nil:
+			diag := ingressDiagnostics(ingress)
+			state.SealosHost = inferSealosHost(diag.Hosts)
+			state.CustomDomain = inferCustomDomain(diag.Hosts, state.SealosHost)
+		case !apierrors.IsNotFound(err):
+			return nil, fmt.Errorf("get ingress %s: %w", name, err)
+		}
 	}
 
 	if err := c.fillTunnelRemoteStateFromAuthSecret(ctx, name, state); err != nil {
-		return nil, err
-	}
-	if err := c.fillTunnelRemoteStateFromDeployment(ctx, name, state); err != nil {
 		return nil, err
 	}
 
@@ -2628,7 +2103,7 @@ func (c *Client) TunnelResources(ctx context.Context, tunnelID string) (*TunnelR
 	if err := validateTunnelID(tunnelID); err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	out := &TunnelResourceList{
 		Namespace: c.namespace,
 		TunnelID:  tunnelID,
@@ -2877,7 +2352,7 @@ func (c *Client) StreamTunnelLogs(ctx context.Context, tunnelID string, out io.W
 	if out == nil {
 		return fmt.Errorf("log output writer is required")
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	pods, err := c.clientset.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: tunnelPodLabelSelector(name),
 	})
@@ -2927,7 +2402,7 @@ func (c *Client) DiagnoseTunnelWithOptions(ctx context.Context, tunnelID string,
 	if err := validateTunnelID(tunnelID); err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	diag := &TunnelDiagnostics{
 		Namespace: c.namespace,
 		Name:      name,
@@ -3052,7 +2527,7 @@ func (c *Client) WithNamespace(namespace string) *Client {
 
 func compactDNSLabel(value string, limit int) string {
 	value = strings.ToLower(value)
-	value = regexp.MustCompile("[^a-z0-9-]+").ReplaceAllString(value, "-")
+	value = compactDNSLabelPattern.ReplaceAllString(value, "-")
 	value = strings.Trim(value, "-")
 	if value == "" {
 		value = "sealtun"
@@ -3323,9 +2798,11 @@ func (c *Client) WaitForReady(ctx context.Context, tunnelID string) error {
 	if err := validateTunnelID(tunnelID); err != nil {
 		return err
 	}
-	name := fmt.Sprintf("sealtun-%s", tunnelID)
+	name := tunnelResourceName(tunnelID)
 	deployClient := c.clientset.AppsV1().Deployments(c.namespace)
 	var lastErr error
+	pollTimer := time.NewTimer(2 * time.Second)
+	defer pollTimer.Stop()
 
 	for {
 		select {
@@ -3334,8 +2811,9 @@ func (c *Client) WaitForReady(ctx context.Context, tunnelID string) error {
 				return fmt.Errorf("%w; last Kubernetes error: %v", ctx.Err(), lastErr)
 			}
 			return ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-pollTimer.C:
 			dep, err := deployClient.Get(ctx, name, metav1.GetOptions{})
+			pollTimer.Reset(2 * time.Second)
 			if apierrors.IsNotFound(err) {
 				lastErr = err
 				continue

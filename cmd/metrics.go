@@ -68,6 +68,7 @@ var metricsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(metricsCmd)
+	markAlpha(metricsCmd)
 	metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, "Output metrics as JSON")
 	metricsCmd.Flags().BoolVar(&metricsRemote, "remote", true, "Include Kubernetes readiness metrics")
 	metricsCmd.Flags().BoolVar(&metricsServer, "server", true, "Include tunnel server request counters when supported by the remote pod")

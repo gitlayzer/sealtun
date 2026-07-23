@@ -77,6 +77,7 @@ var initCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+	markAlpha(initCmd)
 	initCmd.Flags().BoolVar(&initOpts.JSON, "json", false, "Output onboarding recommendation as JSON")
 	initCmd.Flags().BoolVar(&initOpts.Apply, "apply", false, "Create the recommended tunnel")
 	initCmd.Flags().StringVar(&initOpts.Protocol, "protocol", "auto", "Recommended protocol: auto, https, ssh, tcp, mysql, postgres, redis, mongodb, or mqtt")

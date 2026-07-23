@@ -77,7 +77,7 @@ var policyShowCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		payload, err := showPolicy(args[0], nowUTC())
+		payload, err := showPolicyWithContext(cmd.Context(), args[0], nowUTC())
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,11 @@ func init() {
 }
 
 func showPolicy(tunnelID string, now time.Time) (*policyShowPayload, error) {
-	sess, err := findSessionRefreshed(context.Background(), tunnelID)
+	return showPolicyWithContext(context.Background(), tunnelID, now)
+}
+
+func showPolicyWithContext(ctx context.Context, tunnelID string, now time.Time) (*policyShowPayload, error) {
+	sess, err := findSessionRefreshed(ctx, tunnelID)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +246,11 @@ func fetchServerAudit(ctx context.Context, sess session.TunnelSession, since tim
 func fetchServerAuditURLWithRetry(ctx context.Context, client *http.Client, auditURL, secret string, retryFor, retryEvery time.Duration) (*accesspolicy.AuditPayload, error) {
 	deadline := time.Now().Add(retryFor)
 	var lastErr error
+	waitTimer := time.NewTimer(time.Hour)
+	if !waitTimer.Stop() {
+		<-waitTimer.C
+	}
+	defer waitTimer.Stop()
 	for {
 		payload, err := fetchServerAuditURLOnce(ctx, client, auditURL, secret)
 		if err == nil {
@@ -260,10 +269,11 @@ func fetchServerAuditURLWithRetry(ctx context.Context, client *http.Client, audi
 		} else if remaining < wait {
 			wait = remaining
 		}
+		waitTimer.Reset(wait)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(wait):
+		case <-waitTimer.C:
 		}
 	}
 }

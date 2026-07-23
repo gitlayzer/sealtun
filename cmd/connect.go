@@ -34,8 +34,9 @@ type connectPlanRunner interface {
 }
 
 var (
-	connectSaveState   = clusterconnect.SaveState
-	connectRemoveState = clusterconnect.RemoveState
+	connectSaveState          = clusterconnect.SaveState
+	connectRemoveState        = clusterconnect.RemoveState
+	connectAcquireRuntimeLock = clusterconnect.AcquireRuntimeLock
 )
 
 var connectCmd = &cobra.Command{
@@ -64,24 +65,33 @@ var connectStatusCmd = &cobra.Command{
 	},
 }
 
-var disconnectCmd = &cobra.Command{
-	Use:   "disconnect",
-	Short: "Stop the current cluster connect session",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runDisconnect(cmd)
-	},
+var disconnectCmd = newDisconnectCommand()
+
+var connectDisconnectCmd = newDisconnectCommand()
+
+func newDisconnectCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "disconnect",
+		Short: "Stop the current cluster connect session",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDisconnect(cmd)
+		},
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(disconnectCmd)
 	connectCmd.AddCommand(connectStatusCmd)
+	connectCmd.AddCommand(connectDisconnectCmd)
 	connectCmd.Flags().StringVar(&connectOpts.Mode, "mode", clusterconnect.ModeAuto, "Connect mode: auto or tun")
 	connectCmd.Flags().StringVar(&connectOpts.Namespace, "namespace", "", "Kubernetes namespace to access; defaults to active kubeconfig namespace")
 	connectCmd.Flags().StringVar(&connectOpts.Listen, "listen", "", "Local redirect listener address; defaults to 127.0.0.1:15443")
 	connectCmd.Flags().BoolVar(&connectOpts.Check, "check", false, "Only probe capabilities and print the selected mode")
 	connectCmd.Flags().BoolVar(&connectOpts.JSON, "json", false, "Output preflight/status as JSON")
 	connectStatusCmd.Flags().BoolVar(&connectOpts.JSON, "json", false, "Output status as JSON")
+	markAlphaTree(connectCmd)
+	markDeprecated(disconnectCmd, "sealtun connect disconnect")
 }
 
 func runConnectCheck(cmd *cobra.Command, opts connectOptions) error {
@@ -121,6 +131,12 @@ func runConnect(cmd *cobra.Command, opts connectOptions) error {
 }
 
 func runConnectWithEnvironment(cmd *cobra.Command, opts connectOptions, env connectPreflighter, newServer func(clusterconnect.TransparentOptions) connectPlanRunner) error {
+	releaseRuntime, err := connectAcquireRuntimeLock()
+	if err != nil {
+		return fmt.Errorf("another sealtun connect session is already running: %w", err)
+	}
+	defer releaseRuntime()
+
 	ctx := connectCommandContext(cmd)
 	preflight, err := env.Preflight(ctx, clusterconnect.Options{
 		Mode:      opts.Mode,

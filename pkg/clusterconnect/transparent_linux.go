@@ -23,6 +23,17 @@ const (
 	iptablesBinName = "iptables"
 )
 
+func ensureRootOwnedPrivateFile(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", path)
+	}
+	return nil
+}
+
 type OriginalDestination struct {
 	IP   net.IP
 	Port int

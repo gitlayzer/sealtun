@@ -77,7 +77,7 @@ make build
 
 This repository includes `skills/sealtun` so Codex-like AI agents can understand and use the Sealtun CLI more accurately. The skill is designed to passively match requests about `sealtun`, `sealtun.yaml`, local tunneling, exposing a local port, temporary public preview links, third-party callbacks to a local service, tunnel access control, public SSH, or generic TCP tunnels.
 
-After the skill triggers, it first checks whether the request is actually about making a local/dev service public through Sealtun. It then follows a fixed guidance, live operation, or troubleshooting workflow. Unless the user explicitly asks for execution, it will not run state-changing commands such as `sealtun expose/apply/domain set/stop/cleanup/logout`.
+After the skill triggers, it first checks whether the request is actually about making a local/dev service public through Sealtun. It then follows a fixed guidance, live operation, or troubleshooting workflow. Unless the user explicitly asks for execution, it will not run state-changing commands such as `sealtun expose/apply/domain add/stop/cleanup/logout`.
 
 Install the skill directly from the repository:
 
@@ -94,16 +94,22 @@ cp -R skills/sealtun ~/.codex/skills/sealtun
 
 ## Quick Start
 
+### Feature stability
+
+- **Stable**: `up`, `expose`, `apply/diff`, tunnel lifecycle, security policy, custom domain, account/scope, and the basic `doctor/logs` diagnostics follow compatibility requirements.
+- **Alpha**: `init`, `tui/console`, `connect`, `mesh`, `ssh connect`, and the standalone `discover/template/export/events/metrics/resources/watch` commands. Their current behavior remains available, but interfaces may change or be removed in a future release.
+- **Deprecated**: `repair`, `domain set`, and top-level `disconnect` remain compatibility commands only. New calls should use `doctor <id> --fix`, `domain add`, and `connect disconnect`.
+
 Shortest path:
 
 ```bash
 # 1. Login to Sealos
 sealtun login
 
-# 2. Discover local ports and print recommended commands
-sealtun init
+# 2. Interactively select a port, protocol, and optional security, then create
+sealtun up
 
-# 3. Publish a local Web service, for example localhost:3000
+# 3. Publish an exact local Web service in scripts, for example localhost:3000
 sealtun expose 3000
 
 # 4. Inspect status, diagnosis, and logs
@@ -117,7 +123,7 @@ sealtun start <tunnel-id>
 sealtun cleanup <tunnel-id>
 ```
 
-For interactive day-to-day management, open the terminal console:
+For interactive day-to-day management, open the Alpha terminal console:
 
 ```bash
 sealtun tui
@@ -125,7 +131,7 @@ sealtun tui
 sealtun console
 ```
 
-The TUI reuses the existing CLI logic. Focus starts on the left menu, where up/down switches between `Tunnels`, `Create`, `Tools`, and `Status`; press `enter`, `right`, or `tab` to enter the content area, and `left`, `esc`, or `tab` to return to the menu. `Tunnels` lists and selects sessions; press `o` on a selected tunnel to open `Tunnel Actions` for inspect/doctor/logs/metrics/events/resources/export plus domain/policy/share/resources/rotate/repair/start/stop/cleanup operations. `Create` builds a basic HTTPS/SSH/TCP tunnel from a discovered local port. `Tools` is global-only and runs status, discover, init, template, connect check, domain status, doctor dry-run, export all, and YAML apply dry-run/diff/apply. Write operations show the equivalent CLI command and require confirmation. Real `connect` network takeover remains an explicit CLI flow.
+The TUI reuses the existing CLI logic. Focus starts on the left menu, where up/down switches between `Tunnels`, `Create`, `Tools`, and `Status`; press `enter`, `right`, or `tab` to enter the content area, and `left`, `esc`, or `tab` to return to the menu. `Tunnels` lists and selects sessions; press `o` on a selected tunnel to open `Tunnel Actions` for inspect/doctor/logs/metrics/events/resources/export plus domain/policy/share/resources/rotate/doctor fix/start/stop/cleanup operations. `Create` builds a basic HTTPS/SSH/TCP tunnel from a discovered local port. `Tools` is global-only and runs status, discover, init, template, connect check, domain status, doctor dry-run, export all, and YAML apply dry-run/diff/apply. Write operations show the equivalent CLI command and require confirmation. Real `connect` network takeover remains an explicit CLI flow.
 
 Access in-cluster Services/Pods from Linux:
 
@@ -170,7 +176,7 @@ Built-in regions:
 ### 2. Expose a local port
 For instance, to make your local Web Server running on Port `3000` accessible to everyone on the Internet:
 ```bash
-# First-time guidance prints a recommended command and sealtun.yaml without creating resources
+# Alpha: print first-time guidance and sealtun.yaml without creating resources
 sealtun init
 sealtun init --protocol auto --json
 
@@ -320,7 +326,7 @@ Or attach one to an existing tunnel after DNS is ready:
 sealtun domain plan <tunnel-id> app.example.com
 
 # Attach after DNS is ready
-sealtun domain set <tunnel-id> app.example.com
+sealtun domain add <tunnel-id> app.example.com
 
 # Or wait for DNS, attach automatically, and keep waiting for certificate readiness
 sealtun domain add <tunnel-id> app.example.com --wait --timeout 5m
@@ -350,7 +356,7 @@ Remove the custom domain:
 sealtun domain clear <tunnel-id>
 ```
 
-### 6. Access services inside the cluster
+### 6. Access services inside the cluster (Alpha)
 `sealtun expose` makes a local service public. `sealtun connect` goes the other direction: local tools can directly reach Service FQDNs, Service ClusterIPs, and Pod IPs inside the current Sealos/Kubernetes namespace. It only uses the active Sealtun profile/region/namespace and kubeconfig, so users do not need to manually change RBAC.
 
 Linux currently supports transparent TCP mode. Sealtun temporarily updates local `iptables` and `/etc/hosts`, then forwards intercepted TCP connections through Kubernetes `pods/portforward`. This is not a SOCKS/HTTP proxy, and clients do not need proxy configuration.
@@ -361,7 +367,7 @@ sudo sealtun connect
 sudo sealtun connect --namespace ns-3rgvtt74
 ```
 
-`sealtun connect` runs in the foreground by default. Keep that terminal open, or stop it from another terminal with `sudo sealtun disconnect`; a normal `Ctrl-C` or `disconnect` cleans up the `iptables` rules and `/etc/hosts` block written by Sealtun.
+`sealtun connect` runs in the foreground by default. Keep that terminal open, or stop it from another terminal with `sudo sealtun connect disconnect`; a normal `Ctrl-C` or `connect disconnect` cleans up the `iptables` rules and `/etc/hosts` block written by Sealtun.
 
 After connect starts, use normal client commands:
 ```bash
@@ -374,12 +380,12 @@ Inspect or stop the current cluster connect session:
 ```bash
 sealtun connect status
 sealtun connect status --json
-sudo sealtun disconnect
+sudo sealtun connect disconnect
 ```
 
 Limitations: transparent data-plane support is Linux + TCP only and requires root plus `iptables`; ICMP/ping and UDP are not supported. macOS/Windows fail clearly as unsupported for now.
 
-### 7. Cross-region Mesh
+### 7. Cross-region Mesh (Alpha)
 `sealtun mesh` imports a Kubernetes Service from one Sealos region into other regions. After import, Pods in the importing region can call a local ClusterIP Service such as `http://mesh-api.<namespace>.svc.cluster.local:8080`; traffic is forwarded through the Sealtun Mesh gateways in each region to the source Service.
 
 Mesh v1 is service-level connectivity, not transparent Pod IP/CNI networking. It does not make Pod IPs directly routable across clusters and does not support ICMP/ping or UDP.
@@ -424,6 +430,8 @@ sealtun mesh down
 `mesh service check` verifies the source-region gateway, the import-region ClusterIP Service, and the target Kubernetes Service plus ready Pod count. Mesh gateways use the same-version `ghcr.io/gitlayzer/sealtun` image, so there is no separate gateway image to maintain.
 
 ### 8. Observe tunnels and operate them
+`doctor`, `logs`, and lifecycle operations are Stable. The `metrics`, `events`, `discover`, `resources`, and `watch` commands below are Alpha tools for users who explicitly need those advanced diagnostics.
+
 Show remote tunnel pod logs:
 ```bash
 sealtun logs <tunnel-id>
@@ -472,14 +480,12 @@ sealtun doctor <tunnel-id> --report --report-file ./doctor.md
 
 # Show conservative automatic fixes without executing them
 sealtun doctor --fix --dry-run
-sealtun repair <tunnel-id> --dry-run
 
 # Execute low-risk fixes: resume stopped tunnels, clean expired/stale tunnels, start the local daemon
 sealtun doctor --fix
-sealtun repair <tunnel-id>
 ```
 
-`repair` is the safer single-tunnel repair entrypoint. It reuses the same conservative actions as `doctor --fix`: resume stopped tunnels, clean expired/stale tunnels, or start the local daemon. It does not run `cleanup --all`, delete active tunnels, or change DNS providers. `doctor <id> --report` writes a redacted Markdown troubleshooting report for collaborators or issues without exposing tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
+`doctor --fix` only performs conservative actions: resume stopped tunnels, clean expired/stale tunnels, or start the local daemon. It does not run `cleanup --all`, delete active tunnels, or change DNS providers. The old `repair` command remains only as a Deprecated compatibility entrypoint. `doctor <id> --report` writes a redacted Markdown troubleshooting report for collaborators or issues without exposing tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
 
 Watch tunnel or global status in real time:
 ```bash
@@ -501,7 +507,7 @@ sealtun cleanup --all
 
 `metrics` combines local session state, remote Deployment/Pod/Ingress readiness, and server-side request counters when the remote pod supports the Bearer-secret-protected `/_sealtun/metrics` endpoint. TCP/SSH tunnels also expose TCP connection, active connection, byte, and error counters.
 
-### 9. Protocol templates
+### 9. Protocol templates (Alpha)
 When you are unsure which command or declarative config to use, generate a template first:
 
 ```bash
@@ -584,7 +590,7 @@ sealtun diff -f sealtun.yaml
 sealtun apply -f sealtun.yaml
 ```
 
-Export local sessions back to declarative config:
+Use Alpha `export` to turn local sessions back into declarative config:
 ```bash
 # Export one tunnel to stdout
 sealtun export <tunnel-id>
@@ -612,7 +618,7 @@ basicAuth:
   passwordEnv: SEALTUN_BASIC_AUTH_PASSWORD
 ```
 
-`name` is used as the stable tunnel ID, so repeated `apply` runs update the same `sealtun-<name>` resources. `tunnels` can declare multiple tunnels in one file. `target` is HTTPS-only and must be a `http://` or `https://` URL; if `localPort` is also set, it must match the target port. `targetTls.insecureSkipVerify` applies only to `https://` targets and is intended for private upstreams with self-signed certificates. `resources` can declare remote Pod CPU/memory requests and limits; omitted fields use Sealtun defaults. `ttl` is persisted as `expiresAt` in the local session; the local daemon automatically removes expired remote resources and session records. Custom domains still require verified CNAME ownership before attachment; for a new tunnel, `apply` keeps the Sealos-managed host and prints the follow-up `domain set` command when DNS is not ready. For an existing tunnel, `apply` rejects unverified custom-domain changes so it does not accidentally clear or overwrite a working domain configuration.
+`name` is used as the stable tunnel ID, so repeated `apply` runs update the same `sealtun-<name>` resources. `tunnels` can declare multiple tunnels in one file. `target` is HTTPS-only and must be a `http://` or `https://` URL; if `localPort` is also set, it must match the target port. `targetTls.insecureSkipVerify` applies only to `https://` targets and is intended for private upstreams with self-signed certificates. `resources` can declare remote Pod CPU/memory requests and limits; omitted fields use Sealtun defaults. `ttl` is persisted as `expiresAt` in the local session; the local daemon automatically removes expired remote resources and session records. Custom domains still require verified CNAME ownership before attachment; for a new tunnel, `apply` keeps the Sealos-managed host and prints the follow-up `domain add` command when DNS is not ready. For an existing tunnel, `apply` rejects unverified custom-domain changes so it does not accidentally clear or overwrite a working domain configuration.
 
 ## License
 

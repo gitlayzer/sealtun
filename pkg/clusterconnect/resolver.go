@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 )
@@ -22,7 +24,7 @@ type Target struct {
 
 type ClusterAPI interface {
 	GetService(ctx context.Context, namespace, name string) (*corev1.Service, error)
-	GetEndpoints(ctx context.Context, namespace, name string) (*corev1.Endpoints, error)
+	ListEndpointSlices(ctx context.Context, namespace, serviceName string) (*discoveryv1.EndpointSliceList, error)
 	ListServices(ctx context.Context, namespace string) (*corev1.ServiceList, error)
 	ListPods(ctx context.Context, namespace string, opts metav1.ListOptions) (*corev1.PodList, error)
 }
@@ -44,8 +46,9 @@ func (k *kubeAPI) GetService(ctx context.Context, namespace, name string) (*core
 	return k.clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (k *kubeAPI) GetEndpoints(ctx context.Context, namespace, name string) (*corev1.Endpoints, error) {
-	return k.clientset.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
+func (k *kubeAPI) ListEndpointSlices(ctx context.Context, namespace, serviceName string) (*discoveryv1.EndpointSliceList, error) {
+	selector := labels.Set{discoveryv1.LabelServiceName: serviceName}.AsSelector().String()
+	return k.clientset.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 }
 
 func (k *kubeAPI) ListServices(ctx context.Context, namespace string) (*corev1.ServiceList, error) {
@@ -116,25 +119,31 @@ func (r *Resolver) resolveService(ctx context.Context, svc *corev1.Service, port
 	if err != nil {
 		return nil, err
 	}
-	endpoints, err := r.Client.GetEndpoints(ctx, svc.Namespace, svc.Name)
+	slices, err := r.Client.ListEndpointSlices(ctx, svc.Namespace, svc.Name)
 	if err != nil {
 		return nil, err
 	}
-	for _, subset := range endpoints.Subsets {
-		endpointPort := chooseEndpointPort(servicePort, subset.Ports, port)
+	for sliceIndex := range slices.Items {
+		slice := &slices.Items[sliceIndex]
+		endpointPort := chooseEndpointSlicePort(servicePort, slice.Ports, port)
 		if endpointPort == nil {
 			continue
 		}
-		for _, addr := range subset.Addresses {
-			if addr.TargetRef != nil && addr.TargetRef.Kind == "Pod" && addr.TargetRef.Name != "" {
-				ns := addr.TargetRef.Namespace
+		for endpointIndex := range slice.Endpoints {
+			endpoint := &slice.Endpoints[endpointIndex]
+			if (endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready) ||
+				(endpoint.Conditions.Terminating != nil && *endpoint.Conditions.Terminating) {
+				continue
+			}
+			if endpoint.TargetRef != nil && endpoint.TargetRef.Kind == "Pod" && endpoint.TargetRef.Name != "" {
+				ns := endpoint.TargetRef.Namespace
 				if ns == "" {
 					ns = svc.Namespace
 				}
-				return &Target{Namespace: ns, PodName: addr.TargetRef.Name, PodPort: endpointPort.Port}, nil
+				return &Target{Namespace: ns, PodName: endpoint.TargetRef.Name, PodPort: *endpointPort.Port}, nil
 			}
-			if addr.IP != "" {
-				target, err := r.resolvePodIP(ctx, addr.IP, int(endpointPort.Port))
+			for _, address := range endpoint.Addresses {
+				target, err := r.resolvePodIP(ctx, address, int(*endpointPort.Port))
 				if err == nil {
 					return target, nil
 				}
@@ -164,30 +173,30 @@ func chooseServicePort(svc *corev1.Service, requested int) (*corev1.ServicePort,
 	return nil, fmt.Errorf("service %s/%s has multiple ports; specify one", svc.Namespace, svc.Name)
 }
 
-func chooseEndpointPort(servicePort *corev1.ServicePort, endpointPorts []corev1.EndpointPort, requested int) *corev1.EndpointPort {
+func chooseEndpointSlicePort(servicePort *corev1.ServicePort, endpointPorts []discoveryv1.EndpointPort, requested int) *discoveryv1.EndpointPort {
 	for i := range endpointPorts {
 		port := &endpointPorts[i]
-		if endpointPortMatches(servicePort, port, requested) {
+		if endpointSlicePortMatches(servicePort, port, requested) {
 			return port
 		}
 	}
-	if len(endpointPorts) == 1 {
+	if len(endpointPorts) == 1 && endpointPorts[0].Port != nil {
 		return &endpointPorts[0]
 	}
 	return nil
 }
 
-func endpointPortMatches(servicePort *corev1.ServicePort, endpointPort *corev1.EndpointPort, requested int) bool {
-	if servicePort == nil || endpointPort == nil {
+func endpointSlicePortMatches(servicePort *corev1.ServicePort, endpointPort *discoveryv1.EndpointPort, requested int) bool {
+	if servicePort == nil || endpointPort == nil || endpointPort.Port == nil {
 		return false
 	}
-	if servicePort.Name != "" && endpointPort.Name != "" && servicePort.Name == endpointPort.Name {
+	if servicePort.Name != "" && endpointPort.Name != nil && servicePort.Name == *endpointPort.Name {
 		return true
 	}
-	if requested > 0 && int(endpointPort.Port) == requested {
+	if requested > 0 && int(*endpointPort.Port) == requested {
 		return true
 	}
-	return targetPortMatches(servicePort.TargetPort, endpointPort.Port)
+	return targetPortMatches(servicePort.TargetPort, *endpointPort.Port)
 }
 
 func targetPortMatches(target intstr.IntOrString, endpointPort int32) bool {

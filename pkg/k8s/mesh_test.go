@@ -78,6 +78,43 @@ func TestEnsureMeshGatewayCreatesManagedResources(t *testing.T) {
 	}
 }
 
+func TestEnsureMeshGatewaySkipsUpdatesWhenUnchanged(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	client := &Client{clientset: clientset, namespace: "ns-test", domain: "sealos.example"}
+	spec := MeshGatewaySpec{
+		MeshName: "global",
+		Token:    "secret-token",
+		Routes: []mesh.GatewayRoute{{
+			Name:             "api",
+			Protocol:         mesh.ProtocolHTTP,
+			ListenPort:       mesh.ImportPort("api"),
+			TargetRegion:     "hzh",
+			TargetNamespace:  "default",
+			TargetService:    "api",
+			TargetPort:       8080,
+			RemoteGatewayURL: "https://mesh-hzh.example.com",
+		}},
+	}
+
+	if _, err := client.EnsureMeshGateway(context.Background(), spec); err != nil {
+		t.Fatalf("initial EnsureMeshGateway: %v", err)
+	}
+	clientset.ClearActions()
+	if _, err := client.EnsureMeshGateway(context.Background(), spec); err != nil {
+		t.Fatalf("repeated EnsureMeshGateway: %v", err)
+	}
+
+	var updates []string
+	for _, action := range clientset.Actions() {
+		if action.GetVerb() == "update" {
+			updates = append(updates, action.GetResource().Resource)
+		}
+	}
+	if len(updates) != 0 {
+		t.Fatalf("unchanged mesh reconciliation issued updates: %v", updates)
+	}
+}
+
 func TestEnsureMeshImportCreatesClusterIPServiceToGateway(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	client := &Client{

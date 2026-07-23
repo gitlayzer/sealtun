@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,6 +32,10 @@ type GatewayStatus struct {
 
 const gatewayTokenHeader = "X-Sealtun-Mesh-Token" // #nosec G101 -- header name, not a credential value.
 
+var gatewayWebSocketUpgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" },
+}
+
 func RunGateway(ctx context.Context, opts GatewayOptions) error {
 	if strings.TrimSpace(opts.Listen) == "" {
 		opts.Listen = ":" + strconv.Itoa(int(DefaultGatewayPort))
@@ -38,10 +43,8 @@ func RunGateway(ctx context.Context, opts GatewayOptions) error {
 	if strings.TrimSpace(opts.Token) == "" {
 		return fmt.Errorf("mesh gateway token is required")
 	}
-	for _, route := range opts.Routes {
-		if err := ValidateRoute(route); err != nil {
-			return err
-		}
+	if err := ValidateGatewayRoutes(opts.Routes); err != nil {
+		return err
 	}
 
 	mux := http.NewServeMux()
@@ -54,26 +57,40 @@ func RunGateway(ctx context.Context, opts GatewayOptions) error {
 	mux.HandleFunc("/_sealtun/mesh/tcp/", gateway.handleTCP)
 
 	errc := make(chan error, len(opts.Routes)+1)
-	servers := []*http.Server{}
-	listeners := []io.Closer{}
-	var mu sync.Mutex
-	addCloser := func(closer io.Closer) {
-		mu.Lock()
-		defer mu.Unlock()
-		listeners = append(listeners, closer)
-	}
-
-	management := &http.Server{
-		Addr:              opts.Listen,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	servers = append(servers, management)
-	go func() {
-		if err := management.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errc <- err
+	servers := make([]*http.Server, 0, len(opts.Routes)+1)
+	listeners := make([]net.Listener, 0, len(opts.Routes)+1)
+	closeAll := func() {
+		for _, listener := range listeners {
+			_ = listener.Close()
 		}
-	}()
+		for _, server := range servers {
+			_ = server.Close()
+		}
+	}
+	defer closeAll()
+
+	startHTTPServer := func(addr string, handler http.Handler) error {
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+		server := &http.Server{
+			Addr:              addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		listeners = append(listeners, listener)
+		servers = append(servers, server)
+		go func() {
+			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+				errc <- err
+			}
+		}()
+		return nil
+	}
+	if err := startHTTPServer(opts.Listen, mux); err != nil {
+		return fmt.Errorf("listen for mesh management traffic on %s: %w", opts.Listen, err)
+	}
 
 	for _, route := range opts.Routes {
 		route := route
@@ -82,23 +99,17 @@ func RunGateway(ctx context.Context, opts GatewayOptions) error {
 		}
 		switch route.Protocol {
 		case ProtocolHTTP:
-			server := &http.Server{
-				Addr:              ":" + strconv.Itoa(int(route.ListenPort)),
-				Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proxyHTTPToRemote(w, r, route, opts.Token) }),
-				ReadHeaderTimeout: 10 * time.Second,
+			addr := ":" + strconv.Itoa(int(route.ListenPort))
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proxyHTTPToRemote(w, r, route, opts.Token) })
+			if err := startHTTPServer(addr, handler); err != nil {
+				return fmt.Errorf("listen for mesh route %s on %s: %w", route.Name, addr, err)
 			}
-			servers = append(servers, server)
-			go func() {
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					errc <- err
-				}
-			}()
 		case ProtocolTCP:
 			ln, err := net.Listen("tcp", ":"+strconv.Itoa(int(route.ListenPort)))
 			if err != nil {
-				return err
+				return fmt.Errorf("listen for mesh route %s on port %d: %w", route.Name, route.ListenPort, err)
 			}
-			addCloser(ln)
+			listeners = append(listeners, ln)
 			go acceptTCPRoute(ctx, ln, route, opts.Token, errc)
 		}
 	}
@@ -110,11 +121,9 @@ func RunGateway(ctx context.Context, opts GatewayOptions) error {
 		for _, server := range servers {
 			_ = server.Shutdown(shutdownCtx)
 		}
-		mu.Lock()
-		for _, closer := range listeners {
-			_ = closer.Close()
+		for _, listener := range listeners {
+			_ = listener.Close()
 		}
-		mu.Unlock()
 		return nil
 	case err := <-errc:
 		return err
@@ -150,6 +159,34 @@ func ValidateRoute(route GatewayRoute) error {
 		}
 	}
 	return nil
+}
+
+func validateGatewayRoutes(routes []GatewayRoute) error {
+	names := make(map[string]struct{}, len(routes))
+	listenPorts := make(map[int32]string, len(routes))
+	for _, route := range routes {
+		if err := ValidateRoute(route); err != nil {
+			return err
+		}
+		name := NormalizeName(route.Name)
+		if _, exists := names[name]; exists {
+			return fmt.Errorf("duplicate mesh route name %q", name)
+		}
+		names[name] = struct{}{}
+
+		if strings.TrimSpace(route.RemoteGatewayURL) == "" {
+			continue
+		}
+		if existing, exists := listenPorts[route.ListenPort]; exists {
+			return fmt.Errorf("mesh routes %q and %q use the same listen port %d", existing, name, route.ListenPort)
+		}
+		listenPorts[route.ListenPort] = name
+	}
+	return nil
+}
+
+func ValidateGatewayRoutes(routes []GatewayRoute) error {
+	return validateGatewayRoutes(routes)
 }
 
 type gatewayServer struct {
@@ -209,11 +246,7 @@ func (g *gatewayServer) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
+	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -233,19 +266,22 @@ func (g *gatewayServer) handleTCP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "route is not tcp", http.StatusBadRequest)
 		return
 	}
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" }}
-	ws, err := upgrader.Upgrade(w, r, nil)
+	ws, err := gatewayWebSocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer ws.Close()
 	stream := tunnel.NewWSConn(ws)
-	targetConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s.%s.svc.cluster.local:%d", route.TargetService, route.TargetNamespace, route.TargetPort), 5*time.Second)
+	targetConn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(
+		r.Context(),
+		"tcp",
+		fmt.Sprintf("%s.%s.svc.cluster.local:%d", route.TargetService, route.TargetNamespace, route.TargetPort),
+	)
 	if err != nil {
 		return
 	}
 	defer targetConn.Close()
-	relay(targetConn, stream)
+	relay(r.Context(), targetConn, stream)
 }
 
 func (g *gatewayServer) authorized(r *http.Request) bool {
@@ -271,6 +307,7 @@ func constantTimeTokenEqual(token, want string) bool {
 
 func cloneTargetHeaders(header http.Header, gatewayToken string) http.Header {
 	out := header.Clone()
+	removeHopByHopHeaders(out)
 	out.Del(gatewayTokenHeader)
 	const prefix = "Bearer "
 	auth := out.Get("Authorization")
@@ -278,6 +315,41 @@ func cloneTargetHeaders(header http.Header, gatewayToken string) http.Header {
 		out.Del("Authorization")
 	}
 	return out
+}
+
+var hopByHopHeaders = []string{
+	"Connection",
+	"Proxy-Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te",
+	"Trailer",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
+func removeHopByHopHeaders(header http.Header) {
+	for _, value := range header.Values("Connection") {
+		for _, name := range strings.Split(value, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				header.Del(name)
+			}
+		}
+	}
+	for _, name := range hopByHopHeaders {
+		header.Del(name)
+	}
+}
+
+func copyResponseHeaders(dst, src http.Header) {
+	headers := src.Clone()
+	removeHopByHopHeaders(headers)
+	for key, values := range headers {
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
 }
 
 func splitRoutePath(value string) (string, string) {
@@ -304,6 +376,7 @@ func proxyHTTPToRemote(w http.ResponseWriter, r *http.Request, route GatewayRout
 		return
 	}
 	req.Header = r.Header.Clone()
+	removeHopByHopHeaders(req.Header)
 	req.Header.Set(gatewayTokenHeader, token)
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
@@ -311,11 +384,7 @@ func proxyHTTPToRemote(w http.ResponseWriter, r *http.Request, route GatewayRout
 		return
 	}
 	defer resp.Body.Close()
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
+	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -338,7 +407,7 @@ func acceptTCPRoute(ctx context.Context, ln net.Listener, route GatewayRoute, to
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if ctx.Err() != nil || strings.Contains(err.Error(), "use of closed network connection") {
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return
 			}
 			errc <- err
@@ -374,21 +443,40 @@ func proxyTCPToRemote(ctx context.Context, conn net.Conn, route GatewayRoute, to
 		return err
 	}
 	defer ws.Close()
-	relay(conn, tunnel.NewWSConn(ws))
+	relay(ctx, conn, tunnel.NewWSConn(ws))
 	return nil
 }
 
-func relay(a, b net.Conn) {
+func relay(ctx context.Context, a, b net.Conn) {
 	done := make(chan struct{}, 2)
+	stopWatcher := make(chan struct{})
+	watcherDone := make(chan struct{})
+	var closeOnce sync.Once
+	closeConnections := func() {
+		closeOnce.Do(func() {
+			_ = a.Close()
+			_ = b.Close()
+		})
+	}
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-ctx.Done():
+			closeConnections()
+		case <-stopWatcher:
+		}
+	}()
 	go func() {
 		_, _ = io.Copy(a, b)
-		_ = a.Close()
 		done <- struct{}{}
 	}()
 	go func() {
 		_, _ = io.Copy(b, a)
-		_ = b.Close()
 		done <- struct{}{}
 	}()
 	<-done
+	closeConnections()
+	<-done
+	close(stopWatcher)
+	<-watcherDone
 }

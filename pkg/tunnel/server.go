@@ -24,8 +24,6 @@ import (
 	"github.com/labring/sealtun/pkg/accesspolicy"
 	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
 	"github.com/labring/sealtun/pkg/publicauth"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 type ServerOptions struct {
@@ -48,6 +46,7 @@ type Server struct {
 	rateLimiter                *accesspolicy.RateLimiter
 	auditMu                    sync.Mutex
 	auditEvents                []accesspolicy.AuditEvent
+	auditStart                 int
 
 	mu            sync.RWMutex
 	activeSession *yamux.Session
@@ -400,11 +399,12 @@ func (s *Server) recordRequestAudit(r *http.Request, decision, reason string, st
 	}
 	s.auditMu.Lock()
 	defer s.auditMu.Unlock()
-	s.auditEvents = append(s.auditEvents, event)
-	if len(s.auditEvents) > maxAuditEvents {
-		copy(s.auditEvents, s.auditEvents[len(s.auditEvents)-maxAuditEvents:])
-		s.auditEvents = s.auditEvents[:maxAuditEvents]
+	if len(s.auditEvents) < maxAuditEvents {
+		s.auditEvents = append(s.auditEvents, event)
+		return
 	}
+	s.auditEvents[s.auditStart] = event
+	s.auditStart = (s.auditStart + 1) % maxAuditEvents
 }
 
 func (s *Server) auditPayload(since time.Duration, limit int) accesspolicy.AuditPayload {
@@ -416,7 +416,8 @@ func (s *Server) auditPayload(since time.Duration, limit int) accesspolicy.Audit
 	defer s.auditMu.Unlock()
 
 	filtered := make([]accesspolicy.AuditEvent, 0, len(s.auditEvents))
-	for _, event := range s.auditEvents {
+	for i := 0; i < len(s.auditEvents); i++ {
+		event := s.auditEvents[(s.auditStart+i)%len(s.auditEvents)]
 		if !cutoff.IsZero() {
 			eventTime, err := time.Parse(time.RFC3339, event.Time)
 			if err != nil || eventTime.Before(cutoff) {
@@ -429,7 +430,7 @@ func (s *Server) auditPayload(since time.Duration, limit int) accesspolicy.Audit
 	if limit > 0 && len(filtered) > limit {
 		filtered = filtered[len(filtered)-limit:]
 	}
-	return accesspolicy.AuditPayload{Events: append([]accesspolicy.AuditEvent(nil), filtered...), Total: total}
+	return accesspolicy.AuditPayload{Events: filtered, Total: total}
 }
 
 func parseAuditSince(value string) (time.Duration, error) {
@@ -789,12 +790,7 @@ func (s *Server) Start() error {
 		}()
 	}
 
-	h2s := &http2.Server{}
-	server := &http.Server{
-		Handler:           h2c.NewHandler(s, h2s),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	server := newTunnelHTTPServer(s)
 	go func() {
 		errc <- server.Serve(httpListener)
 	}()
@@ -806,6 +802,18 @@ func (s *Server) Start() error {
 	closeListeners(listeners)
 	drainServeErrors(errc, serveCount-1)
 	return err
+}
+
+func newTunnelHTTPServer(handler http.Handler) *http.Server {
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	return &http.Server{
+		Handler:           handler,
+		Protocols:         protocols,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }
 
 func closeListeners(listeners []net.Listener) {

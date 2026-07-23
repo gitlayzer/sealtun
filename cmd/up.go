@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labring/sealtun/pkg/auth"
 	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/spf13/cobra"
@@ -785,9 +786,18 @@ func projectStatePath(create bool) (string, error) {
 	}
 	dir := filepath.Join(cwd, projectStateDirName)
 	if create {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if _, err := auth.EnsurePrivateDir(dir, "project state directory"); err != nil {
 			return "", err
 		}
+	} else if info, statErr := os.Lstat(dir); statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("project state directory %s is a symlink", dir)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("project state path %s is not a directory", dir)
+		}
+	} else if !os.IsNotExist(statErr) {
+		return "", statErr
 	}
 	return filepath.Join(dir, projectStateFileName), nil
 }
@@ -801,7 +811,7 @@ func writeUpPlanConfigIfRequested(plan *upPlan) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(plan.ConfigPath, data, 0o600)
+	return writeRegularFileAtomic(plan.ConfigPath, data, 0o600, "up config")
 }
 
 func upPlanApplyFile(plan *upPlan) *applyFile {
@@ -867,7 +877,7 @@ func loadProjectTunnelState() (*projectTunnelState, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path) // #nosec G304 -- path is the fixed per-project Sealtun state file under the current working directory.
+	data, err := readRegularFile(path, "project state file")
 	if err != nil {
 		return nil, err
 	}
@@ -890,7 +900,7 @@ func saveProjectTunnelState(state projectTunnelState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return writeRegularFileAtomic(path, append(data, '\n'), 0o600, "project state")
 }
 
 func removeProjectTunnelStateIfMatches(tunnelID string) error {

@@ -80,7 +80,7 @@ var shareListCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		items, err := listShareLinks(args[0], nowUTC())
+		items, err := listShareLinksWithContext(cmd.Context(), args[0], nowUTC())
 		if err != nil {
 			return err
 		}
@@ -217,7 +217,11 @@ func createShareLink(ctx context.Context, tunnelID, name string, ttl time.Durati
 }
 
 func listShareLinks(tunnelID string, now time.Time) ([]shareListItem, error) {
-	sess, err := findSessionRefreshed(context.Background(), tunnelID)
+	return listShareLinksWithContext(context.Background(), tunnelID, now)
+}
+
+func listShareLinksWithContext(ctx context.Context, tunnelID string, now time.Time) ([]shareListItem, error) {
+	sess, err := findSessionRefreshed(ctx, tunnelID)
 	if err != nil {
 		return nil, err
 	}

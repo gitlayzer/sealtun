@@ -14,27 +14,6 @@ type activeScope struct {
 	namespace string
 }
 
-func activeKubeClient() (*auth.AuthData, *k8s.Client, string, error) {
-	root, err := auth.CurrentSealtunDir()
-	if err != nil {
-		return nil, nil, "", err
-	}
-	authData, err := auth.LoadAuthDataFromDir(root)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("not logged in. Please run 'sealtun login' first: %w", err)
-	}
-	kubeconfigPath := filepath.Join(root, "kubeconfig")
-	kubeconfig, err := readActiveRegularFile(kubeconfigPath, "active kubeconfig")
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to read kubeconfig: %w", err)
-	}
-	client, err := k8s.NewClient(kubeconfigPath, authData)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to init k8s client: %w", err)
-	}
-	return authData, client, kubeconfig, nil
-}
-
 func currentActiveScope() (*activeScope, error) {
 	root, err := auth.CurrentSealtunDir()
 	if err != nil {

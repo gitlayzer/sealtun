@@ -489,6 +489,7 @@ func init() {
 	meshGatewayCmd.Flags().StringVar(&meshGatewayTokenEnv, "token-env", "", "Environment variable containing gateway token")
 	meshGatewayCmd.Flags().StringVar(&meshGatewayRoutesFile, "routes-file", "", "File containing gateway routes JSON")
 	meshGatewayCmd.Flags().StringVar(&meshGatewayToken, "token", "", "Gateway token")
+	markAlphaTree(meshCmd)
 }
 
 func loadMeshConfig() (*mesh.Config, error) {

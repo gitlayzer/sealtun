@@ -598,6 +598,27 @@ func TestWriteTunnelDoctorReportUsesRequestedPath(t *testing.T) {
 	}
 }
 
+func TestWriteTunnelDoctorReportRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "outside.md")
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(dir, "doctor.md")
+	if err := os.Symlink(target, linked); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := writeTunnelDoctorReport(linked, &tunnelDoctorPayload{TunnelID: "reportfile", Status: "active"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlinked report to be rejected, got %v", err)
+	}
+	data, readErr := os.ReadFile(target)
+	if readErr != nil || string(data) != "original" {
+		t.Fatalf("outside target changed: data=%q err=%v", data, readErr)
+	}
+}
+
 func TestActionableErrorHint(t *testing.T) {
 	tests := []struct {
 		name string

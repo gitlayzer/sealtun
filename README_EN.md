@@ -10,6 +10,8 @@ Sealtun is a local tunnel CLI for **Sealos Cloud** and **Kubernetes** users. It 
 
 > For installation, login, tunnel creation, access controls, custom domains, TUI, cluster access, operations, and declarative config, see [QuickStart_EN.md](./QuickStart_EN.md).
 
+> Stability: core tunnels, declarative configuration, security, and lifecycle commands follow compatibility requirements. Entrypoints marked `[Alpha]` may change interface or be removed in a future release. Current Alpha entrypoints are `init`, `tui/console`, `connect`, `mesh`, `ssh connect`, and the standalone `discover`, `template`, `export`, `events`, `metrics`, `resources`, and `watch` commands; no existing capability was removed.
+
 ## Features
 
 - 🔑 **Password-less OAuth2 Login**: Connect easily with `sealtun login` using the Device Authorization Grant flow.
@@ -19,13 +21,13 @@ Sealtun is a local tunnel CLI for **Sealos Cloud** and **Kubernetes** users. It 
 - 🌐 **Custom Domain Automation**: Use `domain plan/add/verify/status/doctor` to generate CNAME guidance, wait for DNS, attach domains, and inspect certificate readiness.
 - 🔗 **Temporary Share Links and Rotation**: Use `share create/list/revoke/rotate` to generate, revoke, or rotate expiring links for HTTPS tunnels.
 - 🛡️ **Security Operations**: HTTPS tunnels support Basic Auth, Bearer tokens, temporary links, IP rules, rate limits, access audit, and server secret rotation.
-- 📊 **Status and Diagnostics**: Use `doctor <tunnel-id>`, `inspect --remote`, `logs`, `events`, `metrics`, `resources`, and `watch` to diagnose local ports, daemon state, remote Pods, Services, Ingresses, and certificates.
-- 🧭 **Guided UX and Safe Fixes**: Use `init` for first-run command/YAML recommendations, and `resources`, `watch`, or `doctor --fix --dry-run` to understand and conservatively repair tunnel state.
-- 🖥️ **Terminal Console**: Use `tui` / `console` in an interactive terminal to discover ports, create tunnels, and manage logs, events, resources, domains, policies, share links, and lifecycle actions.
-- 🔌 **Cluster Service Access**: On Linux, `sudo sealtun connect` lets TCP clients directly reach Service FQDNs, Service ClusterIPs, and Pod IPs without SOCKS or client-side proxy config.
-- 🕸️ **Cross-Region Mesh**: Use `mesh` to import a Kubernetes Service from one Sealos region into other regions as local ClusterIP Services for service-level HTTP/TCP communication.
-- 🧩 **Protocol Templates**: Use `template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` to generate commands and `sealtun.yaml` examples.
-- 🧾 **Declarative Config**: Use `apply -f sealtun.yaml` to declare tunnels in YAML and create or update them with stable names; use `export` to turn local sessions back into YAML.
+- 📊 **Status and Diagnostics**: Use stable `doctor <tunnel-id>`, `inspect --remote`, and `logs`, plus Alpha `events`, `metrics`, `resources`, and `watch`, to diagnose local ports, daemon state, remote Pods, Services, Ingresses, and certificates.
+- 🧭 **Guided UX and Safe Fixes**: Use stable `up` for daily guided creation; Alpha `init` generates first-run command/YAML recommendations; use Alpha `resources` and `watch`, or stable `doctor --fix --dry-run`, to understand and conservatively repair tunnel state.
+- 🖥️ **Terminal Console (Alpha)**: Use `tui` / `console` in an interactive terminal to discover ports, create tunnels, and manage logs, events, resources, domains, policies, share links, and lifecycle actions.
+- 🔌 **Cluster Service Access (Alpha)**: On Linux, `sudo sealtun connect` lets TCP clients directly reach Service FQDNs, Service ClusterIPs, and Pod IPs without SOCKS or client-side proxy config.
+- 🕸️ **Cross-Region Mesh (Alpha)**: Use `mesh` to import a Kubernetes Service from one Sealos region into other regions as local ClusterIP Services for service-level HTTP/TCP communication.
+- 🧩 **Protocol Templates (Alpha)**: Use `template https|ssh|tcp|mysql|postgres|redis|mongodb|mqtt` to generate commands and `sealtun.yaml` examples.
+- 🧾 **Declarative Config**: Use stable `apply -f sealtun.yaml` to declare tunnels in YAML and create or update them with stable names; use Alpha `export` to turn local sessions back into YAML.
 - 🌐 **Optimized for Sealos**: Native support for Sealos Cloud domains, certificates, and Kubernetes resources.
 
 ## Pricing

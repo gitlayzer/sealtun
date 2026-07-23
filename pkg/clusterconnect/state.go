@@ -13,6 +13,7 @@ import (
 
 const connectStateDirName = "connect"
 const connectStateFileName = "state.json"
+const connectRuntimeLockFileName = "runtime.lock"
 
 type State struct {
 	Mode          string         `json:"mode"`
@@ -47,6 +48,35 @@ func statePath(create bool) (string, error) {
 		}
 	}
 	return filepath.Join(dir, connectStateFileName), nil
+}
+
+func AcquireRuntimeLock() (func(), error) {
+	path, err := statePath(true)
+	if err != nil {
+		return nil, err
+	}
+	path = filepath.Join(filepath.Dir(path), connectRuntimeLockFileName)
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("connect runtime lock %s is not a regular file", path)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- fixed lock path under the private Sealtun config directory.
+	if err != nil {
+		return nil, err
+	}
+	releaseLock, err := session.LockFileForExternalUse(file, 0)
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("acquire connect runtime lock: %w", err)
+	}
+	return func() {
+		releaseLock()
+		_ = file.Close()
+	}, nil
 }
 
 func SaveState(state State) error {

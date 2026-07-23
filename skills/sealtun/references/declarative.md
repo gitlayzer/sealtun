@@ -10,7 +10,7 @@ sealtun diff -f sealtun.yaml
 sealtun apply -f sealtun.yaml
 ```
 
-`--dry-run` validates and prints planned tunnels without login or cloud mutation. `diff` compares desired YAML with local sessions. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions.
+`--dry-run` validates and prints planned tunnels without login or cloud mutation. `diff` compares desired YAML with local sessions. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions. The declarative `apply/diff` workflow is Stable; the standalone `export` and `resources` helper commands are Alpha.
 
 For first-time users, run or recommend:
 
@@ -193,7 +193,7 @@ TCP declarations cannot set `domain`, `waitDomain`, `basicAuth`, or `accessPolic
 
 ## Domains In Declarative Apply
 
-New tunnels with an unverified custom domain keep the generated Sealos host and print a warning with the later `sealtun domain set` command. Existing tunnels reject unverified custom-domain changes to avoid accidentally clearing or taking over live hostnames. Use `waitDomain: true` only when DNS is expected to become ready during the command.
+New tunnels with an unverified custom domain keep the generated Sealos host and print a warning with the later `sealtun domain add` command. Existing tunnels reject unverified custom-domain changes to avoid accidentally clearing or taking over live hostnames. Use `waitDomain: true` only when DNS is expected to become ready during the command.
 
 ## TTL Behavior
 

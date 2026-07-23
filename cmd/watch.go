@@ -51,6 +51,7 @@ var watchCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(watchCmd)
+	markAlpha(watchCmd)
 	watchCmd.Flags().BoolVar(&watchOpts.JSON, "json", false, "Output watch events as newline-delimited JSON")
 	watchCmd.Flags().DurationVar(&watchOpts.Interval, "interval", 3*time.Second, "Refresh interval")
 	watchCmd.Flags().IntVar(&watchOpts.Count, "count", 0, "Stop after N refreshes; 0 watches until interrupted")

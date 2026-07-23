@@ -48,6 +48,7 @@ var repairCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(repairCmd)
+	markDeprecated(repairCmd, "sealtun doctor <tunnel-id> --fix")
 	repairCmd.Flags().BoolVar(&repairJSON, "json", false, "Output repair plan/results as JSON")
 	repairCmd.Flags().BoolVar(&repairDryRun, "dry-run", false, "Show conservative repair actions without executing them")
 }

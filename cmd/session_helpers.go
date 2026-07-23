@@ -40,10 +40,6 @@ func findSession(tunnelID string) (*session.TunnelSession, error) {
 	return sess, nil
 }
 
-func localPortReachable(port string) bool {
-	return targetReachable(defaultLocalTargetURL(port))
-}
-
 func targetReachable(targetURL string) bool {
 	target, err := tunnel.ParseTarget(targetURL)
 	if err != nil {

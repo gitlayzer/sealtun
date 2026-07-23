@@ -104,6 +104,26 @@ func TestRuntimeLockDoesNotStartDuplicateWhenLockOwnerIsAliveWithoutState(t *tes
 	}
 }
 
+func TestRuntimeLockRejectsReusedPIDToken(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	root := filepath.Join(home, ".sealtun")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatalf("create config dir: %v", err)
+	}
+	path := filepath.Join(root, runtimeLockFileName)
+	if err := os.WriteFile(path, []byte(fmt.Sprintf("%d:not-this-process:1", os.Getpid())), 0o600); err != nil {
+		t.Fatalf("write reused PID runtime lock: %v", err)
+	}
+
+	release, err := AcquireRuntimeLock()
+	if err != nil {
+		t.Fatalf("AcquireRuntimeLock should replace a reused PID lock: %v", err)
+	}
+	release()
+}
+
 func TestRuntimeLockDoesNotStartDuplicateWhenStatePIDIsAliveButHeartbeatIsStale(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -250,5 +270,12 @@ func TestStateAliveRequiresFreshHeartbeatForSameSnapshot(t *testing.T) {
 	stale := time.Now().Add(-2 * heartbeatMaxAge).Format(time.RFC3339)
 	if stateAlive(&State{PID: os.Getpid(), StartedAt: stale, UpdatedAt: stale}) {
 		t.Fatal("expected stale heartbeat to be considered not alive")
+	}
+}
+
+func TestStateAliveRejectsReusedPID(t *testing.T) {
+	now := time.Now().Format(time.RFC3339)
+	if stateAlive(&State{PID: os.Getpid(), PIDStartToken: "not-this-process", StartedAt: now, UpdatedAt: now}) {
+		t.Fatal("expected mismatched process start token to be considered not alive")
 	}
 }

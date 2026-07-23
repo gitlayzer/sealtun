@@ -48,6 +48,7 @@ var eventsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(eventsCmd)
+	markAlpha(eventsCmd)
 	eventsCmd.Flags().BoolVar(&eventsJSON, "json", false, "Output events as JSON")
 	eventsCmd.Flags().DurationVar(&eventsTimeout, "timeout", 8*time.Second, "Maximum time to wait for remote event diagnostics")
 }

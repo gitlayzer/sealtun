@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -129,4 +132,71 @@ func TestStoppedSessionGuardPreservesStoppedState(t *testing.T) {
 		t.Fatal(saveErr)
 	}
 	t.Fatal("stopped session guard did not preserve stopped state")
+}
+
+func TestReconcileDaemonWorkersWaitsForCanceledWorkerBeforeReplacement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	managed := map[string]*managedTunnel{}
+	var mu sync.Mutex
+	var active atomic.Int32
+	var maxActive atomic.Int32
+	started := make(chan string, 2)
+	releaseFirst := make(chan struct{})
+
+	run := func(ctx context.Context, sess session.TunnelSession) {
+		current := active.Add(1)
+		defer active.Add(-1)
+		for {
+			maximum := maxActive.Load()
+			if current <= maximum || maxActive.CompareAndSwap(maximum, current) {
+				break
+			}
+		}
+		started <- sess.Secret
+		if sess.Secret == "old" {
+			<-ctx.Done()
+			<-releaseFirst
+			return
+		}
+		<-ctx.Done()
+	}
+
+	oldSession := session.TunnelSession{TunnelID: "abc123", Secret: "old"}
+	newSession := session.TunnelSession{TunnelID: "abc123", Secret: "new"}
+	reconcileDaemonWorkers(ctx, &mu, managed, map[string]session.TunnelSession{"abc123": oldSession}, run)
+	if got := <-started; got != "old" {
+		t.Fatalf("first worker secret = %q, want old", got)
+	}
+
+	reconcileDaemonWorkers(ctx, &mu, managed, map[string]session.TunnelSession{"abc123": newSession}, run)
+	select {
+	case got := <-started:
+		t.Fatalf("replacement worker %q started before canceled worker exited", got)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(releaseFirst)
+	deadline := time.Now().Add(time.Second)
+	for {
+		mu.Lock()
+		_, exists := managed["abc123"]
+		mu.Unlock()
+		if !exists {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("canceled worker did not exit")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	reconcileDaemonWorkers(ctx, &mu, managed, map[string]session.TunnelSession{"abc123": newSession}, run)
+	if got := <-started; got != "new" {
+		t.Fatalf("replacement worker secret = %q, want new", got)
+	}
+	cancel()
+	if maxActive.Load() != 1 {
+		t.Fatalf("daemon workers overlapped: max active = %d", maxActive.Load())
+	}
 }

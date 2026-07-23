@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/labring/sealtun/pkg/auth"
 	authv1 "k8s.io/api/authorization/v1"
@@ -104,19 +105,19 @@ func (e *Environment) Preflight(ctx context.Context, opts Options) (*Preflight, 
 }
 
 func ProbeCapabilities(ctx context.Context, namespace string, reviewer AccessReviewer) []Capability {
-	checks := []struct {
+	type capabilityCheck struct {
 		name        string
 		required    bool
 		verb        string
 		group       string
 		resource    string
 		subresource string
-	}{
+	}
+	checks := []capabilityCheck{
 		{name: CapabilityKubeconfig, required: true},
 		{name: CapabilityServicesGet, required: true, verb: "get", resource: "services"},
 		{name: CapabilityServicesList, required: true, verb: "list", resource: "services"},
-		{name: CapabilityEndpointsGet, required: true, verb: "get", resource: "endpoints"},
-		{name: CapabilityEndpointsList, required: false, verb: "list", resource: "endpoints"},
+		{name: CapabilityEndpointSlicesList, required: true, verb: "list", group: "discovery.k8s.io", resource: "endpointslices"},
 		{name: CapabilityPodsGet, required: true, verb: "get", resource: "pods"},
 		{name: CapabilityPodsList, required: true, verb: "list", resource: "pods"},
 		{name: CapabilityPodsPortForward, required: true, verb: "create", resource: "pods", subresource: "portforward"},
@@ -124,22 +125,28 @@ func ProbeCapabilities(ctx context.Context, namespace string, reviewer AccessRev
 		{name: CapabilitySecrets, verb: "create", resource: "secrets"},
 		{name: CapabilityConfigMaps, verb: "create", resource: "configmaps"},
 	}
-	caps := make([]Capability, 0, len(checks))
-	for _, check := range checks {
+	caps := make([]Capability, len(checks))
+	var wg sync.WaitGroup
+	for i, check := range checks {
 		cap := Capability{Name: check.name, Required: check.required, Namespace: namespace}
 		if check.name == CapabilityKubeconfig {
 			cap.Allowed = true
-			caps = append(caps, cap)
+			caps[i] = cap
 			continue
 		}
-		allowed, reason, err := reviewer.Review(ctx, namespace, check.verb, check.group, check.resource, check.subresource)
-		cap.Allowed = allowed
-		cap.Reason = reason
-		if err != nil {
-			cap.Error = err.Error()
-		}
-		caps = append(caps, cap)
+		wg.Add(1)
+		go func(index int, check capabilityCheck, cap Capability) {
+			defer wg.Done()
+			allowed, reason, err := reviewer.Review(ctx, namespace, check.verb, check.group, check.resource, check.subresource)
+			cap.Allowed = allowed
+			cap.Reason = reason
+			if err != nil {
+				cap.Error = err.Error()
+			}
+			caps[index] = cap
+		}(i, check, cap)
 	}
+	wg.Wait()
 	return caps
 }
 

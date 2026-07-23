@@ -44,6 +44,9 @@ func TestTUILoadsStatusTunnelsAndPorts(t *testing.T) {
 	if !source.listCheck {
 		t.Fatalf("expected local check option to be passed to source")
 	}
+	if !source.discoverHasDeadline {
+		t.Fatal("expected TUI port discovery to have a deadline")
+	}
 }
 
 func TestTUICreateFromDiscoveredTCPPortUsesProtocol(t *testing.T) {
@@ -110,6 +113,7 @@ func TestTUIOperationsIncludeHTTPSManagement(t *testing.T) {
 		"logs",
 		"resources",
 		"export",
+		"doctor-fix",
 		"domain-plan",
 		"domain-add",
 		"policy-show",
@@ -122,6 +126,11 @@ func TestTUIOperationsIncludeHTTPSManagement(t *testing.T) {
 	} {
 		if !values[want] {
 			t.Fatalf("expected operation %q in HTTPS operations", want)
+		}
+	}
+	for _, deprecated := range []string{"repair", "domain-set"} {
+		if values[deprecated] {
+			t.Fatalf("deprecated operation %q should not be shown in the TUI", deprecated)
 		}
 	}
 }
@@ -397,13 +406,14 @@ func runTeaCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
 }
 
 type fakeTUISource struct {
-	status      *statusPayload
-	tunnels     []listItem
-	ports       []discoverItem
-	listCheck   bool
-	createdArgs []string
-	commandArgs []string
-	err         error
+	status              *statusPayload
+	tunnels             []listItem
+	ports               []discoverItem
+	listCheck           bool
+	createdArgs         []string
+	commandArgs         []string
+	discoverHasDeadline bool
+	err                 error
 }
 
 func (f *fakeTUISource) Status() (*statusPayload, error) {
@@ -415,7 +425,8 @@ func (f *fakeTUISource) ListTunnels(check bool) ([]listItem, error) {
 	return f.tunnels, nil
 }
 
-func (f *fakeTUISource) DiscoverPorts(context.Context) ([]discoverItem, error) {
+func (f *fakeTUISource) DiscoverPorts(ctx context.Context) ([]discoverItem, error) {
+	_, f.discoverHasDeadline = ctx.Deadline()
 	return f.ports, nil
 }
 

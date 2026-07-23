@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -24,39 +25,54 @@ const (
 	encryptedSessionMagic = "STES1:" // prefix marking an encrypted session blob
 )
 
-// encryptSessionData encrypts a marshaled session for storage. On any failure to
-// obtain a key it returns the plaintext unchanged so session persistence keeps
-// working (availability over the defense-in-depth hardening).
-func encryptSessionData(plaintext []byte) []byte {
+// encryptSessionData encrypts a marshaled session for storage. Session files
+// contain live credentials, so encryption failures must stop the write rather
+// than silently fall back to plaintext.
+func encryptSessionData(plaintext []byte) ([]byte, error) {
 	key, err := sessionEncryptionKey()
 	if err != nil {
-		return plaintext
+		return nil, err
 	}
+	return encryptSessionDataWithKey(plaintext, key)
+}
+
+func encryptSessionDataWithKey(plaintext, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return plaintext
+		return nil, err
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return plaintext
+		return nil, err
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return plaintext
+		return nil, err
 	}
 	sealed := gcm.Seal(nonce, nonce, plaintext, nil)
 	encoded := make([]byte, 0, len(encryptedSessionMagic)+base64.StdEncoding.EncodedLen(len(sealed)))
 	encoded = append(encoded, encryptedSessionMagic...)
 	b64 := make([]byte, base64.StdEncoding.EncodedLen(len(sealed)))
 	base64.StdEncoding.Encode(b64, sealed)
-	return append(encoded, b64...)
+	return append(encoded, b64...), nil
 }
 
 // decryptSessionData reverses encryptSessionData. Blobs without the magic prefix
 // are treated as legacy plaintext and returned unchanged, so existing session
 // files keep working without a migration step.
 func decryptSessionData(data []byte) ([]byte, error) {
-	if len(data) < len(encryptedSessionMagic) || string(data[:len(encryptedSessionMagic)]) != encryptedSessionMagic {
+	if !isEncryptedSessionData(data) {
+		return data, nil
+	}
+	key, err := sessionEncryptionKey()
+	if err != nil {
+		return nil, fmt.Errorf("load session key: %w", err)
+	}
+	return decryptSessionDataWithKey(data, key)
+}
+
+func decryptSessionDataWithKey(data, key []byte) ([]byte, error) {
+	if !isEncryptedSessionData(data) {
 		return data, nil
 	}
 	payload := data[len(encryptedSessionMagic):]
@@ -67,10 +83,6 @@ func decryptSessionData(data []byte) ([]byte, error) {
 	}
 	sealed = sealed[:n]
 
-	key, err := sessionEncryptionKey()
-	if err != nil {
-		return nil, fmt.Errorf("load session key: %w", err)
-	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -91,6 +103,10 @@ func decryptSessionData(data []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+func isEncryptedSessionData(data []byte) bool {
+	return bytes.HasPrefix(data, []byte(encryptedSessionMagic))
+}
+
 // sessionEncryptionKey returns the local 32-byte session key, creating it on
 // first use. The key file is written 0600 under the user-owned config dir.
 func sessionEncryptionKey() ([]byte, error) {
@@ -98,6 +114,10 @@ func sessionEncryptionKey() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return sessionEncryptionKeyFromConfigDir(root)
+}
+
+func sessionEncryptionKeyFromConfigDir(root string) ([]byte, error) {
 	path := filepath.Join(root, sessionKeyFileName)
 
 	if info, err := os.Lstat(path); err == nil {

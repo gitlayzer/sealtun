@@ -25,7 +25,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.10'
+          go-version: '1.25.12'
           cache: true
 
       - name: Run tests
@@ -35,7 +35,7 @@ jobs:
         run: go vet ./...
 
       - name: Run race tests
-        run: go test -race ./cmd ./pkg/session ./pkg/accesspolicy ./pkg/publicauth ./pkg/k8s ./pkg/clusterconnect ./pkg/tunnel
+        run: go test -race ./cmd ./pkg/session ./pkg/accesspolicy ./pkg/publicauth ./pkg/k8s ./pkg/clusterconnect ./pkg/tunnel ./pkg/mesh ./pkg/daemon
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
@@ -64,7 +64,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.10'
+          go-version: '1.25.12'
           cache: true
 
       - name: Run GoReleaser snapshot

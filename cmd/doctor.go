@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,6 +18,21 @@ import (
 
 const doctorRemoteTimeout = 12 * time.Second
 const doctorRemoteConcurrency = 4
+
+var doctorReportSafePattern = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+type doctorRedactionRule struct {
+	pattern *regexp.Regexp
+	repl    string
+}
+
+var doctorRedactionRules = []doctorRedactionRule{
+	{pattern: regexp.MustCompile(`(?i)(authorization\s*[:=]\s*)[^\s]+(?:\s+[^\s]+)?`), repl: `${1}<redacted>`},
+	{pattern: regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+`), repl: `${1}<redacted>`},
+	{pattern: regexp.MustCompile(`(?i)((?:token|secret|password|passwd|pwd)\s*[:=]\s*)[^\s&]+`), repl: `${1}<redacted>`},
+	{pattern: regexp.MustCompile(`(?i)(_sealtun_token=)[^&\s]+`), repl: `${1}<redacted>`},
+	{pattern: regexp.MustCompile(`(?i)(basic\s+)[A-Za-z0-9+/=-]+`), repl: `${1}<redacted>`},
+}
 
 type doctorPayload struct {
 	DaemonRunning        bool     `json:"daemonRunning"`
@@ -225,7 +239,7 @@ func collectDoctorPayloadWithContext(ctx context.Context) (*doctorPayload, error
 		return nil, err
 	}
 
-	items, err := collectListItemsWithLocalCheck(true)
+	items, err := collectListItemsWithContext(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -783,14 +797,14 @@ func writeTunnelDoctorReport(path string, payload *tunnelDoctorPayload) (string,
 	if strings.TrimSpace(path) == "" {
 		path = defaultDoctorReportPath(payload.TunnelID)
 	}
-	if err := os.WriteFile(path, []byte(renderTunnelDoctorReport(payload)), 0o600); err != nil {
+	if err := writeRegularFileAtomic(path, []byte(renderTunnelDoctorReport(payload)), 0o600, "doctor report"); err != nil {
 		return "", fmt.Errorf("write doctor report: %w", err)
 	}
 	return path, nil
 }
 
 func defaultDoctorReportPath(tunnelID string) string {
-	safe := regexp.MustCompile(`[^a-zA-Z0-9._-]+`).ReplaceAllString(tunnelID, "-")
+	safe := doctorReportSafePattern.ReplaceAllString(tunnelID, "-")
 	safe = strings.Trim(safe, "-")
 	if safe == "" {
 		safe = "tunnel"
@@ -885,19 +899,9 @@ func redactSensitiveText(value string) string {
 	if value == "" {
 		return ""
 	}
-	replacements := []struct {
-		pattern string
-		repl    string
-	}{
-		{`(?i)(authorization\s*[:=]\s*)[^\s]+(?:\s+[^\s]+)?`, `${1}<redacted>`},
-		{`(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+`, `${1}<redacted>`},
-		{`(?i)((?:token|secret|password|passwd|pwd)\s*[:=]\s*)[^\s&]+`, `${1}<redacted>`},
-		{`(?i)(_sealtun_token=)[^&\s]+`, `${1}<redacted>`},
-		{`(?i)(basic\s+)[A-Za-z0-9+/=-]+`, `${1}<redacted>`},
-	}
 	out := value
-	for _, item := range replacements {
-		out = regexp.MustCompile(item.pattern).ReplaceAllString(out, item.repl)
+	for _, rule := range doctorRedactionRules {
+		out = rule.pattern.ReplaceAllString(out, rule.repl)
 	}
 	return out
 }

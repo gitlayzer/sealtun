@@ -65,6 +65,7 @@ var discoverCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(discoverCmd)
+	markAlpha(discoverCmd)
 	discoverCmd.Flags().BoolVar(&discoverOpts.JSON, "json", false, "Output discovered ports as JSON")
 	discoverCmd.Flags().StringVar(&discoverOpts.Protocol, "protocol", "auto", "Filter protocol hint: auto, https, ssh, or tcp")
 	discoverCmd.Flags().IntVar(&discoverOpts.Limit, "limit", 30, "Maximum number of ports to return")

@@ -1,13 +1,16 @@
 package tunnel
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labring/sealtun/pkg/accesspolicy"
 	"github.com/labring/sealtun/pkg/publicauth"
@@ -342,6 +345,94 @@ func TestServerAuditRecordsIPRuleReason(t *testing.T) {
 	server.ServeHTTP(auditRec, auditReq)
 	if !strings.Contains(auditRec.Body.String(), `"reason":"ip-denylist"`) {
 		t.Fatalf("expected ip-denylist audit reason, got %s", auditRec.Body.String())
+	}
+}
+
+func TestServerAuditRetainsNewestEventsInOrder(t *testing.T) {
+	server := NewServerWithOptions("secret", 8080, "https", "3000", ServerOptions{
+		AccessPolicy: &accesspolicy.Policy{Audit: &accesspolicy.AuditConfig{Enabled: true}},
+	})
+	request := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	for i := 0; i < maxAuditEvents+3; i++ {
+		server.recordRequestAudit(request, "allow", fmt.Sprintf("event-%d", i), http.StatusOK, nil)
+	}
+
+	payload := server.auditPayload(0, maxAuditEvents)
+	if len(payload.Events) != maxAuditEvents {
+		t.Fatalf("expected %d retained events, got %d", maxAuditEvents, len(payload.Events))
+	}
+	if payload.Events[0].Reason != "event-3" {
+		t.Fatalf("expected oldest retained event to be event-3, got %q", payload.Events[0].Reason)
+	}
+	if payload.Events[len(payload.Events)-1].Reason != fmt.Sprintf("event-%d", maxAuditEvents+2) {
+		t.Fatalf("unexpected newest retained event: %q", payload.Events[len(payload.Events)-1].Reason)
+	}
+}
+
+func BenchmarkServerRecordRequestAuditFullBuffer(b *testing.B) {
+	server := NewServerWithOptions("secret", 8080, "https", "3000", ServerOptions{
+		AccessPolicy: &accesspolicy.Policy{Audit: &accesspolicy.AuditConfig{Enabled: true}},
+	})
+	request := httptest.NewRequest(http.MethodGet, "https://example.test/", nil)
+	for i := 0; i < maxAuditEvents; i++ {
+		server.recordRequestAudit(request, "allow", "none", http.StatusOK, nil)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		server.recordRequestAudit(request, "allow", "none", http.StatusOK, nil)
+	}
+}
+
+func TestTunnelHTTPServerAcceptsHTTP1AndUnencryptedHTTP2(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "%s", r.Proto)
+	})
+	server := newTunnelHTTPServer(handler)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		_ = server.Close()
+		<-serveDone
+	})
+
+	url := "http://" + listener.Addr().String()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	http1Req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	http1Resp, err := http.DefaultClient.Do(http1Req)
+	if err != nil {
+		t.Fatalf("HTTP/1 request failed: %v", err)
+	}
+	_ = http1Resp.Body.Close()
+	if http1Resp.ProtoMajor != 1 {
+		t.Fatalf("HTTP/1 response protocol = %s", http1Resp.Proto)
+	}
+
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	transport := &http.Transport{Protocols: protocols}
+	defer transport.CloseIdleConnections()
+	http2Req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	http2Resp, err := (&http.Client{Transport: transport}).Do(http2Req)
+	if err != nil {
+		t.Fatalf("unencrypted HTTP/2 request failed: %v", err)
+	}
+	_ = http2Resp.Body.Close()
+	if http2Resp.ProtoMajor != 2 {
+		t.Fatalf("unencrypted HTTP/2 response protocol = %s", http2Resp.Proto)
 	}
 }
 

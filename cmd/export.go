@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -31,7 +29,7 @@ var exportCmd = &cobra.Command{
 		if exportAll && len(args) > 0 {
 			return fmt.Errorf("--all cannot be combined with a tunnel id")
 		}
-		config, warnings, err := runExport(args)
+		config, warnings, err := runExportWithContext(cmd.Context(), args, exportAll, exportIncludeSecrets)
 		if err != nil {
 			return err
 		}
@@ -64,6 +62,7 @@ var exportCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(exportCmd)
+	markAlpha(exportCmd)
 	exportCmd.Flags().BoolVar(&exportAll, "all", false, "Export all local tunnel sessions")
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Write YAML to a file")
 	exportCmd.Flags().BoolVar(&exportJSON, "json", false, "Output exported configuration as JSON")
@@ -71,15 +70,15 @@ func init() {
 }
 
 func runExport(args []string) (*applyFile, []string, error) {
-	return runExportWithOptions(args, exportAll, exportIncludeSecrets)
+	return runExportWithContext(context.Background(), args, exportAll, exportIncludeSecrets)
 }
 
-func runExportWithOptions(args []string, exportAllEnabled bool, includeSecretPlaceholders bool) (*applyFile, []string, error) {
+func runExportWithContext(ctx context.Context, args []string, exportAllEnabled bool, includeSecretPlaceholders bool) (*applyFile, []string, error) {
 	var sessions []session.TunnelSession
 	var err error
 	switch {
 	case len(args) == 1:
-		sess, err := findSessionRefreshed(context.Background(), args[0])
+		sess, err := findSessionRefreshed(ctx, args[0])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -89,8 +88,8 @@ func runExportWithOptions(args []string, exportAllEnabled bool, includeSecretPla
 		if err != nil {
 			return nil, nil, fmt.Errorf("load tunnel sessions: %w", err)
 		}
-		for i := range sessions {
-			refreshSessionFromRemote(context.Background(), &sessions[i])
+		if err := refreshSessionsFromRemote(ctx, sessions, false); err != nil {
+			return nil, nil, err
 		}
 	default:
 		return nil, nil, fmt.Errorf("provide a tunnel id or use --all")
@@ -208,20 +207,7 @@ func envPlaceholder(tunnelID, suffix string) string {
 // non-regular file. A local attacker could otherwise pre-create the output path
 // as a symlink to a sensitive file and have the export follow it on write.
 func validateExportOutputPath(path string) error {
-	info, err := os.Lstat(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to write export to %q: path is a symlink", path)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("refusing to write export to %q: not a regular file", path)
-	}
-	return nil
+	return validateRegularOutputPath(path, "export")
 }
 
 // writeExportFileAtomic writes data to a temp file in the same directory with
@@ -230,29 +216,5 @@ func validateExportOutputPath(path string) error {
 // following a symlink at that name, which closes the validate→write TOCTOU
 // window that a plain os.WriteFile would leave open.
 func writeExportFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	return writeRegularFileAtomic(path, data, 0o600, "export")
 }

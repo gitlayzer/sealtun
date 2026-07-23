@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -12,6 +14,44 @@ import (
 	"github.com/labring/sealtun/pkg/k8s"
 	"github.com/labring/sealtun/pkg/session"
 )
+
+func BenchmarkCollectListItemsRemoteRefresh(b *testing.B) {
+	home := b.TempDir()
+	b.Setenv("HOME", home)
+	for i := 0; i < 8; i++ {
+		if err := session.Save(session.TunnelSession{
+			TunnelID:  fmt.Sprintf("bench-%02d", i),
+			Region:    "https://gzg.sealos.run",
+			Namespace: "ns-bench",
+			Protocol:  "https",
+			LocalPort: "3000",
+		}); err != nil {
+			b.Fatalf("save session %d: %v", i, err)
+		}
+	}
+	originalCollector := collectSessionRemoteState
+	collectSessionRemoteState = func(ctx context.Context, sess session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		select {
+		case <-time.After(time.Millisecond):
+			return &k8s.TunnelRemoteState{}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	b.Cleanup(func() { collectSessionRemoteState = originalCollector })
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		items, err := collectListItemsWithLocalCheck(false)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(items) != 8 {
+			b.Fatalf("got %d items, want 8", len(items))
+		}
+	}
+}
 
 func TestCollectListItems(t *testing.T) {
 	home := t.TempDir()
@@ -288,5 +328,39 @@ func TestCollectListItemsRefreshesRemoteHTTPSState(t *testing.T) {
 	}
 	if items[0].SealosHost != "sealtun-abc123-ns-demo.bja.sealos.run" {
 		t.Fatalf("expected refreshed sealos host, got %#v", items[0])
+	}
+}
+
+func TestCollectListItemsPropagatesContextCancellation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := session.Save(session.TunnelSession{
+		TunnelID:  "cancel-list",
+		Region:    "https://gzg.sealos.run",
+		Namespace: "ns-demo",
+		Protocol:  "https",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	originalCollector := collectSessionRemoteState
+	collectSessionRemoteState = func(ctx context.Context, sess session.TunnelSession) (*k8s.TunnelRemoteState, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	t.Cleanup(func() { collectSessionRemoteState = originalCollector })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := collectListItemsWithContext(ctx, false)
+		done <- err
+	}()
+	<-started
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
 	}
 }

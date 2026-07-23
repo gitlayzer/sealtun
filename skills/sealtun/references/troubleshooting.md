@@ -1,5 +1,7 @@
 # Sealtun Troubleshooting
 
+Prefer Stable `status`, `list`, `inspect`, `doctor`, and `logs` checks first. Standalone `discover`, `events`, `metrics`, `resources`, and `watch` are Alpha diagnostics; disclose their stability when they are the right tool for the reported problem.
+
 Use this when users report tunnel failures, auth issues, SSH/TCP connection failures, stale sessions, stop/start confusion, domain problems, missing metrics, or confusing CLI output.
 
 ## Fault Signature Map
@@ -53,7 +55,7 @@ sealtun login <region> --profile <name>
 
 Profiles are stored under `~/.sealtun/profiles/<name>`. Switching a profile updates the active auth and kubeconfig used by later commands.
 
-For first-time authorization, make the flow explicit: Sealtun needs Sealos authorization to obtain Kubernetes credentials for the active workspace. Ask the user to complete the browser/device flow, then verify with `sealtun status` before running `expose`, real `apply`, `domain set`, or cleanup operations.
+For first-time authorization, make the flow explicit: Sealtun needs Sealos authorization to obtain Kubernetes credentials for the active workspace. Ask the user to complete the browser/device flow, then verify with `sealtun status` before running `expose`, real `apply`, `domain add`, or cleanup operations.
 
 ## Daemon And Session Issues
 
@@ -72,13 +74,13 @@ sealtun doctor
 sealtun doctor <tunnel-id>
 sealtun doctor <tunnel-id> --report
 sealtun doctor --fix --dry-run
-sealtun repair <tunnel-id> --dry-run
+sealtun doctor <tunnel-id> --fix --dry-run
 sealtun stop <tunnel-id>
 sealtun cleanup
 ```
 
 `expose` normally starts daemon mode unless `--foreground` is used. `apply` also ensures the local daemon is running after successful cloud changes. `stop` intentionally preserves remote entry resources and scales the pod to zero; `start` or `resume` reopens it. `cleanup` deletes stopped, expired, stale, or error tunnels; `cleanup --all` force deletes all locally tracked tunnels.
-Use `doctor --fix --dry-run` before `doctor --fix`, or `repair <tunnel-id> --dry-run` before repairing one tunnel. Automatic fixes are conservative: start stopped tunnels, clean expired/stale sessions, or start the local daemon. They must not clean active tunnels, run `cleanup --all`, logout, or modify DNS provider settings. Use `doctor <id> --report` when a user needs a redacted Markdown artifact for support; it must not leak tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
+Use `doctor <tunnel-id> --fix --dry-run` before `doctor <tunnel-id> --fix`. Automatic fixes are conservative: start stopped tunnels, clean expired/stale sessions, or start the local daemon. They must not clean active tunnels, run `cleanup --all`, logout, or modify DNS provider settings. The old `repair` command is a Deprecated compatibility alias. Use `doctor <id> --report` when a user needs a redacted Markdown artifact for support; it must not leak tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
 
 ## SSH Direct TCP Problems
 
@@ -187,7 +189,7 @@ Mesh is service-level HTTP/TCP import, not transparent cross-cluster Pod IP/CNI 
 Symptoms:
 
 - Custom domain still points to the Sealos host only.
-- `domain set` or `apply` refuses an unverified domain.
+- `domain add` or `apply` refuses an unverified domain.
 - Certificate is not ready.
 
 Actions:

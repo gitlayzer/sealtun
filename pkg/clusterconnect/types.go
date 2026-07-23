@@ -13,17 +13,21 @@ const (
 var transparentPlatformSupported = platformTransparentSupported
 
 const (
-	CapabilityKubeconfig      = "kubeconfig"
-	CapabilityServicesGet     = "services.get"
-	CapabilityServicesList    = "services.list"
-	CapabilityEndpointsGet    = "endpoints.get"
-	CapabilityEndpointsList   = "endpoints.list"
-	CapabilityPodsGet         = "pods.get"
-	CapabilityPodsList        = "pods.list"
-	CapabilityPodsPortForward = "pods.portforward"
-	CapabilityDeployments     = "deployments.create"
-	CapabilitySecrets         = "secrets.create"
-	CapabilityConfigMaps      = "configmaps.create"
+	CapabilityKubeconfig         = "kubeconfig"
+	CapabilityServicesGet        = "services.get"
+	CapabilityServicesList       = "services.list"
+	CapabilityEndpointSlicesList = "endpointslices.list"
+	CapabilityPodsGet            = "pods.get"
+	CapabilityPodsList           = "pods.list"
+	CapabilityPodsPortForward    = "pods.portforward"
+	CapabilityDeployments        = "deployments.create"
+	CapabilitySecrets            = "secrets.create"
+	CapabilityConfigMaps         = "configmaps.create"
+
+	// Deprecated: service resolution uses discovery.k8s.io/v1 EndpointSlice.
+	CapabilityEndpointsGet = "endpoints.get"
+	// Deprecated: service resolution uses discovery.k8s.io/v1 EndpointSlice.
+	CapabilityEndpointsList = "endpoints.list"
 )
 
 type Options struct {
@@ -83,7 +87,7 @@ func SelectMode(requested string, caps []Capability) (selected string, modes []M
 		CapabilityKubeconfig,
 		CapabilityServicesGet,
 		CapabilityServicesList,
-		CapabilityEndpointsGet,
+		CapabilityEndpointSlicesList,
 		CapabilityPodsGet,
 		CapabilityPodsList,
 		CapabilityPodsPortForward,

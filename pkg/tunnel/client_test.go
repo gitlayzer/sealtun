@@ -86,6 +86,43 @@ func TestDialTargetHTTPSAllowsExplicitInsecureSkipVerify(t *testing.T) {
 	}
 }
 
+func TestDialTargetHTTPSTimesOutStalledHandshake(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	stop := make(chan struct{})
+	serverDone := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		<-stop
+	}()
+
+	target, err := ParseTargetWithOptions("https://"+listener.Addr().String(), TargetOptions{TLSInsecureSkipVerify: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	conn, err := dialTargetWithTimeout(target, 30*time.Millisecond)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	close(stop)
+	<-serverDone
+	if err == nil {
+		t.Fatal("expected stalled TLS handshake to time out")
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("stalled TLS handshake took %s, want bounded timeout", elapsed)
+	}
+}
+
 func TestRawTCPLocalForwardingDoesNotWriteHTTPFallback(t *testing.T) {
 	t.Parallel()
 

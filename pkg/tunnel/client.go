@@ -149,7 +149,11 @@ func handleTargetForwarding(stream net.Conn, target Target, protocol string) {
 }
 
 func dialTarget(target Target) (net.Conn, error) {
-	conn, err := net.DialTimeout("tcp", target.Address, 5*time.Second)
+	return dialTargetWithTimeout(target, 5*time.Second)
+}
+
+func dialTargetWithTimeout(target Target, timeout time.Duration) (net.Conn, error) {
+	conn, err := net.DialTimeout("tcp", target.Address, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +164,15 @@ func dialTarget(target Target) (net.Conn, error) {
 			return nil, splitErr
 		}
 		tlsConn := tls.Client(conn, &tls.Config{ServerName: host, InsecureSkipVerify: target.TLSInsecureSkipVerify}) // #nosec G402 -- only enabled by an explicit per-target user option for private upstreams.
+		if err := tlsConn.SetDeadline(time.Now().Add(timeout)); err != nil {
+			_ = tlsConn.Close()
+			return nil, err
+		}
 		if err := tlsConn.Handshake(); err != nil {
+			_ = tlsConn.Close()
+			return nil, err
+		}
+		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
 			_ = tlsConn.Close()
 			return nil, err
 		}

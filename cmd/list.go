@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"text/tabwriter"
+	"time"
 
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/spf13/cobra"
@@ -35,6 +37,11 @@ type listItem struct {
 var listJSON bool
 var listCheck bool
 
+const (
+	listRemoteRefreshConcurrency = 4
+	listRemoteRefreshTimeout     = 10 * time.Second
+)
+
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List local Sealtun tunnel sessions",
@@ -42,7 +49,7 @@ var listCmd = &cobra.Command{
 By default this command only reads local session records. Use --check to probe
 local target ports and mark unreachable running tunnels as degraded.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		items, err := collectListItems()
+		items, err := collectListItemsWithContext(cmd.Context(), listCheck)
 		if err != nil {
 			return err
 		}
@@ -65,19 +72,66 @@ func init() {
 }
 
 func collectListItems() ([]listItem, error) {
-	return collectListItemsWithLocalCheck(listCheck)
+	return collectListItemsWithContext(context.Background(), listCheck)
 }
 
 func collectListItemsWithLocalCheck(checkLocalPort bool) ([]listItem, error) {
+	return collectListItemsWithContext(context.Background(), checkLocalPort)
+}
+
+func collectListItemsWithContext(ctx context.Context, checkLocalPort bool) ([]listItem, error) {
 	sessions, err := session.List()
 	if err != nil {
 		return nil, fmt.Errorf("load tunnel sessions: %w", err)
 	}
-	for i := range sessions {
-		refreshSessionFromRemote(context.Background(), &sessions[i])
-		ensureSessionPublicPort(context.Background(), &sessions[i])
+	if err := refreshSessionsFromRemote(ctx, sessions, true); err != nil {
+		return nil, err
 	}
 	return listItemsFromSessions(sessions, checkLocalPort), nil
+}
+
+func refreshSessionsFromRemote(ctx context.Context, sessions []session.TunnelSession, ensurePublicPort bool) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	workerCount := listRemoteRefreshConcurrency
+	if workerCount > len(sessions) {
+		workerCount = len(sessions)
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				refreshCtx, cancel := context.WithTimeout(ctx, listRemoteRefreshTimeout)
+				refreshSessionFromRemote(refreshCtx, &sessions[index])
+				if ensurePublicPort {
+					ensureSessionPublicPort(refreshCtx, &sessions[index])
+				}
+				cancel()
+			}
+		}()
+	}
+	for index := range sessions {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return ctx.Err()
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	return ctx.Err()
 }
 
 func listItemsFromSessions(sessions []session.TunnelSession, checkLocalPort bool) []listItem {

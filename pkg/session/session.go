@@ -124,17 +124,17 @@ func SessionsDirFromConfigDir(root string) (string, error) {
 }
 
 func Save(session TunnelSession) error {
-	release, err := acquireSessionLock()
+	dir, release, err := acquireSessionDir()
 	if err != nil {
 		return err
 	}
 	defer release()
 
-	return saveLocked(session)
+	return saveLockedInDir(session, dir)
 }
 
 func Update(session TunnelSession) error {
-	release, err := acquireSessionLock()
+	dir, release, err := acquireSessionDir()
 	if err != nil {
 		return err
 	}
@@ -147,25 +147,41 @@ func Update(session TunnelSession) error {
 		return err
 	}
 
-	dir, err := SessionsDir()
-	if err != nil {
-		return err
-	}
 	path := filepath.Join(dir, session.TunnelID+".json")
 	if _, err := os.Stat(path); err != nil {
 		return err
 	}
 
-	return saveLocked(session)
+	return saveLockedInDir(session, dir)
 }
 
-func saveLocked(session TunnelSession) error {
-	if err := validateTunnelID(session.TunnelID); err != nil {
-		return err
-	}
-
-	dir, err := SessionsDir()
+func acquireSessionDir() (string, func(), error) {
+	root, err := auth.GetSealosDir()
 	if err != nil {
+		return "", nil, err
+	}
+	release, err := acquireSessionLockFromConfigDir(root)
+	if err != nil {
+		return "", nil, err
+	}
+	dir, err := SessionsDirFromConfigDir(root)
+	if err != nil {
+		release()
+		return "", nil, err
+	}
+	return dir, release, nil
+}
+
+func saveLockedInDir(session TunnelSession, dir string) error {
+	key, err := sessionEncryptionKeyFromConfigDir(filepath.Dir(dir))
+	if err != nil {
+		return fmt.Errorf("load session encryption key: %w", err)
+	}
+	return saveLockedInDirWithKey(session, dir, key)
+}
+
+func saveLockedInDirWithKey(session TunnelSession, dir string, key []byte) error {
+	if err := validateTunnelID(session.TunnelID); err != nil {
 		return err
 	}
 
@@ -179,13 +195,20 @@ func saveLocked(session TunnelSession) error {
 		return err
 	}
 	syncPIDStartToken(&session)
-	preserveScrubbedCredentials(path, &session)
+	if err := preserveScrubbedCredentials(path, &session, key); err != nil {
+		return err
+	}
 
-	plaintext, err := json.MarshalIndent(session, "", "  ") // #nosec G117 -- tunnel secrets are encrypted at rest (see encryptSessionData) and the file is 0600.
+	// Session files are encrypted and machine-read; compact JSON avoids writing
+	// formatting whitespace on every daemon state update.
+	plaintext, err := json.Marshal(session) // #nosec G117 -- tunnel secrets are encrypted at rest (see encryptSessionData) and the file is 0600.
 	if err != nil {
 		return err
 	}
-	data := encryptSessionData(plaintext)
+	data, err := encryptSessionDataWithKey(plaintext, key)
+	if err != nil {
+		return fmt.Errorf("encrypt session %s: %w", session.TunnelID, err)
+	}
 
 	// Create the temp file with O_EXCL so a same-UID attacker cannot pre-create
 	// the (otherwise predictable) temp path as a symlink and redirect this write
@@ -225,14 +248,6 @@ func validateSessionFileForWrite(path, tunnelID string) error {
 	return nil
 }
 
-func acquireSessionLock() (func(), error) {
-	root, err := auth.GetSealosDir()
-	if err != nil {
-		return nil, err
-	}
-	return acquireSessionLockFromConfigDir(root)
-}
-
 func acquireSessionLockFromConfigDir(root string) (func(), error) {
 	path := filepath.Join(root, sessionLockFileName)
 	if err := validateSessionLockPath(path); err != nil {
@@ -268,22 +283,25 @@ func validateSessionLockPath(path string) error {
 	return nil
 }
 
-func preserveScrubbedCredentials(path string, next *TunnelSession) {
+func preserveScrubbedCredentials(path string, next *TunnelSession, key []byte) error {
 	data, err := os.ReadFile(path) // #nosec G304 -- path is derived from a validated tunnel ID under the session directory.
 	if err != nil {
-		return
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
-	data, err = decryptSessionData(data)
+	data, err = decryptSessionDataWithKey(data, key)
 	if err != nil {
-		return
+		return fmt.Errorf("decrypt existing session %s: %w", next.TunnelID, err)
 	}
 
 	var existing TunnelSession
 	if err := json.Unmarshal(data, &existing); err != nil {
-		return
+		return nil
 	}
 	if existing.TunnelID != next.TunnelID {
-		return
+		return nil
 	}
 	if existing.CredentialsScrubbed {
 		next.Secret = ""
@@ -297,6 +315,7 @@ func preserveScrubbedCredentials(path string, next *TunnelSession) {
 			next.LastError = "local credentials scrubbed"
 		}
 	}
+	return nil
 }
 
 func Delete(tunnelID string) error {
@@ -304,16 +323,11 @@ func Delete(tunnelID string) error {
 		return err
 	}
 
-	release, err := acquireSessionLock()
+	dir, release, err := acquireSessionDir()
 	if err != nil {
 		return err
 	}
 	defer release()
-
-	dir, err := SessionsDir()
-	if err != nil {
-		return err
-	}
 
 	path := filepath.Join(dir, tunnelID+".json")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -323,20 +337,19 @@ func Delete(tunnelID string) error {
 }
 
 func ScrubCredentials() error {
-	release, err := acquireSessionLock()
+	dir, release, err := acquireSessionDir()
 	if err != nil {
 		return err
 	}
 	defer release()
 
-	dir, err := SessionsDir()
-	if err != nil {
-		return err
-	}
-
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
+	}
+	key, err := sessionEncryptionKeyFromConfigDir(filepath.Dir(dir))
+	if err != nil {
+		return fmt.Errorf("load session encryption key: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -349,7 +362,7 @@ func ScrubCredentials() error {
 		if err != nil {
 			return err
 		}
-		data, err := decryptSessionData(raw)
+		data, err := decryptSessionDataWithKey(raw, key)
 		if err != nil {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
@@ -382,7 +395,7 @@ func ScrubCredentials() error {
 		sess.ConnectionState = ConnectionStateStopped
 		sess.CredentialsScrubbed = true
 		sess.LastError = "local credentials scrubbed"
-		if err := saveLocked(sess); err != nil {
+		if err := saveLockedInDirWithKey(sess, dir, key); err != nil {
 			return fmt.Errorf("scrub session %s credentials: %w", sess.TunnelID, err)
 		}
 	}
@@ -435,7 +448,13 @@ func getLockedFromConfigDir(root, tunnelID string) (*TunnelSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err = decryptSessionData(data)
+	if isEncryptedSessionData(data) {
+		key, keyErr := sessionEncryptionKeyFromConfigDir(root)
+		if keyErr != nil {
+			return nil, fmt.Errorf("load session key: %w", keyErr)
+		}
+		data, err = decryptSessionDataWithKey(data, key)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("decrypt session %s: %w", tunnelID, err)
 	}
@@ -469,13 +488,13 @@ func List() ([]TunnelSession, error) {
 		return []TunnelSession{}, nil
 	}
 
-	release, err := acquireSessionLock()
+	release, err := acquireSessionLockFromConfigDir(root)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	return listLocked()
+	return listLockedFromConfigDir(root)
 }
 
 func sessionsDirExists(root string) (bool, error) {
@@ -503,14 +522,6 @@ func ListFromConfigDir(root string) ([]TunnelSession, error) {
 	return listLockedFromConfigDir(root)
 }
 
-func listLocked() ([]TunnelSession, error) {
-	root, err := auth.GetSealosDir()
-	if err != nil {
-		return nil, err
-	}
-	return listLockedFromConfigDir(root)
-}
-
 func listLockedFromConfigDir(root string) ([]TunnelSession, error) {
 	dir, err := SessionsDirFromConfigDir(root)
 	if err != nil {
@@ -523,6 +534,7 @@ func listLockedFromConfigDir(root string) ([]TunnelSession, error) {
 	}
 
 	sessions := make([]TunnelSession, 0, len(entries))
+	var key []byte
 	for _, entry := range entries {
 		if !isSessionJSONFile(entry) {
 			continue
@@ -535,7 +547,13 @@ func listLockedFromConfigDir(root string) ([]TunnelSession, error) {
 			}
 			return nil, err
 		}
-		data, err = decryptSessionData(data)
+		if isEncryptedSessionData(data) && key == nil {
+			key, err = sessionEncryptionKeyFromConfigDir(root)
+			if err != nil {
+				return nil, fmt.Errorf("load session encryption key: %w", err)
+			}
+		}
+		data, err = decryptSessionDataWithKey(data, key)
 		if err != nil {
 			continue
 		}

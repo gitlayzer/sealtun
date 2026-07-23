@@ -216,7 +216,7 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "[+] Sealos CNAME target: %s\n", hosts.SealosHost)
 		fmt.Fprintf(out, "[+] Configure DNS: CNAME %s -> %s\n", normalizedCustomDomain, hosts.SealosHost)
 		if !waitDomain {
-			fmt.Fprintf(out, "[+] After DNS is ready, attach it with: sealtun domain set %s %s\n", tunnelID, normalizedCustomDomain)
+			fmt.Fprintf(out, "[+] After DNS is ready, attach it with: sealtun domain add %s %s\n", tunnelID, normalizedCustomDomain)
 		}
 	}
 	fmt.Fprintf(out, "[+] Waiting for tunnel server pod to be ready...\n")
@@ -230,10 +230,10 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "[+] Waiting for custom domain DNS, Ingress, and certificate readiness (timeout %s)...\n", domainWaitTimeout)
 		if err := waitForDomainCNAMEReady(ctx, normalizedCustomDomain, hosts.SealosHost, domainWaitTimeout); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain DNS is not ready yet: %v\n", err)
-			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Re-run `sealtun domain set %s %s` after CNAME is ready.\n", tunnelID, normalizedCustomDomain)
+			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Re-run `sealtun domain add %s %s` after CNAME is ready.\n", tunnelID, normalizedCustomDomain)
 		} else if payload, err := configureSessionCustomDomain(ctx, tunnelID, normalizedCustomDomain); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Custom domain could not be attached: %v\n", err)
-			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Recheck DNS and retry `sealtun domain set %s %s`.\n", tunnelID, normalizedCustomDomain)
+			fmt.Fprintf(cmd.ErrOrStderr(), "[!] Tunnel will continue to run on the Sealos host. Recheck DNS and retry `sealtun domain add %s %s`.\n", tunnelID, normalizedCustomDomain)
 		} else if current, err := session.Get(tunnelID); err == nil {
 			sessionRecord = *current
 			if printErr := printDomainPayload(cmd, payload); printErr != nil {
@@ -423,6 +423,11 @@ func dialForegroundTunnelWithRetry(ctx context.Context, timeout, interval time.D
 	defer cancel()
 
 	var lastErr error
+	retryTimer := time.NewTimer(interval)
+	if !retryTimer.Stop() {
+		<-retryTimer.C
+	}
+	defer retryTimer.Stop()
 	for {
 		connected := false
 		err := dial(dialCtx, func() {
@@ -433,13 +438,14 @@ func dialForegroundTunnelWithRetry(ctx context.Context, timeout, interval time.D
 		}
 		lastErr = err
 
+		retryTimer.Reset(interval)
 		select {
 		case <-dialCtx.Done():
 			if lastErr != nil {
 				return lastErr
 			}
 			return dialCtx.Err()
-		case <-time.After(interval):
+		case <-retryTimer.C:
 		}
 	}
 }

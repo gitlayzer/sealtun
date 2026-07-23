@@ -42,4 +42,5 @@ var sshConnectCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(sshCmd)
 	sshCmd.AddCommand(sshConnectCmd)
+	markAlphaTree(sshCmd)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -366,6 +367,74 @@ func TestBuildGuidedUpPlanFullHTTPSOptionsAndConfig(t *testing.T) {
 	if strings.Contains(text, "password:") {
 		t.Fatalf("generated config must not write plaintext password:\n%s", text)
 	}
+}
+
+func TestWriteUpPlanConfigRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "outside.yaml")
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(dir, "sealtun.yaml")
+	if err := os.Symlink(target, linked); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	err := writeUpPlanConfigIfRequested(&upPlan{
+		SaveConfig: true,
+		ConfigPath: linked,
+		Protocol:   tunnelprotocol.HTTPS,
+		LocalPort:  "3000",
+	})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlinked config to be rejected, got %v", err)
+	}
+	data, readErr := os.ReadFile(target)
+	if readErr != nil || string(data) != "original" {
+		t.Fatalf("outside target changed: data=%q err=%v", data, readErr)
+	}
+}
+
+func TestProjectStateRejectsSymlinkedDirectoryAndFile(t *testing.T) {
+	t.Run("directory", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		outside := t.TempDir()
+		if err := os.Symlink(outside, filepath.Join(cwd, projectStateDirName)); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		err := saveProjectTunnelState(projectTunnelState{TunnelID: "abc123"})
+		if err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("expected symlinked state directory rejection, got %v", err)
+		}
+		if _, statErr := os.Stat(filepath.Join(outside, projectStateFileName)); !os.IsNotExist(statErr) {
+			t.Fatalf("state escaped project directory, stat err=%v", statErr)
+		}
+	})
+
+	t.Run("file", func(t *testing.T) {
+		cwd := t.TempDir()
+		t.Chdir(cwd)
+		stateDir := filepath.Join(cwd, projectStateDirName)
+		if err := os.Mkdir(stateDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(cwd, "outside-state.json")
+		if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(stateDir, projectStateFileName)); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		err := saveProjectTunnelState(projectTunnelState{TunnelID: "abc123"})
+		if err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("expected symlinked state file rejection, got %v", err)
+		}
+		data, readErr := os.ReadFile(target)
+		if readErr != nil || string(data) != "original" {
+			t.Fatalf("outside target changed: data=%q err=%v", data, readErr)
+		}
+	})
 }
 
 func TestBuildGuidedUpPlanCanSkipOptionalHTTPSOptions(t *testing.T) {

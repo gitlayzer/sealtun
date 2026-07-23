@@ -21,9 +21,10 @@ const (
 )
 
 type State struct {
-	PID       int    `json:"pid"`
-	StartedAt string `json:"startedAt"`
-	UpdatedAt string `json:"updatedAt"`
+	PID           int    `json:"pid"`
+	PIDStartToken string `json:"pidStartToken,omitempty"`
+	StartedAt     string `json:"startedAt"`
+	UpdatedAt     string `json:"updatedAt"`
 }
 
 func statePath() (string, error) {
@@ -49,9 +50,10 @@ func SaveState(pid int) error {
 	}
 
 	return writeState(path, State{
-		PID:       pid,
-		StartedAt: time.Now().Format(time.RFC3339),
-		UpdatedAt: time.Now().Format(time.RFC3339),
+		PID:           pid,
+		PIDStartToken: session.ProcessStartToken(pid),
+		StartedAt:     time.Now().Format(time.RFC3339),
+		UpdatedAt:     time.Now().Format(time.RFC3339),
 	})
 }
 
@@ -145,7 +147,7 @@ func AcquireRuntimeLock() (func(), error) {
 		if ok && alive {
 			return nil, os.ErrExist
 		}
-		if state, stateErr := LoadState(); stateErr == nil && session.ProcessAlive(state.PID) {
+		if state, stateErr := LoadState(); stateErr == nil && stateProcessAlive(state) {
 			return nil, os.ErrExist
 		}
 		switch {
@@ -162,7 +164,7 @@ func AcquireRuntimeLock() (func(), error) {
 }
 
 func createOwnedLock(path string) (func(), error) {
-	token := fmt.Sprintf("%d:%d", os.Getpid(), time.Now().UnixNano())
+	token := fmt.Sprintf("%d:%s:%d", os.Getpid(), session.ProcessStartToken(os.Getpid()), time.Now().UnixNano())
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- lock path is fixed under the user-owned Sealtun config directory.
 	if err != nil {
 		return nil, err
@@ -190,15 +192,26 @@ func lockOwnerAlive(path string) (bool, bool) {
 	if err != nil {
 		return false, false
 	}
-	pidText, _, ok := strings.Cut(string(data), ":")
-	if !ok {
+	parts := strings.Split(string(data), ":")
+	if len(parts) < 2 {
 		return false, false
 	}
-	pid, err := strconv.Atoi(pidText)
+	pid, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return false, false
 	}
-	return session.ProcessAlive(pid), true
+	if !session.ProcessAlive(pid) {
+		return false, true
+	}
+	// Legacy locks contain pid:nonce and remain PID-only. New locks contain
+	// pid:start-token:nonce, allowing Linux and Windows to reject PID reuse.
+	if len(parts) >= 3 && parts[1] != "" {
+		current := session.ProcessStartToken(pid)
+		if current == "" || current != parts[1] {
+			return false, true
+		}
+	}
+	return true, true
 }
 
 func LoadState() (*State, error) {
@@ -286,7 +299,7 @@ func Stop(timeout time.Duration) error {
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if !session.ProcessAlive(state.PID) {
+		if !stateProcessAlive(state) {
 			_ = DeleteStateForPID(state.PID)
 			return nil
 		}
@@ -305,7 +318,7 @@ func Alive() bool {
 }
 
 func stateAlive(state *State) bool {
-	if state == nil || !session.ProcessAlive(state.PID) {
+	if !stateProcessAlive(state) {
 		return false
 	}
 	updatedAt := state.UpdatedAt
@@ -317,4 +330,15 @@ func stateAlive(state *State) bool {
 		return false
 	}
 	return time.Since(ts) <= heartbeatMaxAge
+}
+
+func stateProcessAlive(state *State) bool {
+	if state == nil || !session.ProcessAlive(state.PID) {
+		return false
+	}
+	if state.PIDStartToken == "" {
+		return true
+	}
+	current := session.ProcessStartToken(state.PID)
+	return current != "" && current == state.PIDStartToken
 }

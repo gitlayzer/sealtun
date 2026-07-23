@@ -46,6 +46,7 @@ var templateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(templateCmd)
+	markAlpha(templateCmd)
 	templateCmd.Flags().BoolVar(&templateJSON, "json", false, "Output template as JSON")
 	templateCmd.Flags().StringVar(&templateName, "name", "", "Tunnel name for the YAML template")
 	templateCmd.Flags().IntVar(&templatePort, "port", 0, "Local port for the template")
