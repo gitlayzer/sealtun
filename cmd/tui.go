@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -94,6 +95,8 @@ type tuiDataSource interface {
 
 type tuiCLIDataSource struct{}
 
+var tuiCreateMu sync.Mutex
+
 func (tuiCLIDataSource) Status() (*statusPayload, error) {
 	return collectStatus()
 }
@@ -158,6 +161,9 @@ func (tuiCLIDataSource) Create(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	tuiCreateMu.Lock()
+	defer tuiCreateMu.Unlock()
+
 	previousProtocol := protocol
 	protocol = nextProtocol
 	defer func() {
@@ -604,6 +610,9 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if m.view == tuiViewConfirm {
+			if m.loading {
+				return m, nil
+			}
 			action, target := m.confirmAction, m.confirmTarget
 			m.loading = true
 			m.message = fmt.Sprintf("Running %s...", m.confirmCommand)

@@ -6,9 +6,12 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
 )
 
 func TestTUILoadsStatusTunnelsAndPorts(t *testing.T) {
@@ -77,6 +80,67 @@ func TestTUICreateFromDiscoveredTCPPortUsesProtocol(t *testing.T) {
 	}
 	if want := []string{"6379", "--protocol", "tcp"}; !reflect.DeepEqual(source.createdArgs, want) {
 		t.Fatalf("source saw create args %v want %v", source.createdArgs, want)
+	}
+}
+
+func TestTUIConfirmIgnoresEnterWhileActionIsRunning(t *testing.T) {
+	model := newTUIModel(&fakeTUISource{}, true)
+	model.view = tuiViewConfirm
+	model.confirmAction = tuiActionStop
+	model.confirmTarget = "tun123"
+	model.confirmCommand = "sealtun stop tun123"
+	model.loading = false
+
+	next, firstCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = next.(tuiModel)
+	if firstCmd == nil || !model.loading {
+		t.Fatal("first Enter should start the confirmed action")
+	}
+
+	_, secondCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if secondCmd != nil {
+		t.Fatal("second Enter must not submit the action again while it is running")
+	}
+}
+
+func TestTUICreateSerializesProtocolOverride(t *testing.T) {
+	previousRunExpose := runExpose
+	previousProtocol := protocol
+	t.Cleanup(func() {
+		runExpose = previousRunExpose
+		protocol = previousProtocol
+	})
+
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	runExpose = func(*cobra.Command, []string) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}
+
+	var wg sync.WaitGroup
+	for _, args := range [][]string{{"3000", "--protocol", "https"}, {"6379", "--protocol", "tcp"}} {
+		args := append([]string{}, args...)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = (tuiCLIDataSource{}).Create(context.Background(), args)
+		}()
+	}
+
+	<-entered
+	overlapped := false
+	select {
+	case <-entered:
+		overlapped = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	wg.Wait()
+
+	if overlapped {
+		t.Fatal("concurrent TUI creates entered the package-level protocol override together")
 	}
 }
 
