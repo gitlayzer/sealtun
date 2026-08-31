@@ -32,3 +32,6 @@ Thumbs.db
 
 # example
 .example
+dist/
+outputs/
+sealtun
