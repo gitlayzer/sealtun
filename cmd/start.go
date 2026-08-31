@@ -10,10 +10,9 @@ import (
 )
 
 var startCmd = &cobra.Command{
-	Use:     "start [tunnel-id]",
-	Aliases: []string{"resume"},
-	Short:   "Restart a stopped Sealtun tunnel",
-	Args:    cobra.ExactArgs(1),
+	Use:   "start [tunnel-id]",
+	Short: "Restart a stopped Sealtun tunnel",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withTunnelOperationLock(args[0], func() error {
 			return runStartTunnel(cmd, args[0])

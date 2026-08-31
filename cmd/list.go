@@ -36,6 +36,9 @@ type listItem struct {
 
 var listJSON bool
 var listCheck bool
+var listWatch bool
+var listInterval time.Duration
+var listCount int
 
 const (
 	listRemoteRefreshConcurrency = 4
@@ -49,6 +52,15 @@ var listCmd = &cobra.Command{
 By default this command only reads local session records. Use --check to probe
 local target ports and mark unreachable running tunnels as degraded.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if listWatch {
+			if listInterval <= 0 {
+				return fmt.Errorf("--interval must be greater than 0")
+			}
+			if listCount < 0 {
+				return fmt.Errorf("--count must be greater than or equal to 0")
+			}
+			return runListWatch(cmd, watchOptions{JSON: listJSON, Interval: listInterval, Count: listCount})
+		}
 		items, err := collectListItemsWithContext(cmd.Context(), listCheck)
 		if err != nil {
 			return err
@@ -69,6 +81,48 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output tunnel sessions as JSON")
 	listCmd.Flags().BoolVar(&listCheck, "check", false, "Probe local target ports and report degraded sessions")
+	listCmd.Flags().BoolVar(&listWatch, "watch", false, "Refresh the tunnel list until interrupted or --count is reached")
+	listCmd.Flags().DurationVar(&listInterval, "interval", 3*time.Second, "Refresh interval when --watch is enabled")
+	listCmd.Flags().IntVar(&listCount, "count", 0, "Stop after N refreshes; 0 watches until interrupted")
+}
+
+func runListWatch(cmd *cobra.Command, opts watchOptions) error {
+	out := cmd.OutOrStdout()
+	enc := json.NewEncoder(out)
+	ticker := time.NewTicker(opts.Interval)
+	defer ticker.Stop()
+	remaining := opts.Count
+	first := true
+	for {
+		if !first {
+			select {
+			case <-cmd.Context().Done():
+				return nil
+			case <-ticker.C:
+			}
+		}
+		first = false
+		items, err := collectListItemsWithContext(cmd.Context(), listCheck)
+		if err != nil {
+			if opts.JSON {
+				_ = enc.Encode(map[string]interface{}{"time": time.Now().Format(time.RFC3339), "error": err.Error()})
+			}
+			return err
+		}
+		if opts.JSON {
+			if err := enc.Encode(map[string]interface{}{"time": time.Now().Format(time.RFC3339), "items": items}); err != nil {
+				return err
+			}
+		} else {
+			printListTable(cmd, items)
+		}
+		if remaining > 0 {
+			remaining--
+			if remaining == 0 {
+				return nil
+			}
+		}
+	}
 }
 
 func collectListItems() ([]listItem, error) {

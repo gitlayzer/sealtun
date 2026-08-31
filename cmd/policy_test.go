@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labring/sealtun/pkg/k8s"
 	"github.com/labring/sealtun/pkg/accesspolicy"
+	"github.com/labring/sealtun/pkg/k8s"
 	"github.com/labring/sealtun/pkg/session"
 )
 

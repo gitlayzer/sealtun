@@ -86,16 +86,6 @@ CNAME target. Point your custom domain to that Sealos host, then attach the
 domain to the tunnel.`,
 }
 
-var domainSetCmd = &cobra.Command{
-	Use:          "set [tunnel-id] [domain]",
-	Short:        "Attach a custom domain to an existing tunnel",
-	Args:         cobra.ExactArgs(2),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runDomainAdd(cmd, args, false, 0)
-	},
-}
-
 var domainPlanCmd = &cobra.Command{
 	Use:          "plan [tunnel-id] [domain]",
 	Short:        "Show the DNS and attach plan for a custom domain",
@@ -266,10 +256,8 @@ var domainDoctorCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(domainCmd)
-	markDeprecated(domainSetCmd, "sealtun domain add <tunnel-id> <domain>")
 	domainCmd.AddCommand(domainPlanCmd)
 	domainCmd.AddCommand(domainAddCmd)
-	domainCmd.AddCommand(domainSetCmd)
 	domainCmd.AddCommand(domainClearCmd)
 	domainCmd.AddCommand(domainVerifyCmd)
 	domainCmd.AddCommand(domainStatusCmd)

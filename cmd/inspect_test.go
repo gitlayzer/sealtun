@@ -245,15 +245,15 @@ func TestCollectInspectPayloadRefreshesRemoteHTTPSState(t *testing.T) {
 	t.Cleanup(func() { collectSessionRemoteState = originalCollector })
 
 	if err := session.Save(session.TunnelSession{
-		TunnelID:   "abc123",
-		Region:     "https://bja.sealos.run",
-		Namespace:  "ns-demo",
-		Protocol:   "https",
-		Host:       "old.example.com",
-		LocalPort:  "3000",
-		PID:        0,
-		CreatedAt:  time.Now().Format(time.RFC3339),
-		Resources:  []string{"sealtun-abc123"},
+		TunnelID:  "abc123",
+		Region:    "https://bja.sealos.run",
+		Namespace: "ns-demo",
+		Protocol:  "https",
+		Host:      "old.example.com",
+		LocalPort: "3000",
+		PID:       0,
+		CreatedAt: time.Now().Format(time.RFC3339),
+		Resources: []string{"sealtun-abc123"},
 	}); err != nil {
 		t.Fatalf("save session: %v", err)
 	}

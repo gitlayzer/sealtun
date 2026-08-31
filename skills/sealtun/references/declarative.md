@@ -10,7 +10,7 @@ sealtun diff -f sealtun.yaml
 sealtun apply -f sealtun.yaml
 ```
 
-`--dry-run` validates and prints planned tunnels without login or cloud mutation. `diff` compares desired YAML with local sessions. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions. The declarative `apply/diff` workflow is Stable; the standalone `export` and `resources` helper commands are Alpha.
+`--dry-run` validates and prints planned tunnels without login or cloud mutation. `diff` compares desired YAML with local sessions. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions. Resource sizing is declared exclusively through the YAML `resources` field; there are no standalone resource-mutation commands.
 
 For first-time users, run or recommend:
 

@@ -2,7 +2,7 @@
 
 [返回 README](./README.md) | [English QuickStart](./QuickStart_EN.md)
 
-这里集中放置安装、登录、创建隧道、访问控制、自定义域名、TUI、集群访问、观测运维、协议模板和声明式配置用法。计费说明见 [README.md](./README.md#-计费说明)。
+这里集中放置安装、登录、创建隧道、访问控制、自定义域名、观测运维和声明式配置用法。计费说明见 [README.md](./README.md#-计费说明)。
 
 ## 📦 安装
 
@@ -94,11 +94,7 @@ cp -R skills/sealtun ~/.codex/skills/sealtun
 
 ## 🚀 快速上手
 
-### 功能稳定性
-
-- **Stable**：`up`、`expose`、`apply/diff`、隧道生命周期、安全策略、自定义域名、账号范围，以及基础诊断 `doctor/logs` 按兼容性要求维护。
-- **Alpha**：`init`、`tui/console`、`connect`、`mesh`、`ssh connect`，以及独立的 `discover/template/export/events/metrics/resources/watch`。功能完整保留，但接口可能调整，也可能在未来版本移除。
-- **Deprecated**：`repair`、`domain set`、顶级 `disconnect` 仅作为兼容入口保留。新调用分别使用 `doctor <id> --fix`、`domain add`、`connect disconnect`。
+全部命令均为 Stable：`up`、`expose`、`apply/diff`、隧道生命周期、安全策略、自定义域名、账号范围，以及诊断 `doctor/logs/inspect/list`。
 
 最短路径：
 
@@ -121,23 +117,6 @@ sealtun logs <tunnel-id>
 sealtun stop <tunnel-id>
 sealtun start <tunnel-id>
 sealtun cleanup <tunnel-id>
-```
-
-偏交互式的日常管理可以打开 Alpha 终端控制台：
-
-```bash
-sealtun tui
-# 等价别名
-sealtun console
-```
-
-TUI 会复用现有 CLI 逻辑。默认焦点在左侧菜单，上下键切换 `Tunnels`、`Create`、`Tools`、`Status`；按 `enter`、`right` 或 `tab` 进入右侧内容，按 `left`、`esc` 或 `tab` 回到菜单。`Tunnels` 用来查看和选择隧道，选中后按 `o` 进入 `Tunnel Actions`，可以执行 inspect/doctor/logs/metrics/events/resources/export、domain/policy/share/resources/rotate/doctor fix/start/stop/cleanup 等对象级操作；`Create` 用来从本地监听端口创建基础 HTTPS/SSH/TCP 隧道；`Tools` 只放全局操作，例如 status/discover/init/template/connect check/domain status/doctor dry-run/export all，以及 YAML apply dry-run/diff/apply。写操作都会先展示等价 CLI 命令并要求确认。`connect` 真实接管网络规则仍建议使用明确的 CLI 命令。
-
-Linux 下访问集群内 Service/Pod：
-
-```bash
-sealtun connect --check
-sudo sealtun connect
 ```
 
 ### 1. 登录到 Sealos
@@ -176,13 +155,6 @@ sealtun profile use hzh-dev
 ### 2. 暴露本地端口
 例如，让运行在本地 `3000` 端口的 Web 服务可以被公网访问：
 ```bash
-# Alpha：生成首次使用建议和 sealtun.yaml，不会创建资源
-sealtun init
-sealtun init --protocol auto --json
-
-# 确认后再创建推荐隧道
-sealtun init --apply
-
 # 日常开发推荐：自动复用当前项目隧道；没有状态时进入完整创建引导
 sealtun up
 sealtun up --guided
@@ -198,10 +170,9 @@ sealtun expose --target http://10.0.0.12:8080
 
 # 私有 HTTPS upstream 使用自签名证书时，显式关闭 upstream 证书校验
 sealtun expose --target https://10.0.0.12:8443 --target-insecure-skip-verify
-
 ```
 
-`sealtun up` 是 `expose` 的智能入口：它会优先复用当前目录 `.sealtun/state.json` 记录的 tunnel；没有状态且处于交互终端时，会按“登录检查 -> 选择端口 -> 选择协议 -> 是否加认证 -> 是否加限流 -> 是否加域名 -> 是否保存配置 -> 创建”的流程引导。非交互脚本或已明确端口/`--target` 时，`up` 直接调用同一套 `expose` 创建逻辑；也可以用 `--guided` 强制进入引导。`--target` 只适用于默认 HTTPS 隧道，目标必须是运行 Sealtun CLI 的机器可访问的 `http://` 或 `https://` 地址；SSH/TCP 四层隧道仍使用本地端口和 NodePort 模型。`--target-insecure-skip-verify`/`up --insecure` 只影响 Sealtun 客户端到 HTTPS upstream 的证书校验，默认关闭，仅建议用于私有网络内的自签名证书 upstream。
+`sealtun up` 是 `expose` 的智能入口：它会优先复用当前目录 `.sealtun/state.json` 记录的 tunnel；没有状态且处于交互终端时，会按“登录检查 -> 选择端口 -> 选择协议 -> 是否加认证 -> 是否加限流 -> 是否加域名 -> 是否保存配置 -> 创建”的流程引导，引导时会自动发现本地监听端口并按协议模板提示。非交互脚本或已明确端口/`--target` 时，`up` 直接调用同一套 `expose` 创建逻辑；也可以用 `--guided` 强制进入引导。`--template` 支持 `https/ssh/tcp/mysql/postgres/redis/mongodb/mqtt`。`--target` 只适用于默认 HTTPS 隧道，目标必须是运行 Sealtun CLI 的机器可访问的 `http://` 或 `https://` 地址；SSH/TCP 四层隧道仍使用本地端口和 NodePort 模型。`--target-insecure-skip-verify`/`up --insecure` 只影响 Sealtun 客户端到 HTTPS upstream 的证书校验，默认关闭，仅建议用于私有网络内的自签名证书 upstream。
 
 为公网业务流量启用 Basic Auth：
 ```bash
@@ -291,11 +262,7 @@ Host sealtun-dev
   Port <node-port>
 ```
 
-`--protocol ssh` 的公网业务入口只有 TCP NodePort，不会提供默认 HTTPS 业务 URL。Sealtun 仍会保留内部控制通道供本地 daemon 连接远端 Pod，但它不作为 SSH 隧道的用户访问入口。Basic Auth、Bearer Token、临时链接、IP 规则和自定义域名只适用于 HTTPS 隧道，不适用于 SSH 四层入口。旧的 WebSocket ProxyCommand 备用方式仍可用：
-
-```bash
-ssh -o ProxyCommand='sealtun ssh connect <tunnel-id>' <user>@sealtun
-```
+`--protocol ssh` 的公网业务入口只有 TCP NodePort，不会提供默认 HTTPS 业务 URL。Sealtun 仍会保留内部控制通道供本地 daemon 连接远端 Pod，但它不作为 SSH 隧道的用户访问入口。Basic Auth、Bearer Token、临时链接、IP 规则和自定义域名只适用于 HTTPS 隧道，不适用于 SSH 四层入口。
 
 ### 4. 通用 TCP 公网访问
 除 SSH 外，也可以用通用四层 TCP 暴露本地数据库、调试服务或其他非 HTTP 协议：
@@ -356,82 +323,7 @@ sealtun domain doctor <tunnel-id>
 sealtun domain clear <tunnel-id>
 ```
 
-### 6. 访问集群内服务（Alpha）
-`sealtun expose` 是把本地服务暴露到公网；`sealtun connect` 则是反向能力：让本机工具直接访问当前 Sealos/Kubernetes namespace 内的 Service FQDN、Service ClusterIP 或 Pod IP。它只使用当前 active profile/region/namespace 的 Sealtun 登录态和 kubeconfig，不要求用户手动修改 RBAC。
-
-Linux 当前支持透明 TCP 模式：Sealtun 会临时写入本机 `iptables` 和 `/etc/hosts`，把目标 TCP 连接转发到 Kubernetes `pods/portforward`。这不是 SOCKS/HTTP 代理，用户不需要给客户端配置代理。
-```bash
-sealtun connect --check
-sealtun connect --check --json
-sudo sealtun connect
-sudo sealtun connect --namespace ns-3rgvtt74
-```
-
-`sealtun connect` 默认以前台进程运行。保持该终端打开，或在另一个终端执行 `sudo sealtun connect disconnect` 停止；正常 `Ctrl-C` 或 `connect disconnect` 会清理 Sealtun 写入的 `iptables` 规则和 `/etc/hosts` 管理块。
-
-连接启动后可以直接访问：
-```bash
-curl http://my-service.ns-3rgvtt74.svc.cluster.local:8080
-curl http://10.96.0.12:8080      # Service ClusterIP
-curl http://10.244.0.22:3000     # Pod IP
-```
-
-查看或停止当前 cluster connect：
-```bash
-sealtun connect status
-sealtun connect status --json
-sudo sealtun connect disconnect
-```
-
-限制：当前透明数据面仅支持 Linux + TCP，需要 root 权限和 `iptables`；不支持 ICMP/ping 和 UDP。macOS/Windows 会明确提示暂不支持。
-
-### 7. 跨区域 Mesh（Alpha）
-`sealtun mesh` 用来把一个 Sealos 区域里的 Kubernetes Service 导入到其他区域。导入后，目标区域里的 Pod 可以访问本地 ClusterIP Service，例如 `http://mesh-api.<namespace>.svc.cluster.local:8080`，流量会通过每个区域的 Sealtun Mesh gateway 转发到源区域 Service。
-
-Mesh v1 是服务级通信，不是透明 Pod IP/CNI 网络：它不会让不同集群的 Pod IP 直接互通，也不支持 ICMP/ping 或 UDP。
-
-初始化本地 Mesh registry，并为多个区域准备独立 profile：
-```bash
-sealtun mesh init --home gzg --regions gzg,hzh,bja
-sealtun mesh login --regions gzg,hzh,bja
-sealtun mesh auth status
-```
-
-配置会保存到 `~/.sealtun/mesh/mesh.json`，各区域登录态会保存为 `mesh-<region>` profile，例如 `mesh-gzg`、`mesh-hzh`。
-
-部署每个区域的 Mesh gateway：
-```bash
-sealtun mesh up
-```
-
-把 `hzh` 区域里的 `default/api:8080` 发布到其他区域：
-```bash
-sealtun mesh service publish api \
-  --from hzh \
-  --k8s-service default/api:8080 \
-  --protocol http \
-  --import gzg,bja
-```
-
-发布后，`gzg` 或 `bja` 区域里的 Pod 可以访问：
-```bash
-curl http://mesh-api.<namespace>.svc.cluster.local:8080
-```
-
-查看、检查和清理：
-```bash
-sealtun mesh status
-sealtun mesh service list
-sealtun mesh service check api --from gzg
-sealtun mesh service unpublish api
-sealtun mesh down
-```
-
-`mesh service check` 会分层检查源区域 gateway、导入区域 ClusterIP Service，以及目标区域 Kubernetes Service 和 ready Pod 数。Mesh gateway 使用当前同版本 `ghcr.io/gitlayzer/sealtun` 镜像，不需要额外维护一套容器。
-
-### 8. 观测和运维
-`doctor`、`logs` 和生命周期操作是 Stable；下面的 `metrics`、`events`、`discover`、`resources`、`watch` 是 Alpha 高级工具，适合明确需要对应诊断能力时使用。
-
+### 6. 观测和运维
 查看远端隧道 Pod 日志：
 ```bash
 sealtun logs <tunnel-id>
@@ -439,33 +331,22 @@ sealtun logs <tunnel-id> --tail 200
 sealtun logs <tunnel-id> --follow
 ```
 
-查看隧道指标：
+查看单条隧道详情，按需附加远端诊断、指标或资源清单：
 ```bash
-sealtun metrics <tunnel-id>
-sealtun metrics <tunnel-id> --json
+# 本地 session 详情
+sealtun inspect <tunnel-id>
+
+# 附加远端 Kubernetes 诊断和最近事件
+sealtun inspect <tunnel-id> --remote
+
+# 附加本地、Kubernetes 和 server 指标
+sealtun inspect <tunnel-id> --metrics
+
+# 附加 Kubernetes 资源清单和占用提示
+sealtun inspect <tunnel-id> --resources
 ```
 
-查看远端 Kubernetes 事件：
-```bash
-sealtun events <tunnel-id>
-sealtun events <tunnel-id> --json
-```
-
-发现本机监听端口，并用协议模板提示快速创建隧道：
-```bash
-sealtun discover
-sealtun discover --protocol tcp
-sealtun discover --json --limit 20
-```
-
-查看单条隧道的 Kubernetes 资源占用提示：
-```bash
-sealtun resources <tunnel-id>
-sealtun resources <tunnel-id> --json
-sealtun resources set <tunnel-id> --request-cpu 20m --request-memory 64Mi --limit-cpu 300m --limit-memory 256Mi
-sealtun resources unset <tunnel-id>
-```
-默认远端 Pod 使用 `requests: cpu=10m memory=32Mi` 和 `limits: cpu=200m memory=128Mi`。`resources set` 会更新 Deployment 模板；如果隧道已经 stopped，不会启动 Pod，下一次 `start` 会沿用新资源配置。
+`inspect --metrics` 会聚合本地 session 状态、远端 Deployment/Pod/Ingress 状态，并在远端 Pod 支持时读取受 Bearer secret 保护的 `/_sealtun/metrics` 请求计数。TCP/SSH 四层隧道还会暴露 TCP 连接数、活跃连接数、字节数和错误数。远端诊断不可用或旧镜像不支持 server 指标时会降级为 warning，不会让命令失败。
 
 一键诊断本地与远端状态：
 ```bash
@@ -485,13 +366,19 @@ sealtun doctor --fix --dry-run
 sealtun doctor --fix
 ```
 
-`doctor --fix` 只执行保守动作：恢复 stopped 隧道、清理 expired/stale 隧道或启动本地 daemon；默认不会执行 `cleanup --all`、不会删除 active 隧道、不会修改 DNS provider。旧 `repair` 命令仅作为 Deprecated 兼容入口保留。`doctor <id> --report` 会生成脱敏 Markdown 排障报告，适合发给协作者或 issue，不会输出 token、secret、Authorization header、Basic Auth 密码或 kubeconfig。
+`doctor --fix` 只执行保守动作：恢复 stopped 隧道、清理 expired/stale 隧道或启动本地 daemon；默认不会执行 `cleanup --all`、不会删除 active 隧道、不会修改 DNS provider。`doctor <id> --report` 会生成脱敏 Markdown 排障报告，适合发给协作者或 issue，不会输出 token、secret、Authorization header、Basic Auth 密码或 kubeconfig。
 
 实时观察隧道或全局状态：
 ```bash
-sealtun watch
-sealtun watch <tunnel-id>
-sealtun watch <tunnel-id> --json
+# 持续刷新全部隧道列表
+sealtun list --watch
+
+# 单条隧道持续巡检
+sealtun inspect <tunnel-id> --watch
+
+# 控制刷新频率和次数；--count 0 表示持续运行
+sealtun list --watch --interval 5s --count 10
+sealtun inspect <tunnel-id> --watch --interval 2s --count 0
 ```
 
 停止、恢复和清理隧道：
@@ -505,22 +392,7 @@ sealtun cleanup --all
 
 `stop` 会保留域名、Service、Ingress、NodePort Service 和本地 session，只把远端 Pod 副本缩到 0；`start` 会重新打开同一条隧道。默认 `cleanup` 只清理 stopped、expired、stale 或 error 隧道，`cleanup <tunnel-id>` 只清理指定的合格隧道；`cleanup --all` 会强制清理所有本地记录关联的远端资源，仅在明确想删除所有隧道时使用。
 
-`metrics` 会聚合本地 session 状态、远端 Deployment/Pod/Ingress 状态，并在远端 Pod 支持时读取受 Bearer secret 保护的 `/_sealtun/metrics` 请求计数。TCP/SSH 四层隧道还会暴露 TCP 连接数、活跃连接数、字节数和错误数。
-
-### 9. 协议模板（Alpha）
-不确定该怎么写命令或声明式配置时，可以先生成模板：
-
-```bash
-sealtun template https --name web --port 3000 --domain app.example.com
-sealtun template ssh
-sealtun template postgres
-sealtun template redis --name cache
-sealtun template mongodb
-```
-
-模板会同时输出一次性 `sealtun expose` 命令和可提交到项目内的 `sealtun.yaml` 片段。`mysql`、`postgres`、`redis`、`mongodb`、`mqtt` 模板默认走通用 TCP 四层入口；HTTPS 模板才支持自定义域名和访问控制。
-
-### 10. 声明式配置
+### 7. 声明式配置
 创建 `sealtun.yaml`：
 ```yaml
 version: v1
@@ -590,19 +462,7 @@ sealtun diff -f sealtun.yaml
 sealtun apply -f sealtun.yaml
 ```
 
-使用 Alpha `export` 从本地 session 反向导出声明式配置：
-```bash
-# 导出单条隧道到 stdout
-sealtun export <tunnel-id>
-
-# 导出所有本地 session
-sealtun export --all -o sealtun.yaml
-
-# 为已经启用 Basic Auth/Bearer/临时链接的隧道生成环境变量占位
-sealtun export --all --include-secret-placeholders
-```
-
-`export` 不会输出已经 hash 后的密码或 token 明文。默认会保留可安全还原的字段，例如协议、本地端口、自定义域名、TTL、IP allowlist/denylist；如果需要把认证配置也写进 YAML，可以使用 `--include-secret-placeholders` 生成 `passwordEnv`、`bearerTokenEnv` 或 `tokenEnv` 占位，再由用户自己填入对应环境变量。
+资源调整统一通过 YAML `resources` 字段声明。默认远端 Pod 使用 `requests: cpu=10m memory=32Mi` 和 `limits: cpu=200m memory=128Mi`；`apply` 会按 YAML 中的期望值更新 Deployment 模板，未写字段回落到默认值。
 
 也可以使用展开的明文写法：
 ```yaml

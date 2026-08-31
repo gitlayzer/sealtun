@@ -1,6 +1,6 @@
 # Sealtun Troubleshooting
 
-Prefer Stable `status`, `list`, `inspect`, `doctor`, and `logs` checks first. Standalone `discover`, `events`, `metrics`, `resources`, and `watch` are Alpha diagnostics; disclose their stability when they are the right tool for the reported problem.
+Prefer `status`, `list`, `inspect`, `doctor`, and `logs` checks first. Remote diagnostics, metrics, events, and the resource inventory are flags on `inspect`; continuous refresh is `list --watch` / `inspect --watch`.
 
 Use this when users report tunnel failures, auth issues, SSH/TCP connection failures, stale sessions, stop/start confusion, domain problems, missing metrics, or confusing CLI output.
 
@@ -10,13 +10,12 @@ Start with the symptom, then confirm the layer before changing anything:
 
 | Symptom | Likely layer | First checks | Typical fix |
 | --- | --- | --- | --- |
-| Public URL shows offline/degraded | Local app, upstream target, or daemon | `list --check`, `inspect <id>`, `curl 127.0.0.1:<port>` or `curl <target>` | Start the local app, fix target reachability, or restart/resume tunnel |
+| Public URL shows offline/degraded | Local app, upstream target, or daemon | `list --check`, `inspect <id>`, `curl 127.0.0.1:<port>` or `curl <target>` | Start the local app, fix target reachability, or restart the tunnel |
 | `ssh` connects then closes after auth starts | Local sshd/user auth | `ssh -vvv`, `logs <id>`, local sshd logs | Fix user/key/password/PAM on the machine running Sealtun |
 | TCP connection opens then closes | Local target protocol/auth | `inspect <id> --remote`, protocol client logs | Fix database/service bind/auth/TLS expectations |
 | Custom domain not ready | DNS/CNAME or certificate | `domain plan`, `domain verify`, `domain doctor` | Correct CNAME, then wait/verify certificate |
-| `resources` output shows missing or warning resources | Remote Kubernetes | `doctor <id>`, `events <id>`, `inspect <id> --remote` | Fix image/pod/service/ingress/cert issue named by diagnostics |
+| Resource inventory shows missing or warning resources | Remote Kubernetes | `doctor <id>`, `inspect <id> --remote`, `inspect <id> --resources` | Fix image/pod/service/ingress/cert issue named by diagnostics |
 | Basic Auth/Bearer/link/rate limit fails | HTTPS access policy | `inspect <id>`, `policy show <id>`, `policy audit <id>`, token length/expiry/IP/rate | Fix credential source, token, temporary link expiry, IP rules, or rate limit |
-| Cross-region Mesh import cannot be reached | Mesh profile, gateway, import Service, or source Service | `mesh auth status`, `mesh status`, `mesh service check <name> --from <region>` | Re-login missing region profile, run `mesh up`, fix import/source Service readiness |
 
 Do not jump straight to `cleanup --all`; it is destructive and only appropriate when the user intentionally wants all tracked remote resources removed.
 
@@ -79,15 +78,14 @@ sealtun stop <tunnel-id>
 sealtun cleanup
 ```
 
-`expose` normally starts daemon mode unless `--foreground` is used. `apply` also ensures the local daemon is running after successful cloud changes. `stop` intentionally preserves remote entry resources and scales the pod to zero; `start` or `resume` reopens it. `cleanup` deletes stopped, expired, stale, or error tunnels; `cleanup --all` force deletes all locally tracked tunnels.
-Use `doctor <tunnel-id> --fix --dry-run` before `doctor <tunnel-id> --fix`. Automatic fixes are conservative: start stopped tunnels, clean expired/stale sessions, or start the local daemon. They must not clean active tunnels, run `cleanup --all`, logout, or modify DNS provider settings. The old `repair` command is a Deprecated compatibility alias. Use `doctor <id> --report` when a user needs a redacted Markdown artifact for support; it must not leak tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
+`expose` normally starts daemon mode unless `--foreground` is used. `apply` also ensures the local daemon is running after successful cloud changes. `stop` intentionally preserves remote entry resources and scales the pod to zero; `start` reopens it. `cleanup` deletes stopped, expired, stale, or error tunnels; `cleanup --all` force deletes all locally tracked tunnels.
+Use `doctor <tunnel-id> --fix --dry-run` before `doctor <tunnel-id> --fix`. Automatic fixes are conservative: start stopped tunnels, clean expired/stale sessions, or start the local daemon. They must not clean active tunnels, run `cleanup --all`, logout, or modify DNS provider settings. Use `doctor <id> --report` when a user needs a redacted Markdown artifact for support; it must not leak tokens, secrets, Authorization headers, Basic Auth passwords, or kubeconfig data.
 
 ## SSH Direct TCP Problems
 
 Symptoms:
 
 - `ssh <user>@<public-host> -p <node-port>` connects then closes.
-- SSH works through ProxyCommand but not direct NodePort.
 - User expects a normal HTTPS URL for an SSH tunnel.
 
 Actions:
@@ -114,7 +112,6 @@ Symptoms:
 Actions:
 
 ```bash
-sealtun discover
 sealtun list --check
 sealtun inspect <tunnel-id>
 lsof -i :3000
@@ -122,7 +119,7 @@ curl -v http://127.0.0.1:3000/
 curl -v http://10.0.0.12:8080/
 ```
 
-Use `sealtun discover` when the user is unsure which local port is actually listening; it scans local TCP listening ports only and provides protocol/template hints without creating a tunnel. For `--target`, do not use discovery; verify the explicit upstream URL from the machine running Sealtun. Fix the local service or upstream reachability first. Sealtun forwards to `localhost:<localPort>` for local tunnels, or to `target` for HTTPS upstream tunnels.
+When the user is unsure which local port is actually listening, `up` discovers local TCP listening ports with protocol hints without creating a tunnel. For `--target`, verify the explicit upstream URL from the machine running Sealtun. Fix the local service or upstream reachability first. Sealtun forwards to `localhost:<localPort>` for local tunnels, or to `target` for HTTPS upstream tunnels.
 
 If an HTTPS upstream works through a local reverse proxy but direct `--target https://...` returns the Sealtun 502 page, check the upstream certificate from the machine running Sealtun:
 
@@ -146,43 +143,16 @@ Actions:
 sealtun doctor <tunnel-id>
 sealtun doctor <tunnel-id> --report
 sealtun inspect <tunnel-id> --remote
-sealtun resources <tunnel-id>
+sealtun inspect <tunnel-id> --resources
 sealtun logs <tunnel-id> --tail 200
-sealtun metrics <tunnel-id> --json
-sealtun events <tunnel-id>
+sealtun inspect <tunnel-id> --metrics
 sealtun doctor --json
 ```
 
 Remote diagnostics inspect the Sealtun-managed Deployment, Service, Ingress, Pod, Events, and readiness where available. If code changes are needed, inspect `pkg/k8s`, `cmd/inspect.go`, `cmd/doctor.go`, and related tests.
 Prefer `sealtun doctor <tunnel-id>` before asking the user to manually inspect Kubernetes. It summarizes local owner state, local port reachability, remote resource readiness, and next-step suggestions.
 
-Use `sealtun resources <tunnel-id>` for a read-only resource list and resource occupancy hints. It shows Deployment, Pod, HTTP Service, TCP NodePort Service, Ingress, Certificate, Issuer, and Secret metadata, but it does not estimate cloud billing and never displays Secret data.
-
-## Cross-region Mesh Problems
-
-Symptoms:
-
-- `mesh service check` reports missing gateway or import Service.
-- Pods in one region cannot access `mesh-<name>.<namespace>.svc.cluster.local:<port>`.
-- A region profile is missing or points to the wrong namespace.
-
-Actions:
-
-```bash
-sealtun mesh auth status
-sealtun mesh status
-sealtun mesh service list
-sealtun mesh service check <name> --from <import-region>
-sealtun mesh up
-```
-
-Mesh is service-level HTTP/TCP import, not transparent cross-cluster Pod IP/CNI routing. Do not debug it as generic Ingress or local `connect`. Check layers in order:
-
-1. The source and import regions must exist in `~/.sealtun/mesh/mesh.json`.
-2. Each region must have a valid `mesh-<region>` profile.
-3. Each region must have a ready Mesh gateway Deployment, Service, and Ingress.
-4. Each import region must have a `mesh-<service>` ClusterIP Service selecting the current Mesh gateway.
-5. The source region must have the target Kubernetes Service and ready backend Pods.
+Use `inspect <tunnel-id> --resources` for a read-only resource list and resource occupancy hints. It shows Deployment, Pod, HTTP Service, TCP NodePort Service, Ingress, Certificate, Issuer, and Secret metadata, but it does not estimate cloud billing and never displays Secret data.
 
 ## Custom Domain, DNS, Certificate
 
@@ -229,7 +199,7 @@ sealtun inspect <tunnel-id>
 sealtun policy show <tunnel-id>
 sealtun policy audit <tunnel-id> --since 10m
 sealtun logs <tunnel-id> --tail 200
-sealtun metrics <tunnel-id> --json
+sealtun inspect <tunnel-id> --metrics
 ```
 
 Check the session access policy. Tokens must be at least 8 characters. Temporary links expire at `expiresAt`; query parameter name is `_sealtun_token`. IP decisions use `X-Real-IP`, then the last valid proxy-confirmed client IP in `X-Forwarded-For`, then `RemoteAddr`, so upstream proxy headers matter. Rate limits use fixed-window specs such as `60/m`; `429` responses should appear in `policy audit` with reason `rate-limit`.
@@ -238,8 +208,7 @@ Access audit must not show plaintext tokens, Authorization headers, Basic Auth p
 
 ## Metrics
 
-`metrics` combines local session data, remote Kubernetes readiness, and server counters where the remote image supports them. Missing server counters usually mean the remote pod is older or unreachable, not necessarily that the tunnel is down.
-
+`inspect --metrics` combines local session data, remote Kubernetes readiness, and server counters where the remote image supports them. Missing server counters usually mean the remote pod is older or unreachable, not necessarily that the tunnel is down; they appear as warnings instead of failing the command.
 
 ## Troubleshooting Response Shape
 

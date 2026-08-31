@@ -49,7 +49,6 @@ var shareCmd = &cobra.Command{
 
 var shareCreateCmd = &cobra.Command{
 	Use:          "create [tunnel-id]",
-	Aliases:      []string{"add"},
 	Short:        "Create a temporary access link",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
@@ -96,7 +95,6 @@ var shareListCmd = &cobra.Command{
 
 var shareRevokeCmd = &cobra.Command{
 	Use:          "revoke [tunnel-id] [name]",
-	Aliases:      []string{"delete", "remove"},
 	Short:        "Revoke a temporary access link by name",
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,

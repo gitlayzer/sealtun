@@ -9,6 +9,7 @@ import (
 	"github.com/labring/sealtun/pkg/auth"
 	"github.com/labring/sealtun/pkg/k8s"
 	"github.com/labring/sealtun/pkg/session"
+	"github.com/spf13/cobra"
 )
 
 func TestPrintTunnelResourcesHidesSecretDataAndShowsHints(t *testing.T) {
@@ -24,10 +25,10 @@ func TestPrintTunnelResourcesHidesSecretDataAndShowsHints(t *testing.T) {
 			CostHints: []string{"secret data hidden"},
 		}},
 	}
-	cmd := *resourcesCmd
+	cmd := &cobra.Command{}
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	printTunnelResources(&cmd, payload)
+	printTunnelResources(cmd, payload)
 	text := out.String()
 	if !strings.Contains(text, "resource hints show Kubernetes occupancy") || !strings.Contains(text, "secret data hidden") {
 		t.Fatalf("expected resources note and hint, got %s", text)
@@ -62,19 +63,6 @@ func TestNormalizeResourceConfigDefaultsAndValidates(t *testing.T) {
 		Requests: &session.ResourceValues{Memory: "bad-unit"},
 	}); err == nil || !strings.Contains(err.Error(), "invalid memory request quantity") {
 		t.Fatalf("expected invalid quantity error, got %v", err)
-	}
-}
-
-func TestMergeResourceSetInputKeepsExistingValues(t *testing.T) {
-	got, err := mergeResourceSetInput(&session.ResourceConfig{
-		Requests: &session.ResourceValues{CPU: "30m", Memory: "64Mi"},
-		Limits:   &session.ResourceValues{CPU: "300m", Memory: "256Mi"},
-	}, resourceSetInput{LimitMemory: "384Mi"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Requests.CPU != "30m" || got.Requests.Memory != "64Mi" || got.Limits.CPU != "300m" || got.Limits.Memory != "384Mi" {
-		t.Fatalf("unexpected merged resources: %#v", got)
 	}
 }
 

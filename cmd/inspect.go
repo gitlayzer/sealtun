@@ -13,31 +13,33 @@ import (
 )
 
 type inspectPayload struct {
-	TunnelID                    string                 `json:"tunnelId"`
-	Status                      string                 `json:"status"`
-	Mode                        string                 `json:"mode,omitempty"`
-	Region                      string                 `json:"region,omitempty"`
-	Namespace                   string                 `json:"namespace,omitempty"`
-	Protocol                    string                 `json:"protocol,omitempty"`
-	Host                        string                 `json:"host,omitempty"`
-	SealosHost                  string                 `json:"sealosHost,omitempty"`
-	CustomDomain                string                 `json:"customDomain,omitempty"`
-	PublicPort                  int32                  `json:"publicPort,omitempty"`
-	LocalPort                   string                 `json:"localPort,omitempty"`
-	TargetURL                   string                 `json:"targetUrl,omitempty"`
-	TargetTLSInsecureSkipVerify bool                   `json:"targetTlsInsecureSkipVerify,omitempty"`
-	BasicAuth                   *inspectBasicAuth      `json:"basicAuth,omitempty"`
-	AccessPolicy                *inspectAccessPolicy   `json:"accessPolicy,omitempty"`
-	TTL                         string                 `json:"ttl,omitempty"`
-	ExpiresAt                   string                 `json:"expiresAt,omitempty"`
-	PID                         int                    `json:"pid"`
-	ProcessAlive                bool                   `json:"processAlive"`
-	LocalPortReachable          bool                   `json:"localPortReachable"`
-	CreatedAt                   string                 `json:"createdAt,omitempty"`
-	Resources                   []string               `json:"resources,omitempty"`
-	LastError                   string                 `json:"lastError,omitempty"`
-	Remote                      *k8s.TunnelDiagnostics `json:"remote,omitempty"`
-	Warnings                    []string               `json:"warnings,omitempty"`
+	TunnelID                    string                  `json:"tunnelId"`
+	Status                      string                  `json:"status"`
+	Mode                        string                  `json:"mode,omitempty"`
+	Region                      string                  `json:"region,omitempty"`
+	Namespace                   string                  `json:"namespace,omitempty"`
+	Protocol                    string                  `json:"protocol,omitempty"`
+	Host                        string                  `json:"host,omitempty"`
+	SealosHost                  string                  `json:"sealosHost,omitempty"`
+	CustomDomain                string                  `json:"customDomain,omitempty"`
+	PublicPort                  int32                   `json:"publicPort,omitempty"`
+	LocalPort                   string                  `json:"localPort,omitempty"`
+	TargetURL                   string                  `json:"targetUrl,omitempty"`
+	TargetTLSInsecureSkipVerify bool                    `json:"targetTlsInsecureSkipVerify,omitempty"`
+	BasicAuth                   *inspectBasicAuth       `json:"basicAuth,omitempty"`
+	AccessPolicy                *inspectAccessPolicy    `json:"accessPolicy,omitempty"`
+	TTL                         string                  `json:"ttl,omitempty"`
+	ExpiresAt                   string                  `json:"expiresAt,omitempty"`
+	PID                         int                     `json:"pid"`
+	ProcessAlive                bool                    `json:"processAlive"`
+	LocalPortReachable          bool                    `json:"localPortReachable"`
+	CreatedAt                   string                  `json:"createdAt,omitempty"`
+	Resources                   []string                `json:"resources,omitempty"`
+	LastError                   string                  `json:"lastError,omitempty"`
+	Remote                      *k8s.TunnelDiagnostics  `json:"remote,omitempty"`
+	Metrics                     *metricsPayload         `json:"metrics,omitempty"`
+	KubernetesResources         *k8s.TunnelResourceList `json:"kubernetesResources,omitempty"`
+	Warnings                    []string                `json:"warnings,omitempty"`
 }
 
 type inspectBasicAuth struct {
@@ -58,12 +60,26 @@ type remoteDiagnosticsCollector func(context.Context, session.TunnelSession) (*k
 
 var inspectJSON bool
 var inspectRemote bool
+var inspectMetrics bool
+var inspectResources bool
+var inspectWatch bool
+var inspectInterval time.Duration
+var inspectCount int
 
 var inspectCmd = &cobra.Command{
 	Use:   "inspect [tunnel-id]",
 	Short: "Inspect a local Sealtun tunnel session",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if inspectWatch {
+			if inspectInterval <= 0 {
+				return fmt.Errorf("--interval must be greater than 0")
+			}
+			if inspectCount < 0 {
+				return fmt.Errorf("--count must be greater than or equal to 0")
+			}
+			return runInspectWatch(cmd, args[0], watchOptions{JSON: inspectJSON, Interval: inspectInterval, Count: inspectCount})
+		}
 		payload, err := collectInspectPayloadWithContext(cmd.Context(), args[0])
 		if err != nil {
 			return err
@@ -83,7 +99,51 @@ var inspectCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(inspectCmd)
 	inspectCmd.Flags().BoolVar(&inspectJSON, "json", false, "Output tunnel session details as JSON")
-	inspectCmd.Flags().BoolVar(&inspectRemote, "remote", false, "Include best-effort remote Kubernetes diagnostics")
+	inspectCmd.Flags().BoolVar(&inspectRemote, "remote", false, "Include best-effort remote Kubernetes diagnostics and recent events")
+	inspectCmd.Flags().BoolVar(&inspectMetrics, "metrics", false, "Include local, Kubernetes, and server metrics")
+	inspectCmd.Flags().BoolVar(&inspectResources, "resources", false, "Include the Kubernetes resource inventory and occupancy hints")
+	inspectCmd.Flags().BoolVar(&inspectWatch, "watch", false, "Refresh inspection until interrupted or --count is reached")
+	inspectCmd.Flags().DurationVar(&inspectInterval, "interval", 3*time.Second, "Refresh interval when --watch is enabled")
+	inspectCmd.Flags().IntVar(&inspectCount, "count", 0, "Stop after N refreshes; 0 watches until interrupted")
+}
+
+func runInspectWatch(cmd *cobra.Command, tunnelID string, opts watchOptions) error {
+	out := cmd.OutOrStdout()
+	enc := json.NewEncoder(out)
+	ticker := time.NewTicker(opts.Interval)
+	defer ticker.Stop()
+	remaining := opts.Count
+	first := true
+	for {
+		if !first {
+			select {
+			case <-cmd.Context().Done():
+				return nil
+			case <-ticker.C:
+			}
+		}
+		first = false
+		payload, err := collectInspectPayloadWithContext(cmd.Context(), tunnelID)
+		if err != nil {
+			if opts.JSON {
+				_ = enc.Encode(map[string]interface{}{"time": time.Now().Format(time.RFC3339), "error": err.Error()})
+			}
+			return err
+		}
+		if opts.JSON {
+			if err := enc.Encode(map[string]interface{}{"time": time.Now().Format(time.RFC3339), "payload": payload}); err != nil {
+				return err
+			}
+		} else {
+			printInspect(cmd, payload)
+		}
+		if remaining > 0 {
+			remaining--
+			if remaining == 0 {
+				return nil
+			}
+		}
+	}
 }
 
 func collectInspectPayload(tunnelID string) (*inspectPayload, error) {
@@ -139,15 +199,46 @@ func collectInspectPayloadWithContext(ctx context.Context, tunnelID string) (*in
 	if !payload.ProcessAlive && payload.PID > 0 {
 		payload.Warnings = append(payload.Warnings, "recorded process is no longer running")
 	}
-	if inspectRemote {
+	if inspectRemote || inspectMetrics {
 		remoteCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		remote, err := collectRemoteDiagnosticsWithContext(remoteCtx, *sess)
+		remote, remoteErr := collectRemoteDiagnosticsWithContext(remoteCtx, *sess)
 		cancel()
-		if err != nil {
-			payload.Warnings = append(payload.Warnings, fmt.Sprintf("remote diagnostics unavailable: %v", err))
+
+		if remoteErr != nil {
+			payload.Warnings = append(payload.Warnings, fmt.Sprintf("remote diagnostics unavailable: %v", remoteErr))
+			if inspectMetrics {
+				metrics, metricsErr := collectMetricsPayloadForSession(ctx, *sess)
+				if metricsErr == nil {
+					payload.Metrics = metrics
+					payload.Warnings = append(payload.Warnings, metrics.Warnings...)
+				} else {
+					payload.Warnings = append(payload.Warnings, fmt.Sprintf("metrics unavailable: %v", metricsErr))
+				}
+			}
 		} else {
-			payload.Remote = remote
-			payload.Warnings = append(payload.Warnings, remote.Warnings...)
+			if inspectRemote {
+				payload.Remote = remote
+				payload.Warnings = append(payload.Warnings, remote.Warnings...)
+			}
+			if inspectMetrics {
+				metrics, metricsErr := collectMetricsPayloadForSession(ctx, *sess)
+				if metricsErr == nil {
+					metrics.Remote = remoteMetricsFromDiagnostics(remote)
+					payload.Metrics = metrics
+					payload.Warnings = append(payload.Warnings, metrics.Warnings...)
+				} else {
+					payload.Warnings = append(payload.Warnings, fmt.Sprintf("metrics unavailable: %v", metricsErr))
+				}
+			}
+		}
+	}
+	if inspectResources {
+		resources, resourcesErr := collectTunnelResources(ctx, tunnelID)
+		if resourcesErr != nil {
+			payload.Warnings = append(payload.Warnings, fmt.Sprintf("kubernetes resources unavailable: %v", resourcesErr))
+		} else {
+			payload.KubernetesResources = resources
+			payload.Warnings = append(payload.Warnings, resources.Warnings...)
 		}
 	}
 
@@ -316,6 +407,25 @@ func printInspect(cmd *cobra.Command, payload *inspectPayload) {
 		for _, warning := range payload.Warnings {
 			fmt.Fprintf(out, "  - %s\n", warning)
 		}
+	}
+
+	if payload.Metrics != nil && payload.Metrics.Remote != nil {
+		fmt.Fprintln(out, "")
+		fmt.Fprintln(out, "Metrics")
+		fmt.Fprintf(out, "  Deployment ready: %s\n", valueOr(payload.Metrics.Remote.DeploymentReady, "-"))
+		fmt.Fprintf(out, "  Pods: %d total, %d ready, %d restarts\n", payload.Metrics.Remote.PodCount, payload.Metrics.Remote.ReadyPods, payload.Metrics.Remote.RestartCount)
+		if len(payload.Metrics.Server) > 0 {
+			fmt.Fprintln(out, "  Server counters:")
+			for _, key := range []string{"clientConnected", "totalRequests", "activeRequests", "totalResponseBytes", "total5xx", "lastStatus", "lastRequestAt", "averageDurationMs", "totalTCPConnections", "activeTCPConnections", "totalTCPBytes", "totalTCPErrors", "lastTCPConnectedAt"} {
+				if value, ok := payload.Metrics.Server[key]; ok {
+					fmt.Fprintf(out, "    %s: %v\n", key, value)
+				}
+			}
+		}
+	}
+
+	if payload.KubernetesResources != nil {
+		printTunnelResources(cmd, payload.KubernetesResources)
 	}
 }
 

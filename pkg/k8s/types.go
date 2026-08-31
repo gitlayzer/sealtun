@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/labring/sealtun/pkg/accesspolicy"
-	"github.com/labring/sealtun/pkg/mesh"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -43,34 +42,6 @@ type ResourceConfig struct {
 type ResourceValues struct {
 	CPU    string
 	Memory string
-}
-
-type MeshGatewaySpec struct {
-	MeshName string
-	Token    string
-	Routes   []mesh.GatewayRoute
-}
-
-type MeshGatewayStatus struct {
-	Name      string
-	Host      string
-	Namespace string
-}
-
-type MeshImportSpec struct {
-	Name       string
-	MeshName   string
-	Protocol   string
-	Port       int32
-	TargetPort int32
-}
-
-type MeshCheck struct {
-	GatewayDeploymentReady bool
-	GatewayServiceExists   bool
-	GatewayIngressHost     string
-	ImportServiceExists    bool
-	Warnings               []string
 }
 
 const (
@@ -268,9 +239,6 @@ const (
 	basicAuthPasswordKey  = "basicAuthPasswordHash"
 	accessPolicyKey       = "accessPolicy"
 	configDigestSaltKey   = "configDigestSalt"
-	meshConfigDigestKey   = "sealtun.labring.com/mesh-config"
-	meshRoutesKey         = "routes.json"
-	meshTokenKey          = "token"
 )
 
 var reservedCustomDomainSuffixes = []string{
@@ -290,8 +258,6 @@ var (
 )
 
 const serverRunAsUserID int64 = 1001
-
-const meshOwnerName = "sealtun-mesh"
 
 type createdResource struct {
 	kind resourceKind

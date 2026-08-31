@@ -126,7 +126,6 @@ var profileUseCmd = &cobra.Command{
 
 var profileDeleteCmd = &cobra.Command{
 	Use:          "delete [name]",
-	Aliases:      []string{"rm", "remove"},
 	Short:        "Delete a saved login profile",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
