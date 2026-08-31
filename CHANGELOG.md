@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.0.39] - 2026-08-31
+
+### Removed
+- **Alpha command surface**: Removed `mesh`, `connect`, `tui`/`console`, `ssh connect`, standalone `discover`, `template`, `export`, `init`, `events`, `metrics`, `resources`, and `watch` commands along with their dedicated packages and TUI dependencies.
+- **Compatibility entries**: Removed `repair` (use `doctor --fix`), `domain set` (use `domain add`), and all command aliases (`resume`, `share add`/`delete`/`remove`, `profile rm`/`remove`).
+
+### Changed
+- **Diagnostics consolidated into `inspect`**: `inspect --remote` covers remote Kubernetes diagnostics and recent events, `inspect --metrics` covers local/Kubernetes/server counters, and `inspect --resources` covers the resource inventory with occupancy hints.
+- **Continuous refresh**: `list --watch` and `inspect --watch` replace the standalone `watch` command, with `--interval` and `--count` controls and NDJSON samples in `--json` mode.
+- **Resource sizing**: Tunnel Pod CPU/memory changes now go exclusively through YAML `resources` declarations and `sealtun apply`; there are no imperative resource-set commands.
+- **Port discovery and protocol templates**: These capabilities remain available inside `up` (guided flow and `--template`) without standalone commands.
+
 ## [v0.0.11] - 2026-05-07
 
 ### Added
