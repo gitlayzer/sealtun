@@ -35,7 +35,7 @@ func actionableErrorHintText(msg string) string {
 		strings.Contains(lower, "exceeded") ||
 		strings.Contains(lower, "out of cpu") ||
 		strings.Contains(lower, "out of memory") {
-		return "Sealos/Kubernetes rejected the resource request. Check account balance/quota in Sealos Cloud, lower tunnel resources with `sealtun resources set`, or clean up unused tunnels."
+		return "Sealos/Kubernetes rejected the resource request. Check account balance/quota in Sealos Cloud, lower tunnel resources via the YAML `resources` field and `sealtun apply`, or clean up unused tunnels."
 	}
 	if strings.Contains(lower, "forbidden") ||
 		strings.Contains(lower, "permission denied") ||
@@ -43,18 +43,21 @@ func actionableErrorHintText(msg string) string {
 		strings.Contains(lower, "rbac") {
 		return "The active login may not have permission in this region/namespace. Run `sealtun status`, confirm the active profile/region, then re-login if needed."
 	}
-	if strings.Contains(lower, "cname") ||
-		strings.Contains(lower, "dns") ||
-		strings.Contains(lower, "no such host") ||
-		strings.Contains(lower, "server misbehaving") ||
-		strings.Contains(lower, "lookup ") {
+	// Local domain validation errors contain "dns" in their message; only hint
+	// at DNS propagation when the failure is an actual resolution/lookup error.
+	if !strings.Contains(lower, "invalid custom domain") &&
+		(strings.Contains(lower, "cname") ||
+			strings.Contains(lower, "no such host") ||
+			strings.Contains(lower, "server misbehaving") ||
+			strings.Contains(lower, "lookup ") ||
+			strings.Contains(lower, "dns resolution")) {
 		return "DNS may not have propagated or the resolver may be stale. Run `sealtun domain plan` to confirm the CNAME target, then `sealtun domain verify --wait` after updating DNS."
 	}
 	if strings.Contains(lower, "x509:") ||
 		strings.Contains(lower, "certificate signed by unknown authority") ||
 		strings.Contains(lower, "tls: failed to verify certificate") ||
 		strings.Contains(lower, "tls: handshake failure") {
-		return "If this is a private HTTPS upstream with a self-signed or name-mismatched certificate, recreate the target tunnel with `--target-insecure-skip-verify`; do not use it for public untrusted upstreams."
+		return "If the Sealos cluster API certificate is not trusted, re-login to refresh the kubeconfig (`sealtun login <region>`). For a private HTTPS upstream with a self-signed certificate, recreate the tunnel with `--target-insecure-skip-verify`; never use it for public upstreams."
 	}
 	if strings.Contains(lower, "connection refused") ||
 		strings.Contains(lower, "i/o timeout") ||

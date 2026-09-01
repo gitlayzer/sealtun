@@ -674,6 +674,34 @@ func TestActionableErrorHint(t *testing.T) {
 	}
 }
 
+func TestActionableErrorHintDoesNotFireOnLocalDomainValidation(t *testing.T) {
+	for _, msg := range []string{
+		`invalid custom domain "1.2.3.4": custom domain must be a DNS hostname, not an IP address`,
+		`invalid custom domain "app_example.com": label "app_example" is not DNS compatible`,
+	} {
+		if got := actionableErrorHintText(msg); got != "" {
+			t.Fatalf("local domain validation error %q should not produce a DNS hint, got %q", msg, got)
+		}
+	}
+}
+
+func TestActionableErrorHintQuotaUsesCurrentCommands(t *testing.T) {
+	got := actionableErrorHintText("pods is forbidden: exceeded quota cpu")
+	if strings.Contains(got, "resources set") {
+		t.Fatalf("quota hint references the removed resources set command: %q", got)
+	}
+	if !strings.Contains(got, "sealtun apply") {
+		t.Fatalf("quota hint should point to YAML apply, got %q", got)
+	}
+}
+
+func TestActionableErrorHintClusterTLSMentionsReLogin(t *testing.T) {
+	got := actionableErrorHintText(`Get "https://gzg.sealos.run:6443/api/v1/namespaces/ns-x/secrets/s": tls: failed to verify certificate: x509: certificate signed by unknown authority`)
+	if !strings.Contains(got, "login") {
+		t.Fatalf("cluster CA hint should mention re-login, got %q", got)
+	}
+}
+
 func TestCommandErrorWithHint(t *testing.T) {
 	got := commandErrorWithHint(fmt.Errorf("x509: certificate signed by unknown authority"))
 	if !strings.Contains(got, "Hint:") || !strings.Contains(got, "--target-insecure-skip-verify") {
