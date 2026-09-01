@@ -21,16 +21,7 @@ Do not jump straight to `cleanup --all`; it is destructive and only appropriate 
 
 ## Fast Local Checks
 
-```bash
-sealtun status
-sealtun region current
-sealtun profile current
-sealtun list --check
-sealtun inspect <tunnel-id>
-sealtun doctor
-```
-
-Start by checking login, active region/profile, local session records, and whether the configured target is reachable from the machine running Sealtun.
+Start with `status`, `region current`, `profile current`, `list --check`, `inspect <id>`, and `doctor`: login, active region/profile, local session records, and whether the configured target is reachable from the machine running Sealtun.
 
 ## Login, Region, Profile
 
@@ -206,9 +197,7 @@ Check the session access policy. Tokens must be at least 8 characters. Temporary
 
 Access audit must not show plaintext tokens, Authorization headers, Basic Auth passwords, or temporary-link tokens. If a user needs to replace a leaked or stale temporary link, use `share rotate <tunnel-id> <name> --ttl 1h`; for the internal tunnel server secret, use `rotate <tunnel-id> --server-secret`.
 
-## Metrics
-
-`inspect --metrics` combines local session data, remote Kubernetes readiness, and server counters where the remote image supports them. Missing server counters usually mean the remote pod is older or unreachable, not necessarily that the tunnel is down; they appear as warnings instead of failing the command.
+`inspect <id> --metrics` combines local session data, remote Kubernetes readiness, and server counters where the remote image supports them. Missing server counters usually mean the remote pod is older or unreachable, not that the tunnel is down; they appear as warnings instead of failing the command.
 
 ## Troubleshooting Response Shape
 

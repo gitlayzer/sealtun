@@ -36,7 +36,7 @@ These should trigger the Sealtun skill and choose the expected path. This set sh
 | "帮我安装并使用 sealtun" | install/login/status path. |
 | "第一次用 sealtun 怎么开始" | `up` guided path; no resource creation without confirmation. |
 | "sealtun 怎么把本地 3000 暴露出去" | HTTPS `expose 3000` path. |
-| "sealtun.yaml 先看看会改什么" | `apply --dry-run` and `diff`, not real apply. |
+| "sealtun.yaml 先看看会改什么" | `apply --dry-run` and `--format diff`, not real apply. |
 | "Sealos 隧道连不上帮我诊断" | troubleshooting path, read-only checks first. |
 | "用 sealtun 暴露 SSH 让我直接连" | `expose 22 --protocol ssh`, report host and NodePort. |
 | "用 sealtun 给公网链接加 Basic Auth 或 Bearer Token" | HTTPS access control path, env-backed secrets preferred. |
@@ -86,8 +86,8 @@ User-facing commands and workflows that must remain represented in the skill:
 - Core: `sealtun --version`, shell completion, install through npm/npx or release binaries.
 - Auth and scope: `login`, `logout`, `status`, `region list/current/use`, `profile list/current/save/use/delete`.
 - Tunnel creation: `up` (guided, port discovery, `--template`) and `expose`.
-- Declarative: `apply -f`, `apply --dry-run`, `diff -f`; resource sizing only through YAML `resources`.
-- Domain: `domain plan/add/verify/status/doctor/clear`.
+- Declarative: `apply -f`, `apply --dry-run`, `apply --dry-run --format diff`; resource sizing only through YAML `resources`.
+- Domain: `domain plan/add/verify/status/clear`; `domain status --verbose` for detailed diagnostics.
 - Access and sharing: Basic Auth, Bearer token, IP allowlist/denylist, temporary access token, `share create/list/revoke/rotate`, `policy show/set/audit`, `rotate --server-secret`.
 - Operations: `list`, `list --check`, `list --watch`, `inspect`, `inspect --remote/--metrics/--resources`, `inspect --watch`, `logs`, `doctor`, `doctor --fix --dry-run`.
 - Lifecycle: `stop`, `start`, `cleanup`, `cleanup <tunnel-id>`, `cleanup --all`.

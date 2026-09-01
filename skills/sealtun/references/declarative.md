@@ -1,6 +1,6 @@
 # Sealtun Declarative Configuration
 
-Use this for `sealtun.yaml`, `apply -f`, `diff -f`, multi-tunnel management, HTTPS access policy YAML, HTTP upstream targets, SSH tunnel declarations, and automatic expiration.
+Use this for `sealtun.yaml`, `apply -f`, multi-tunnel management, HTTPS access policy YAML, HTTP upstream targets, SSH tunnel declarations, and automatic expiration.
 
 ## Workflow
 
@@ -10,7 +10,7 @@ sealtun apply -f sealtun.yaml --dry-run --format diff
 sealtun apply -f sealtun.yaml
 ```
 
-`--dry-run` validates and prints planned tunnels without login or cloud mutation. `diff` compares desired YAML with local sessions. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions. Resource sizing is declared exclusively through the YAML `resources` field; there are no standalone resource-mutation commands.
+`--dry-run` validates and prints planned tunnels without login or cloud mutation. Adding `--format diff` compares desired YAML with local sessions field by field. Real `apply` requires login and creates or updates remote Kubernetes resources and local daemon sessions. Resource sizing is declared exclusively through the YAML `resources` field; there are no standalone resource-mutation commands.
 
 For first-time users, run or recommend:
 
@@ -22,7 +22,7 @@ sealtun apply -f sealtun.yaml --dry-run --format diff
 sealtun apply -f sealtun.yaml
 ```
 
-If login opens an authorization flow, explain that the user must complete it before `apply` can create remote resources. Keep `--dry-run` and `diff` as the safe preview path before real cloud mutation.
+If login opens an authorization flow, explain that the user must complete it before `apply` can create remote resources. Keep `--dry-run` and `--format diff` as the safe preview path before real cloud mutation.
 
 ## Declarative Decision Path
 
@@ -35,7 +35,7 @@ Use declarative config when the user wants repeatability, multiple tunnels, stab
 | Public SSH | `protocol: ssh`, `localPort: 22` | output must show SSH host and port |
 | Generic TCP/database | `protocol: tcp`, protocol-specific port | output must show `<host>:<port>` |
 | Auto-expire | `ttl: 2h` or similar Go duration | verify `expiresAt` behavior in output/session |
-| Tune remote Pod resources | `resources.requests` and `resources.limits` | dry-run/diff, then `resources <id>` after apply |
+| Tune remote Pod resources | `resources.requests` and `resources.limits` | dry-run/diff, then `inspect <id> --resources` after apply |
 | Secure HTTPS | `basicAuth` and/or `accessPolicy` with tokens, IP rules, rate limit, audit, or temporary links | prefer env-backed secrets unless local-only inline config is intentional |
 
 Never add `target`, `domain`, `basicAuth`, or `accessPolicy` to `ssh` or `tcp` tunnels; those are HTTPS-layer features.
