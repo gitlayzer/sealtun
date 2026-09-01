@@ -26,7 +26,7 @@ The public URL is printed at creation time.
 sealtun login gzg                      # log in with a specific region
 sealtun login gzg --profile gzg-main   # save as a named profile
 sealtun profile list / use / delete    # manage profiles
-sealtun region list / current / use    # manage regions
+sealtun region list / current          # query regions (switch with login <region>)
 sealtun status                         # current login state
 ```
 
@@ -73,7 +73,7 @@ Authentication is enforced by the Sealtun server proxy layer and protects public
 
 ```bash
 sealtun share create <tunnel-id> --name review --ttl 1h
-sealtun share list / rotate / revoke <tunnel-id> review
+sealtun share rotate / revoke <tunnel-id> review
 ```
 
 **Policy management**:

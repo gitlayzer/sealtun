@@ -13,7 +13,7 @@ Use this for interactive Sealtun operation: login, `up`, expose HTTPS, remote HT
 | "Expose Postgres/MySQL/Redis/MongoDB/MQTT" | `expose <port> --protocol tcp` | Return `<host>:<node-port>`. |
 | "Secure this public URL" | HTTPS `expose`, `policy set`, or `share` | Prefer env-backed secrets. Not for SSH/TCP NodePort. |
 
-After any live operation, verify with `list --check`, `inspect <id>`, `domain status/verify`, `share list`, or `doctor <id>`.
+After any live operation, verify with `list --check`, `inspect <id>`, `domain status/verify`, `policy show`, or `doctor <id>`.
 
 ## Login, Regions, Profiles
 
@@ -21,13 +21,13 @@ After any live operation, verify with `list --check`, `inspect <id>`, `domain st
 sealtun login
 sealtun login gzg
 sealtun status
-sealtun region list / current / use
+sealtun region list / current
 sealtun profile list / current / save / use / delete
 ```
 
 Known regions: `gzg`, `hzh`, `bja`, `cloud`, `usw`. Bare `sealtun login` shows a keyboard region selector in an interactive terminal; use `sealtun login <region>` in scripts and CI. Login state, kubeconfig, and profiles live under `~/.sealtun`.
 
-First-use behavior: check `status` before creating cloud resources; if a browser/device authorization flow opens, wait for the user to finish instead of retrying; verify with `status` after login. For multiple accounts/regions/workspaces, prefer `login <region> --profile <name>` and `profile use <name>` over silently overwriting the active login.
+First-use behavior: check `status` before creating cloud resources; if a browser/device authorization flow opens, wait for the user to finish instead of retrying; verify with `status` after login. For multiple accounts/regions/workspaces, prefer `login <region> --profile <name>` and `profile use <name>` over silently overwriting the active login. To switch regions, run `login <region>` again.
 
 ## Expose A Port
 
@@ -105,12 +105,11 @@ sealtun doctor [<id>] [--json] [--report [--report-file p.md]] [--fix --dry-run]
 
 ```bash
 sealtun share create <tunnel-id> --name review --ttl 1h [--json] [--open]
-sealtun share list <tunnel-id> [--json]
 sealtun share rotate <tunnel-id> review --ttl 1h
 sealtun share revoke <tunnel-id> review
 ```
 
-HTTPS tunnels only. `share create` prints a `?_sealtun_token=...` URL exactly once because Sealtun stores only the token hash. `share rotate` invalidates the old URL and prints the new one once. `share list` shows names and expiry without tokens.
+HTTPS tunnels only. `share create` prints a `?_sealtun_token=...` URL exactly once because Sealtun stores only the token hash. `share rotate` invalidates the old URL and prints the new one once. Link names and expiry metadata are visible in `policy show <tunnel-id>`.
 
 ## Rotation
 

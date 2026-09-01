@@ -26,7 +26,7 @@ sealtun list       # 3. 查看隧道
 sealtun login gzg                      # 指定 region 登录
 sealtun login gzg --profile gzg-main   # 保存为命名 profile
 sealtun profile list / use / delete    # profile 管理
-sealtun region list / current / use    # region 管理
+sealtun region list / current          # region 查询（切换用 login <region>）
 sealtun status                         # 当前登录状态
 ```
 
@@ -73,7 +73,7 @@ sealtun expose 3000 --rate-limit 60/m --audit
 
 ```bash
 sealtun share create <tunnel-id> --name review --ttl 1h
-sealtun share list / rotate / revoke <tunnel-id> review
+sealtun share rotate / revoke <tunnel-id> review
 ```
 
 **策略管理**：

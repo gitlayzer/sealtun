@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/labring/sealtun/pkg/accesspolicy"
@@ -35,7 +34,6 @@ var shareTTL time.Duration
 var shareToken string
 var shareJSON bool
 var shareOpen bool
-var shareListJSON bool
 
 var shareCmd = &cobra.Command{
 	Use:          "share",
@@ -70,26 +68,6 @@ var shareCreateCmd = &cobra.Command{
 			openBrowser(payload.URL)
 		}
 		return err
-	},
-}
-
-var shareListCmd = &cobra.Command{
-	Use:          "list [tunnel-id]",
-	Short:        "List temporary access links without revealing tokens",
-	Args:         cobra.ExactArgs(1),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		items, err := listShareLinksWithContext(cmd.Context(), args[0], nowUTC())
-		if err != nil {
-			return err
-		}
-		if shareListJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(items)
-		}
-		printShareList(cmd, args[0], items)
-		return nil
 	},
 }
 
@@ -135,14 +113,13 @@ var shareRotateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(shareCmd)
-	shareCmd.AddCommand(shareCreateCmd, shareListCmd, shareRevokeCmd, shareRotateCmd)
+	shareCmd.AddCommand(shareCreateCmd, shareRevokeCmd, shareRotateCmd)
 
 	shareCreateCmd.Flags().StringVar(&shareName, "name", "share", "Temporary link name")
 	shareCreateCmd.Flags().DurationVar(&shareTTL, "ttl", time.Hour, "Temporary link lifetime")
 	shareCreateCmd.Flags().StringVar(&shareToken, "token", "", "Use an explicit token instead of generating one")
 	shareCreateCmd.Flags().BoolVar(&shareJSON, "json", false, "Output the created link as JSON")
 	shareCreateCmd.Flags().BoolVar(&shareOpen, "open", false, "Open the temporary access URL in the browser")
-	shareListCmd.Flags().BoolVar(&shareListJSON, "json", false, "Output temporary link metadata as JSON")
 	shareRotateCmd.Flags().DurationVar(&shareTTL, "ttl", time.Hour, "Rotated temporary link lifetime")
 	shareRotateCmd.Flags().BoolVar(&shareJSON, "json", false, "Output the rotated link as JSON")
 	shareRotateCmd.Flags().BoolVar(&shareOpen, "open", false, "Open the rotated temporary access URL in the browser")
@@ -479,23 +456,4 @@ func printShareCreate(cmd *cobra.Command, payload *shareCreatePayload) {
 	fmt.Fprintf(out, "  URL: %s\n", payload.URL)
 	fmt.Fprintf(out, "  Expires at: %s\n", payload.ExpiresAt)
 	fmt.Fprintln(out, "  Note: this URL is shown only once because Sealtun stores only a token hash.")
-}
-
-func printShareList(cmd *cobra.Command, tunnelID string, items []shareListItem) {
-	out := cmd.OutOrStdout()
-	if len(items) == 0 {
-		fmt.Fprintf(out, "No temporary access links found for tunnel %s.\n", tunnelID)
-		return
-	}
-	fmt.Fprintf(out, "Temporary access links for tunnel %s\n", tunnelID)
-	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tEXPIRES AT\tSTATUS")
-	for _, item := range items {
-		status := "active"
-		if item.Expired {
-			status = "expired"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", item.Name, item.ExpiresAt, status)
-	}
-	_ = w.Flush()
 }

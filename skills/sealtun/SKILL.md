@@ -43,7 +43,7 @@ Inside this repository, prefer current source, README, and QuickStart docs over 
 - `up`/`expose`: capture tunnel ID, endpoint, and protocol output; verify with `list --check` and `inspect`.
 - `apply`: preview with `apply --dry-run` and `apply --dry-run --format diff`; after real apply verify every tunnel with `list` and `inspect`.
 - `domain add/clear`: verify with `domain status` or `domain verify`.
-- `share create/revoke/rotate`: verify with `share list`; never repeat a one-time token.
+- `share create/revoke/rotate`: verify with `policy show` (temporary link metadata); never repeat a one-time token.
 - `stop/start/cleanup`: verify with `list` or `inspect`; `stop` preserves entry resources while `cleanup` removes eligible resources.
 
 ## Operating Rules

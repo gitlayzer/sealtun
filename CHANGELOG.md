@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- **Region switch duplication**: Removed `region use`; switch regions with `login <region>` (identical underlying flow).
+- **Share list duplication**: Removed `share list`; temporary link names and expiry metadata are visible in `policy show <tunnel-id>`.
+
 ### Changed
-- **Domain diagnostics merged**: `domain doctor` is now `domain status --verbose`; both share the same collector and `--verbose` enables detailed DNS, Ingress, and certificate output.
-- **Diff merged into apply**: `sealtun diff` is now `sealtun apply --dry-run --format diff`; `--dry-run` alone shows the execution plan, `--format diff` shows field-level comparisons.
+- **Domain diagnostics merged**: `domain doctor` is now `domain status --verbose`.
+- **Diff merged into apply**: `sealtun diff` is now `sealtun apply --dry-run --format diff`.
+
 
 
 ## [v0.0.39] - 2026-08-31

@@ -48,7 +48,7 @@ These should trigger the Sealtun skill and choose the expected path. This set sh
 | "用 sealtun 停掉再恢复这个隧道" | `stop` then `start`, with preservation semantics. |
 | "用 sealtun 清理停止的隧道" | `cleanup`, not `cleanup --all` unless explicitly requested. |
 | "用 sealtun 切换 profile 或 region" | `profile` / `region` path with status verification. |
-| "用 sealtun 创建临时分享链接" | `share create/list/revoke` path, one-time token warning. |
+| "用 sealtun 创建临时分享链接" | `share create/revoke` path, one-time token warning. |
 | "用 sealtun 看资源占用" | `inspect <id> --resources`; not billing. |
 | "用 sealtun 实时看隧道状态" | `list --watch` / `inspect <id> --watch`. |
 | "用 sealtun doctor 自动修复前先看看计划" | `doctor --fix --dry-run` path before real fix. |
@@ -84,11 +84,11 @@ These should not force Sealtun unless the user adds Sealtun/public-tunnel contex
 User-facing commands and workflows that must remain represented in the skill:
 
 - Core: `sealtun --version`, shell completion, install through npm/npx or release binaries.
-- Auth and scope: `login`, `logout`, `status`, `region list/current/use`, `profile list/current/save/use/delete`.
+- Auth and scope: `login`, `logout`, `status`, `region list/current`, `profile list/current/save/use/delete`.
 - Tunnel creation: `up` (guided, port discovery, `--template`) and `expose`.
 - Declarative: `apply -f`, `apply --dry-run`, `apply --dry-run --format diff`; resource sizing only through YAML `resources`.
 - Domain: `domain plan/add/verify/status/clear`; `domain status --verbose` for detailed diagnostics.
-- Access and sharing: Basic Auth, Bearer token, IP allowlist/denylist, temporary access token, `share create/list/revoke/rotate`, `policy show/set/audit`, `rotate --server-secret`.
+- Access and sharing: Basic Auth, Bearer token, IP allowlist/denylist, temporary access token, `share create/revoke/rotate`, `policy show/set/audit`, `rotate --server-secret`.
 - Operations: `list`, `list --check`, `list --watch`, `inspect`, `inspect --remote/--metrics/--resources`, `inspect --watch`, `logs`, `doctor`, `doctor --fix --dry-run`.
 - Lifecycle: `stop`, `start`, `cleanup`, `cleanup <tunnel-id>`, `cleanup --all`.
 - Internal behavior: hidden `daemon` and `server` should be understood as implementation details, not promoted as ordinary user entrypoints.
