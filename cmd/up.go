@@ -554,7 +554,7 @@ func selectUpDiscoveredPort(cmd *cobra.Command, items []discoverItem, allowUniqu
 		return item, nil
 	}
 	if !upCommandInteractive(cmd) {
-		return discoverItem{}, fmt.Errorf("%d local services were discovered; run `sealtun discover` and then `sealtun up <port>`", len(items))
+		return discoverItem{}, fmt.Errorf("%d local services were discovered; pass an explicit port, for example `sealtun up %d`, or run `sealtun up` interactively to select one", len(items), items[0].Port)
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintln(out, "Select a local service to expose:")
