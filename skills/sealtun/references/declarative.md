@@ -6,7 +6,7 @@ Use this for `sealtun.yaml`, `apply -f`, `diff -f`, multi-tunnel management, HTT
 
 ```bash
 sealtun apply -f sealtun.yaml --dry-run
-sealtun diff -f sealtun.yaml
+sealtun apply -f sealtun.yaml --dry-run --format diff
 sealtun apply -f sealtun.yaml
 ```
 
@@ -18,7 +18,7 @@ For first-time users, run or recommend:
 sealtun status
 sealtun login
 sealtun apply -f sealtun.yaml --dry-run
-sealtun diff -f sealtun.yaml
+sealtun apply -f sealtun.yaml --dry-run --format diff
 sealtun apply -f sealtun.yaml
 ```
 

@@ -315,7 +315,7 @@ sealtun domain verify <tunnel-id> --wait --timeout 5m
 sealtun domain status
 
 # Detailed diagnostics for one tunnel
-sealtun domain doctor <tunnel-id>
+sealtun domain status <tunnel-id> --verbose
 ```
 
 Remove a custom domain:
@@ -456,7 +456,7 @@ Apply the configuration:
 sealtun apply -f sealtun.yaml --dry-run
 
 # Compare local sessions with the declared configuration
-sealtun diff -f sealtun.yaml
+sealtun apply -f sealtun.yaml --dry-run --format diff
 
 # Create or update tunnels
 sealtun apply -f sealtun.yaml

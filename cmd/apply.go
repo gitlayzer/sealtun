@@ -27,8 +27,7 @@ import (
 var applyFilePath string
 var applyJSON bool
 var applyDryRun bool
-var diffFilePath string
-var diffJSON bool
+var applyDryRunFormat string
 
 const applyFileMaxBytes = 1 << 20
 
@@ -39,6 +38,25 @@ var applyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if strings.TrimSpace(applyFilePath) == "" {
 			return fmt.Errorf("missing -f/--file")
+		}
+		if applyDryRunFormat == "diff" {
+			if !applyDryRun {
+				return fmt.Errorf("--format diff requires --dry-run")
+			}
+			results, err := runDiff(applyFilePath)
+			if err != nil {
+				return err
+			}
+			if applyJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(results)
+			}
+			printDiffResults(cmd, results)
+			return nil
+		}
+		if applyDryRunFormat != "" && applyDryRunFormat != "plan" {
+			return fmt.Errorf("unsupported --format %q; use plan or diff", applyDryRunFormat)
 		}
 		results, err := runApply(cmd.Context(), applyFilePath, applyDryRun)
 		if err != nil {
@@ -54,36 +72,12 @@ var applyCmd = &cobra.Command{
 	},
 }
 
-var diffCmd = &cobra.Command{
-	Use:          "diff -f sealtun.yaml",
-	Short:        "Show declarative Sealtun tunnel changes without applying them",
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if strings.TrimSpace(diffFilePath) == "" {
-			return fmt.Errorf("missing -f/--file")
-		}
-		results, err := runDiff(diffFilePath)
-		if err != nil {
-			return err
-		}
-		if diffJSON {
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(results)
-		}
-		printDiffResults(cmd, results)
-		return nil
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(applyCmd)
-	rootCmd.AddCommand(diffCmd)
 	applyCmd.Flags().StringVarP(&applyFilePath, "file", "f", "", "Path to sealtun.yaml")
 	applyCmd.Flags().BoolVar(&applyJSON, "json", false, "Output apply results as JSON")
 	applyCmd.Flags().BoolVar(&applyDryRun, "dry-run", false, "Validate and show planned tunnels without changing local or cloud state")
-	diffCmd.Flags().StringVarP(&diffFilePath, "file", "f", "", "Path to sealtun.yaml")
-	diffCmd.Flags().BoolVar(&diffJSON, "json", false, "Output diff results as JSON")
+	applyCmd.Flags().StringVar(&applyDryRunFormat, "format", "", "Dry-run output format: plan (default) or diff")
 }
 
 func runApply(ctx context.Context, path string, dryRun bool) ([]applyResult, error) {

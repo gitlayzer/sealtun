@@ -19,7 +19,7 @@ func configureRootCommandGroups() {
 		&cobra.Group{ID: commandGroupOther, Title: "Other Commands:"},
 	)
 	assignCommandGroup(commandGroupCore,
-		upCmd, exposeCmd, applyCmd, diffCmd,
+		upCmd, exposeCmd, applyCmd,
 		listCmd, inspectCmd, startCmd, stopCmd, cleanupCmd,
 	)
 	assignCommandGroup(commandGroupSecurity, domainCmd, policyCmd, shareCmd, rotateCmd)

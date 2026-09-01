@@ -69,7 +69,8 @@ var domainVerifyTimeout time.Duration
 var domainAddWait bool
 var domainAddTimeout time.Duration
 var domainStatusTimeout = 15 * time.Second
-var domainDoctorTimeout = 15 * time.Second
+var domainStatusVerbose bool
+var domainStatusVerboseTimeout = 15 * time.Second
 var lookupCNAME = net.DefaultResolver.LookupCNAME
 
 var customDomainLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -224,29 +225,13 @@ var domainStatusCmd = &cobra.Command{
 		if len(args) > 0 {
 			tunnelID = args[0]
 		}
-		payload, err := collectDomainStatus(cmd.Context(), tunnelID, domainStatusTimeout)
-		if payload != nil {
-			if printErr := printDomainStatusPayload(cmd, payload, false); printErr != nil {
-				return printErr
-			}
+		timeout := domainStatusTimeout
+		if domainStatusVerbose {
+			timeout = domainStatusVerboseTimeout
 		}
-		return err
-	},
-}
-
-var domainDoctorCmd = &cobra.Command{
-	Use:          "doctor [tunnel-id]",
-	Short:        "Run custom domain DNS, Ingress, and certificate diagnostics",
-	Args:         cobra.MaximumNArgs(1),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		tunnelID := ""
-		if len(args) > 0 {
-			tunnelID = args[0]
-		}
-		payload, err := collectDomainStatus(cmd.Context(), tunnelID, domainDoctorTimeout)
+		payload, err := collectDomainStatus(cmd.Context(), tunnelID, timeout)
 		if payload != nil {
-			if printErr := printDomainStatusPayload(cmd, payload, true); printErr != nil {
+			if printErr := printDomainStatusPayload(cmd, payload, domainStatusVerbose); printErr != nil {
 				return printErr
 			}
 		}
@@ -261,14 +246,14 @@ func init() {
 	domainCmd.AddCommand(domainClearCmd)
 	domainCmd.AddCommand(domainVerifyCmd)
 	domainCmd.AddCommand(domainStatusCmd)
-	domainCmd.AddCommand(domainDoctorCmd)
 	domainCmd.PersistentFlags().BoolVar(&domainJSON, "json", false, "Output domain details as JSON")
 	domainVerifyCmd.Flags().BoolVar(&domainVerifyWait, "wait", false, "Wait until DNS, Ingress, and certificate are ready")
 	domainVerifyCmd.Flags().DurationVar(&domainVerifyTimeout, "timeout", 5*time.Minute, "Maximum time to wait for domain readiness")
 	domainAddCmd.Flags().BoolVar(&domainAddWait, "wait", false, "Wait for DNS, then attach the domain and wait for certificate readiness")
 	domainAddCmd.Flags().DurationVar(&domainAddTimeout, "timeout", 5*time.Minute, "Maximum time to wait for DNS and domain readiness")
 	domainStatusCmd.Flags().DurationVar(&domainStatusTimeout, "timeout", 15*time.Second, "Per-domain readiness check timeout")
-	domainDoctorCmd.Flags().DurationVar(&domainDoctorTimeout, "timeout", 15*time.Second, "Per-domain diagnostic timeout")
+	domainStatusCmd.Flags().BoolVar(&domainStatusVerbose, "verbose", false, "Show detailed DNS, Ingress, and certificate diagnostics")
+	domainStatusCmd.Flags().DurationVar(&domainStatusVerboseTimeout, "verbose-timeout", 15*time.Second, "Per-domain diagnostic timeout when --verbose is enabled")
 }
 
 func planSessionCustomDomain(tunnelID, customDomain string) (*domainPayload, error) {

@@ -139,7 +139,7 @@ sealtun domain add <tunnel-id> app.example.com --wait --timeout 5m
 sealtun domain verify <tunnel-id>
 sealtun domain verify <tunnel-id> --wait --timeout 5m
 sealtun domain status
-sealtun domain doctor <tunnel-id>
+sealtun domain status <tunnel-id> --verbose
 sealtun domain clear <tunnel-id>
 ```
 

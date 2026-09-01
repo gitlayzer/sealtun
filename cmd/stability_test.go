@@ -11,7 +11,7 @@ func TestRootCommandsAreGroupedByStabilityAndIntent(t *testing.T) {
 		groupID  string
 		commands []*cobra.Command
 	}{
-		{commandGroupCore, []*cobra.Command{upCmd, exposeCmd, applyCmd, diffCmd, listCmd, inspectCmd, startCmd, stopCmd, cleanupCmd}},
+		{commandGroupCore, []*cobra.Command{upCmd, exposeCmd, applyCmd, listCmd, inspectCmd, startCmd, stopCmd, cleanupCmd}},
 		{commandGroupSecurity, []*cobra.Command{domainCmd, policyCmd, shareCmd, rotateCmd}},
 		{commandGroupAccount, []*cobra.Command{loginCmd, logoutCmd, statusCmd, profileCmd, regionCmd}},
 		{commandGroupOperations, []*cobra.Command{doctorCmd, logsCmd}},

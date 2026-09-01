@@ -315,7 +315,7 @@ sealtun domain verify <tunnel-id> --wait --timeout 5m
 sealtun domain status
 
 # 对单个域名做更详细诊断
-sealtun domain doctor <tunnel-id>
+sealtun domain status <tunnel-id> --verbose
 ```
 
 移除自定义域名：
@@ -456,7 +456,7 @@ tunnels:
 sealtun apply -f sealtun.yaml --dry-run
 
 # 对比本地 session 与声明式配置
-sealtun diff -f sealtun.yaml
+sealtun apply -f sealtun.yaml --dry-run --format diff
 
 # 创建或更新隧道
 sealtun apply -f sealtun.yaml

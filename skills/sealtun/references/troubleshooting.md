@@ -13,7 +13,7 @@ Start with the symptom, then confirm the layer before changing anything:
 | Public URL shows offline/degraded | Local app, upstream target, or daemon | `list --check`, `inspect <id>`, `curl 127.0.0.1:<port>` or `curl <target>` | Start the local app, fix target reachability, or restart the tunnel |
 | `ssh` connects then closes after auth starts | Local sshd/user auth | `ssh -vvv`, `logs <id>`, local sshd logs | Fix user/key/password/PAM on the machine running Sealtun |
 | TCP connection opens then closes | Local target protocol/auth | `inspect <id> --remote`, protocol client logs | Fix database/service bind/auth/TLS expectations |
-| Custom domain not ready | DNS/CNAME or certificate | `domain plan`, `domain verify`, `domain doctor` | Correct CNAME, then wait/verify certificate |
+| Custom domain not ready | DNS/CNAME or certificate | `domain plan`, `domain verify`, `domain status --verbose` | Correct CNAME, then wait/verify certificate |
 | Resource inventory shows missing or warning resources | Remote Kubernetes | `doctor <id>`, `inspect <id> --remote`, `inspect <id> --resources` | Fix image/pod/service/ingress/cert issue named by diagnostics |
 | Basic Auth/Bearer/link/rate limit fails | HTTPS access policy | `inspect <id>`, `policy show <id>`, `policy audit <id>`, token length/expiry/IP/rate | Fix credential source, token, temporary link expiry, IP rules, or rate limit |
 
@@ -170,7 +170,7 @@ sealtun domain plan <tunnel-id> app.example.com
 sealtun domain add <tunnel-id> app.example.com --wait --timeout 5m
 sealtun domain verify <tunnel-id>
 sealtun domain verify <tunnel-id> --wait --timeout 5m
-sealtun domain doctor <tunnel-id>
+sealtun domain status <tunnel-id> --verbose
 ```
 
 Confirm the user configured:
