@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -221,6 +222,9 @@ func loadApplyData(label string, data []byte) (*applyFile, error) {
 	if err := decoder.Decode(&config); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", label, err)
 	}
+	if err := validateApplyPortLiterals(label, data); err != nil {
+		return nil, err
+	}
 	var extra interface{}
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err != nil {
@@ -248,8 +252,56 @@ func validateApplyTunnelNames(items []applyTunnel) error {
 			return fmt.Errorf("duplicate tunnel name %q in apply file", item.Name)
 		}
 		seen[tunnelID] = struct{}{}
+		if item.AccessPolicy != nil {
+			linkNames := map[string]struct{}{}
+			for _, link := range item.AccessPolicy.TemporaryLinks {
+				if _, ok := linkNames[link.Name]; ok {
+					return fmt.Errorf("tunnel %s: duplicate temporary link name %q in apply file", item.Name, link.Name)
+				}
+				linkNames[link.Name] = struct{}{}
+			}
+		}
 	}
 	return nil
+}
+
+// validateApplyPortLiterals rejects plain-scalar port values with leading
+// zeros. YAML 1.1 parses them as octal (03000 becomes 1536), which silently
+// provisions the tunnel on the wrong port. Quoted or zero-prefixed hex forms
+// are unaffected because they fail or parse predictably.
+func validateApplyPortLiterals(label string, data []byte) error {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil // the strict decoder reports syntax errors with better context
+	}
+	plainOctalPort := regexp.MustCompile(`^[+-]?0[0-9]+$`)
+	var walk func(node *yaml.Node, inTunnels bool) error
+	walk = func(node *yaml.Node, inTunnels bool) error {
+		if node == nil {
+			return nil
+		}
+		if node.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(node.Content); i += 2 {
+				key, value := node.Content[i], node.Content[i+1]
+				isPortKey := key.Value == "localPort" || key.Value == "port"
+				if inTunnels && isPortKey && value.Kind == yaml.ScalarNode && value.Style == 0 && plainOctalPort.MatchString(value.Value) {
+					return fmt.Errorf("parse %s: line %d: %s %q has a leading zero and is parsed as octal by YAML; write the port without the leading zero (e.g. %s)", label, value.Line, key.Value, value.Value, strings.TrimLeft(strings.TrimLeft(value.Value, "+-"), "0"))
+				}
+				next := inTunnels || key.Value == "tunnels"
+				if err := walk(value, next); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		for _, child := range node.Content {
+			if err := walk(child, inTunnels); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(&doc, false)
 }
 
 func applyOneTunnel(ctx context.Context, item applyTunnel, authData *auth.AuthData, client *k8s.Client, kubeconfig string, dryRun bool) (result applyResult, err error) {
