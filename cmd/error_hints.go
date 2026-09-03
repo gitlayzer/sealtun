@@ -38,9 +38,9 @@ func actionableErrorHintText(msg string) string {
 		return "Sealos/Kubernetes rejected the resource request. Check account balance/quota in Sealos Cloud, lower tunnel resources via the YAML `resources` field and `sealtun apply`, or clean up unused tunnels."
 	}
 	if strings.Contains(lower, "forbidden") ||
-		strings.Contains(lower, "permission denied") ||
 		strings.Contains(lower, "unauthorized") ||
-		strings.Contains(lower, "rbac") {
+		strings.Contains(lower, "rbac") ||
+		(strings.Contains(lower, "permission denied") && !isLocalOSPathError(lower)) {
 		return "The active login may not have permission in this region/namespace. Run `sealtun status`, confirm the active profile/region, then re-login if needed."
 	}
 	// Local domain validation errors contain "dns" in their message; only hint
@@ -66,4 +66,20 @@ func actionableErrorHintText(msg string) string {
 		return "The target or Kubernetes API was not reachable from this machine. Check the local/target service, network path, active region, and rerun `sealtun doctor <tunnel-id>`."
 	}
 	return ""
+}
+
+// isLocalOSPathError reports whether a "permission denied" message came from
+// the local filesystem (unreadable config, YAML, or state files) rather than
+// a cluster-side RBAC rejection. Local OS errors are formatted by Go as
+// "<verb> <path>: permission denied".
+func isLocalOSPathError(lower string) bool {
+	if !strings.Contains(lower, ": permission denied") {
+		return false
+	}
+	for _, verb := range []string{"open ", "read ", "lstat ", "stat ", "mkdir ", "write ", "create ", "remove ", "chmod ", "rename "} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
 }

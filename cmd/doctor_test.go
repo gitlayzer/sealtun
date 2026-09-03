@@ -717,3 +717,23 @@ func containsWarning(warnings []string, want string) bool {
 	}
 	return false
 }
+
+func TestActionableErrorHintDoesNotFireOnLocalFilePermission(t *testing.T) {
+	for _, msg := range []string{
+		`open /tmp/sealtun.yaml: permission denied`,
+		`read /Users/x/.sealtun/auth.json: permission denied`,
+		`lstat /Users/x/.sealtun/sessions.lock: permission denied`,
+		`mkdir /Users/x/.sealtun/sessions: permission denied`,
+	} {
+		if got := actionableErrorHintText(msg); got != "" {
+			t.Fatalf("local filesystem permission error %q should not produce a re-login hint, got %q", msg, got)
+		}
+	}
+}
+
+func TestActionableErrorHintClusterRBACStillFires(t *testing.T) {
+	got := actionableErrorHintText(`deployments.apps "sealtun-web" is forbidden: User "u" cannot get resource`)
+	if !strings.Contains(got, "re-login") && !strings.Contains(got, "permission") {
+		t.Fatalf("cluster RBAC error should still produce the login hint, got %q", got)
+	}
+}

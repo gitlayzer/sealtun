@@ -61,6 +61,15 @@ func resolveAccessPolicy(input accessPolicyInput, now time.Time, lookupEnv func(
 	}
 	policy.IPAllowlist = normalizeStringList(input.IPAllowlist)
 	policy.IPDenylist = normalizeStringList(input.IPDenylist)
+	// If the user passed an IP list flag but every entry normalized away
+	// (e.g. "--ip-allowlist ,"), silently creating an unrestricted tunnel
+	// would contradict their intent; treat it as invalid input instead.
+	if len(input.IPAllowlist) > 0 && len(policy.IPAllowlist) == 0 {
+		return nil, fmt.Errorf("ip allowlist contains no valid entries")
+	}
+	if len(input.IPDenylist) > 0 && len(policy.IPDenylist) == 0 {
+		return nil, fmt.Errorf("ip denylist contains no valid entries")
+	}
 	policy.RateLimit = strings.TrimSpace(input.RateLimit)
 	if input.AuditEnabled {
 		policy.Audit = &session.AuditConfig{Enabled: true}
