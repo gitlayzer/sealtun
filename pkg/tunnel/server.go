@@ -48,6 +48,7 @@ type Server struct {
 	auditEvents                []accesspolicy.AuditEvent
 	auditStart                 int
 	streamOpenSlots            chan struct{}
+	rawTCPSlots                chan struct{}
 
 	mu            sync.RWMutex
 	activeSession *yamux.Session
@@ -102,6 +103,7 @@ func NewServerWithOptions(secret string, port int, protocol string, localPort st
 		accessPolicy:    opts.AccessPolicy,
 		rateLimiter:     rateLimiter,
 		streamOpenSlots: make(chan struct{}, maxConcurrentStreamOpens),
+		rawTCPSlots:     make(chan struct{}, maxConcurrentRawTCPConns),
 		upgrader: websocket.Upgrader{
 			// The tunnel control/TCP WebSocket endpoints are only ever dialed by
 			// the non-browser Sealtun CLI client, which never sets an Origin
@@ -408,6 +410,10 @@ const (
 	maxAuditEvents           = 1000
 	maxAuditPathBytes        = 2048
 	maxConcurrentStreamOpens = 128
+	// Raw TCP (SSH/TCP) has no HTTP auth layer, so keep the unauthenticated
+	// connection surface bounded: a concurrency cap plus an idle timeout.
+	maxConcurrentRawTCPConns = 256
+	rawTCPIdleTimeout        = 10 * time.Minute
 )
 
 func (s *Server) recordRequestAudit(r *http.Request, decision, reason string, status int, clientIP net.IP) {
@@ -914,9 +920,23 @@ func (s *Server) serveRawTCP(listener net.Listener) error {
 func (s *Server) handleRawTCPConnection(conn net.Conn) {
 	defer conn.Close()
 	s.totalTCPConnections.Add(1)
-	s.activeTCPConnections.Add(1)
 	s.lastTCPConnectedAt.Store(time.Now().Unix())
+
+	// Raw TCP has no HTTP auth layer, so unauthenticated internet traffic can
+	// hold connections open indefinitely (each pinning a goroutine, an fd, and
+	// a yamux stream). Cap concurrency and expire idle connections.
+	select {
+	case s.rawTCPSlots <- struct{}{}:
+		defer func() { <-s.rawTCPSlots }()
+	default:
+		s.totalTCPErrors.Add(1)
+		return
+	}
+	s.activeTCPConnections.Add(1)
 	defer s.activeTCPConnections.Add(-1)
+	defer conn.Close()
+	defer func() { _ = conn.SetDeadline(time.Time{}) }()
+	_ = conn.SetDeadline(time.Now().Add(rawTCPIdleTimeout))
 
 	// Raw TCP (SSH/TCP) traffic has no HTTP layer, so token/Basic Auth cannot be
 	// enforced here. We can still apply the IP allow/denylist using the real

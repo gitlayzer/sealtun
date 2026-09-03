@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/labring/sealtun/pkg/session"
@@ -11,6 +12,7 @@ import (
 )
 
 var cleanupAll bool
+var cleanupYes bool
 
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup [tunnel-id]",
@@ -19,6 +21,23 @@ var cleanupCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cleanupAll && len(args) > 0 {
 			return fmt.Errorf("--all cannot be used with a specific tunnel id")
+		}
+		if cleanupAll && !cleanupYes {
+			// Deleting every tracked tunnel and its remote resources is the
+			// most destructive operation in the CLI; require explicit intent.
+			if !defaultUpCommandInteractive(cmd) {
+				return fmt.Errorf("cleanup --all deletes every tracked tunnel and its remote resources; pass --yes to confirm")
+			}
+			sessions, err := session.List()
+			if err != nil {
+				return fmt.Errorf("load local session records: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "This will delete %d tunnel(s) and their remote resources. Type 'yes' to continue: ", len(sessions))
+			var answer string
+			fmt.Fscanln(cmd.InOrStdin(), &answer)
+			if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
+				return fmt.Errorf("cleanup --all aborted")
+			}
 		}
 		if len(args) > 0 {
 			eligible, deleteFailed, err := cleanupTunnelWithLock(cmd, args[0], cleanupAll)
@@ -97,6 +116,7 @@ var cleanupCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(cleanupCmd)
 	cleanupCmd.Flags().BoolVar(&cleanupAll, "all", false, "Force delete all locally tracked Sealtun tunnel resources and remove matching local session records")
+	cleanupCmd.Flags().BoolVar(&cleanupYes, "yes", false, "Confirm the destructive cleanup --all operation without prompting")
 }
 
 func cleanupTunnelWithLock(cmd *cobra.Command, tunnelID string, force bool) (bool, bool, error) {

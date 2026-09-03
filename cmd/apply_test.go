@@ -913,7 +913,7 @@ func TestRollbackApplyResultsRestoresExistingLocalSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := rollbackApplyResults(nil, []applyResult{{
+	if _, err := rollbackApplyResults(nil, []applyResult{{
 		TunnelID: "web",
 		Previous: &session.TunnelSession{
 			TunnelID:     previous.TunnelID,
@@ -986,7 +986,7 @@ func TestRollbackApplyResultsReturnsLocalRestoreFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := rollbackApplyResults(nil, []applyResult{{
+	_, err := rollbackApplyResults(nil, []applyResult{{
 		TunnelID: "web",
 		Previous: &session.TunnelSession{
 			TunnelID:  "web",

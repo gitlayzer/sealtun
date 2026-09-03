@@ -121,11 +121,28 @@ func runApplyConfig(ctx context.Context, config *applyFile, dryRun bool) ([]appl
 		return nil, err
 	}
 	if dryRun {
+		// Dry-run stays offline (no login or cluster access required), but when
+		// the user IS logged in and a YAML tunnel matches an existing session,
+		// run the local compatibility checks a real apply would fail on - so CI
+		// dry-run gates don't report green for applies that will fail on scope
+		// or missing local secrets.
+		var dryRunAuth *auth.AuthData
+		if authData, err := auth.LoadAuthData(); err == nil {
+			dryRunAuth = authData
+		}
 		results := make([]applyResult, 0, len(config.Tunnels))
 		for _, item := range config.Tunnels {
 			normalized, err := normalizeApplyTunnel(item)
 			if err != nil {
 				return results, err
+			}
+			if existing, getErr := session.Get(normalized.TunnelID); getErr == nil && dryRunAuth != nil {
+				if scopeErr := validateExistingApplySessionScope(*existing, dryRunAuth, existing.Namespace); scopeErr != nil {
+					return results, scopeErr
+				}
+				if strings.TrimSpace(existing.Secret) == "" {
+					return results, fmt.Errorf("tunnel %s already exists but its local secret is unavailable; stop or cleanup the old session before apply", existing.TunnelID)
+				}
 			}
 			results = append(results, applyResult{
 				Name:                        normalized.Name,
@@ -178,16 +195,19 @@ func runApplyConfig(ctx context.Context, config *applyFile, dryRun bool) ([]appl
 		for _, item := range config.Tunnels {
 			result, applyErr := applyOneTunnel(ctx, item, authData, client, kubeconfig, false)
 			if applyErr != nil {
-				return applyErrorWithRollback(applyErr, rollbackApplyResults(client, results))
+				rollbackSummary, rollbackErr := rollbackApplyResults(client, results)
+				return applyErrorWithRollback(applyErr, rollbackSummary, rollbackErr)
 			}
 			results = append(results, result)
 		}
 		if err := ensureDaemonRunningFn(); err != nil {
-			return applyErrorWithRollback(fmt.Errorf("failed to start local daemon: %w", err), rollbackApplyResults(client, results))
+			rollbackSummary, rollbackErr := rollbackApplyResults(client, results)
+			return applyErrorWithRollback(fmt.Errorf("failed to start local daemon: %w", err), rollbackSummary, rollbackErr)
 		}
 		for _, result := range results {
 			if err := waitForDaemonSession(result.TunnelID, daemonConnectTimeout); err != nil {
-				return applyErrorWithRollback(err, rollbackApplyResults(client, results))
+				rollbackSummary, rollbackErr := rollbackApplyResults(client, results)
+				return applyErrorWithRollback(err, rollbackSummary, rollbackErr)
 			}
 		}
 		return nil
@@ -551,15 +571,24 @@ func restoreExistingApplyTunnel(client *k8s.Client, previous session.TunnelSessi
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), tunnelCleanupTimeout)
 	defer cancel()
-	_, err := client.WithNamespace(previous.Namespace).EnsureTunnelWithOptions(cleanupCtx, previous.TunnelID, previous.Secret, protocol, previous.LocalPort, k8s.TunnelOptions{
+	namespacedClient := client.WithNamespace(previous.Namespace)
+	if _, err := namespacedClient.EnsureTunnelWithOptions(cleanupCtx, previous.TunnelID, previous.Secret, protocol, previous.LocalPort, k8s.TunnelOptions{
 		CustomDomain: previous.CustomDomain,
 		SealosHost:   previous.SealosHost,
 		TargetURL:    previous.TargetURL,
 		BasicAuth:    basicAuthToK8s(previous.BasicAuth),
 		AccessPolicy: accessPolicyToK8s(previous.AccessPolicy),
 		Resources:    resourcesToK8s(previous.ResourceConfig),
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+	// A rollback that returns before the restored deployment is ready leaves
+	// the tunnel serving the mixed new/old configuration; wait for the
+	// restored rollout so the error message's "restored" claim is true.
+	if err := namespacedClient.WaitForReady(cleanupCtx, previous.TunnelID); err != nil {
+		return fmt.Errorf("restored tunnel %s, but rollout readiness was not confirmed: %w", previous.TunnelID, err)
+	}
+	return nil
 }
 
 func rollbackExistingApplyTunnel(client *k8s.Client, previous session.TunnelSession) error {
@@ -573,8 +602,9 @@ func rollbackExistingApplyTunnel(client *k8s.Client, previous session.TunnelSess
 	return firstErr
 }
 
-func rollbackApplyResults(client *k8s.Client, results []applyResult) error {
+func rollbackApplyResults(client *k8s.Client, results []applyResult) (string, error) {
 	var rollbackErrors []error
+	var deleted, restored []string
 	for i := len(results) - 1; i >= 0; i-- {
 		result := results[i]
 		if result.TunnelID == "" {
@@ -590,23 +620,37 @@ func rollbackApplyResults(client *k8s.Client, results []applyResult) error {
 			}
 			if err := session.Delete(result.TunnelID); err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("delete local session %s: %w", result.TunnelID, err))
+			} else {
+				deleted = append(deleted, result.TunnelID)
 			}
 			continue
 		}
 		if result.Previous != nil {
 			if err := rollbackExistingApplyTunnel(client, *result.Previous); err != nil {
 				rollbackErrors = append(rollbackErrors, fmt.Errorf("restore tunnel %s: %w", result.TunnelID, err))
+			} else {
+				restored = append(restored, result.TunnelID)
 			}
 		}
 	}
-	return errors.Join(rollbackErrors...)
+	var summary []string
+	if len(deleted) > 0 {
+		summary = append(summary, fmt.Sprintf("deleted new tunnels: %s", strings.Join(deleted, ", ")))
+	}
+	if len(restored) > 0 {
+		summary = append(summary, fmt.Sprintf("restored previous configuration for: %s", strings.Join(restored, ", ")))
+	}
+	return strings.Join(summary, "; "), errors.Join(rollbackErrors...)
 }
 
-func applyErrorWithRollback(applyErr, rollbackErr error) error {
-	if rollbackErr == nil {
-		return applyErr
+func applyErrorWithRollback(applyErr error, rollbackSummary string, rollbackErr error) error {
+	if rollbackSummary != "" {
+		applyErr = fmt.Errorf("%w (rollback completed: %s)", applyErr, rollbackSummary)
 	}
-	return errors.Join(applyErr, fmt.Errorf("rollback failed: %w", rollbackErr))
+	if rollbackErr != nil {
+		return errors.Join(applyErr, fmt.Errorf("rollback failed: %w", rollbackErr))
+	}
+	return applyErr
 }
 
 func normalizeApplyTunnel(item applyTunnel) (normalizedApplyTunnel, error) {

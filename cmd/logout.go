@@ -96,6 +96,11 @@ func cleanupLogoutSessions(cmd *cobra.Command) error {
 		return nil
 	}
 
+	// Best-effort remote cleanup: attempt every tunnel, collect failures, and
+	// let the caller decide. Previously the first failure aborted all remaining
+	// cleanups AND blocked local credential scrubbing, trapping users between a
+	// broken cluster and a --force that leaks everything.
+	var failures []string
 	for _, sess := range sessions {
 		if err := withTunnelOperationLockContext(cmd.Context(), sess.TunnelID, func() error {
 			current, err := findSession(sess.TunnelID)
@@ -112,8 +117,12 @@ func cleanupLogoutSessions(cmd *cobra.Command) error {
 			}
 			return nil
 		}); err != nil {
-			return fmt.Errorf("cleanup tunnel %s before logout: %w (rerun with --force to only remove local credentials)", sess.TunnelID, err)
+			failures = append(failures, fmt.Sprintf("%s: %v", sess.TunnelID, err))
+			fmt.Fprintf(cmd.ErrOrStderr(), "[!] failed to clean up tunnel %s remotely: %v\n", sess.TunnelID, err)
 		}
+	}
+	if len(failures) > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[!] %d tunnel(s) could not be cleaned up remotely; their cloud resources may still exist and bill. Local logout will continue.\n", len(failures))
 	}
 	return nil
 }
