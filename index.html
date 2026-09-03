@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sealtun | 本地服务公网入口与集群访问</title>
-  <meta name="description" content="Sealtun 用一套 CLI 把本地服务发布到公网，并让本机直接访问 Sealos/Kubernetes 集群内服务。">
-  <meta property="og:title" content="Sealtun | 本地服务公网入口与集群访问">
-  <meta property="og:description" content="把本地服务发布到公网，也让本机直接访问集群内服务。">
+  <title>Sealtun | 一条命令，把本地服务送上公网</title>
+  <meta name="description" content="Sealtun 是 Sealos Cloud 原生的隧道 CLI：一条命令把本地 Web、SSH、数据库暴露到公网，内置认证、域名、限流、审计和声明式 YAML。">
+  <meta property="og:title" content="Sealtun | 一条命令，把本地服务送上公网">
+  <meta property="og:description" content="Sealos Cloud 原生隧道 CLI：expose 一条命令获得公网 HTTPS URL，支持 SSH/TCP 直连、访问控制、自定义域名与声明式配置。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="./assets/sealtun-social.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -22,295 +22,244 @@
 <body>
   <a class="skip-link" href="#main" data-i18n="skip">跳到正文</a>
 
+  <!-- ══════════ NAV ══════════ -->
   <header class="site-header">
     <div class="wrap navbar">
       <a class="brand" href="#top" aria-label="Sealtun home">
         <img class="brand-logo" src="./assets/sealtun-icon.png" alt="" aria-hidden="true">
         <span>Sealtun</span>
       </a>
-
-      <nav class="nav-links" aria-label="Primary navigation">
-        <a href="#capabilities" data-i18n="nav.capabilities">能力</a>
-        <a href="#latest" data-i18n="nav.latest">最新功能</a>
-        <a href="#skills" data-i18n="nav.skills">Skills</a>
-        <a href="#install" data-i18n="nav.install">安装</a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#features" data-i18n="nav.features">核心能力</a>
+        <a href="#quickstart" data-i18n="nav.quickstart">快速上手</a>
+        <a href="#download" data-i18n="nav.download">下载</a>
+        <a href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noopener">GitHub</a>
       </nav>
-
       <div class="header-actions">
         <div class="lang-switch" role="group" aria-label="Language">
           <button class="lang-option active" type="button" data-lang="zh">中</button>
           <button class="lang-option" type="button" data-lang="en">EN</button>
         </div>
-        <a class="header-cta" href="#install" data-i18n="nav.cta">开始使用</a>
+        <a class="header-cta" href="#download" data-i18n="nav.cta">立即下载</a>
       </div>
     </div>
   </header>
 
   <main id="main">
+    <!-- ══════════ HERO ══════════ -->
     <section class="hero" id="top">
-      <div class="hero-pattern" aria-hidden="true"></div>
+      <div class="hero-glow" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow reveal" data-i18n="hero.eyebrow">Sealos-native tunnel CLI</p>
-          <h1 class="reveal delay-1" data-i18n="hero.title">把本地服务发布到公网，也让本机直接访问集群内服务。</h1>
-          <p class="hero-lead reveal delay-2" data-i18n="hero.lead">Sealtun 面向 Sealos/Kubernetes：开发预览用 expose，集群联调用 connect，认证、域名、审计、诊断和 Dashboard 都在同一套命令里。</p>
-          <div class="hero-actions reveal delay-3">
-            <a class="button primary" href="#skills"><span data-i18n="hero.primary">安装 Skill</span><span aria-hidden="true">-&gt;</span></a>
-            <a class="button secondary" href="#install"><span data-i18n="hero.secondary">查看 CLI 用法</span><span aria-hidden="true">↓</span></a>
-          </div>
-          <div class="command-bar hero-command reveal delay-3" aria-label="Install Sealtun skill command">
-            <code>npx skills add https://github.com/gitlayzer/sealtun</code>
+          <p class="eyebrow" data-i18n="hero.eyebrow">Sealos Cloud 原生隧道 CLI</p>
+          <h1 data-i18n="hero.title">一条命令，<br>把本地服务送上公网。</h1>
+          <p class="hero-lead" data-i18n="hero.lead">Sealtun 把本地 Web、SSH、数据库变成公网入口。认证、域名、限流、审计、声明式 YAML，全在这一个二进制里。</p>
+
+          <div class="command-bar" aria-label="Install command">
+            <span class="command-prompt">$</span>
+            <code data-i18n="hero.installCmd">npm install -g sealtun</code>
             <button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button>
           </div>
+
+          <div class="hero-cards" role="list" aria-label="Download channels">
+            <a class="dl-card" role="listitem" href="https://www.npmjs.com/package/sealtun" target="_blank" rel="noopener">
+              <span class="dl-icon">npm</span>
+              <span class="dl-meta">
+                <strong data-i18n="hero.cardNpm.title">npm 安装</strong>
+                <small data-i18n="hero.cardNpm.desc">macOS / Linux / Windows</small>
+              </span>
+            </a>
+            <a class="dl-card" role="listitem" href="https://github.com/gitlayzer/sealtun/releases/latest" target="_blank" rel="noopener">
+              <span class="dl-icon mono">bin</span>
+              <span class="dl-meta">
+                <strong data-i18n="hero.cardBin.title">独立二进制</strong>
+                <small data-i18n="hero.cardBin.desc">GitHub Releases · 6 平台</small>
+              </span>
+            </a>
+            <a class="dl-card" role="listitem" href="https://github.com/gitlayzer/sealtun/pkgs/container/sealtun" target="_blank" rel="noopener">
+              <span class="dl-icon mono">oci</span>
+              <span class="dl-meta">
+                <strong data-i18n="hero.cardOci.title">容器镜像</strong>
+                <small data-i18n="hero.cardOci.desc">ghcr.io/gitlayzer/sealtun</small>
+              </span>
+            </a>
+          </div>
+
+          <p class="hero-footnote">
+            <a href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noopener" data-i18n="hero.github">在 GitHub 上查看</a>
+            <span class="dot">·</span>
+            <span data-i18n="hero.license">MIT 开源协议</span>
+            <span class="dot">·</span>
+            <span class="version-tag">v0.0.40</span>
+          </p>
         </div>
 
-        <aside class="console-card reveal delay-2" aria-label="Sealtun tunnel preview">
+        <aside class="console-card" aria-label="Sealtun terminal preview">
           <div class="console-top">
             <span></span><span></span><span></span>
             <strong>sealtun</strong>
           </div>
-          <pre><code>$ sealtun expose 3000
-https://*.sealos.run -> localhost:3000
+          <pre><code>$ sealtun login
+✓ 浏览器授权完成，已登录 gzg
+
+$ sealtun expose 3000
+[+] Public URL: https://sealtun-a1b2-ns-x.sealosgzg.site
 
 $ sealtun expose 22 --protocol ssh
-ssh user@host -p &lt;port&gt;
+[+] ssh &lt;user&gt;@sealtun-c3d4-ns-x.sealosgzg.site -p 30022
 
-$ sudo sealtun connect
-service.namespace.svc.cluster.local -> cluster TCP
-
-$ sealtun dashboard --open
-create, inspect, fix</code></pre>
-          <div class="console-metrics" aria-label="Sealtun capabilities">
-            <div><span>HTTPS</span><strong>Ingress</strong></div>
-            <div><span>SSH/TCP</span><strong>NodePort</strong></div>
-            <div><span>Skill</span><strong>AI ready</strong></div>
-          </div>
+$ sealtun share create a1b2 --ttl 1h
+[+] URL: https://…/?_sealtun_token=…</code></pre>
         </aside>
       </div>
+    </section>
 
-      <div class="wrap trust-row reveal delay-3" aria-label="Sealtun highlights">
-        <span data-i18n="trust.public">localhost -> public URL</span>
-        <span data-i18n="trust.cluster">local machine -> cluster Service</span>
-        <span data-i18n="trust.protocols">HTTPS / SSH / TCP</span>
-        <span data-i18n="trust.policy">Auth / rate limit / audit</span>
-        <span data-i18n="trust.ops">Dashboard / doctor / resources</span>
-        <span data-i18n="trust.skill">AI Skill ready</span>
+    <!-- ══════════ FEATURES ══════════ -->
+    <section class="section" id="features">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="features.eyebrow">FEATURES · 核心能力</p>
+        <h2 class="section-title" data-i18n="features.title">公网入口这件事，做到极致。</h2>
+        <p class="section-lead" data-i18n="features.lead">不是功能堆叠，而是把「本地服务公网化」的每一步都做成一条命令。</p>
+
+        <div class="feature-grid">
+          <article class="feature-card span-2">
+            <div class="feature-kicker">HTTPS</div>
+            <h3 data-i18n="f.https.title">一条命令，拿到公网 HTTPS URL</h3>
+            <p data-i18n="f.https.body">expose 一个本地端口或远端 upstream，Ingress + 反向代理自动就绪。Basic Auth、Bearer Token、IP 白名单、限流、审计、自定义域名和 cert-manager 证书，全部是内置 flag，不需要你写一行 Ingress 配置。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>sealtun expose 3000 --domain app.example.com</code></div>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-kicker">SSH / TCP</div>
+            <h3 data-i18n="f.tcp.title">SSH 和数据库，NodePort 直连</h3>
+            <p data-i18n="f.tcp.body">expose 22 --protocol ssh 暴露本机 sshd；expose 5432 --protocol tcp 暴露 Postgres、Redis、MQTT。四层 TCP 直通，不走 HTTP 代理。</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-kicker">UP</div>
+            <h3 data-i18n="f.up.title">会自己找端口的 up</h3>
+            <p data-i18n="f.up.body">sealtun up 自动发现本机监听端口，按协议模板引导创建：Web、SSH、MySQL、Postgres、Redis、MongoDB、MQTT。日常开发一条命令就够。</p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-kicker">POLICY</div>
+            <h3 data-i18n="f.policy.title">入口安全，做成开关</h3>
+            <p data-i18n="f.policy.body">临时分享链接只显示一次、服务端 secret 可轮换、IP 白/黑名单、固定窗口限流、访问审计——策略在服务端代理层强制执行，不靠 Ingress 注解。</p>
+            <div class="chip-wall">
+              <span class="chip">Basic Auth</span>
+              <span class="chip">Bearer Token</span>
+              <span class="chip">IP Allowlist</span>
+              <span class="chip">Rate Limit</span>
+              <span class="chip">Audit</span>
+              <span class="chip">Share Links</span>
+              <span class="chip">Custom Domain</span>
+              <span class="chip">Secret Rotate</span>
+            </div>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-kicker">YAML</div>
+            <h3 data-i18n="f.yaml.title">把隧道写成 YAML</h3>
+            <p data-i18n="f.yaml.body">sealtun.yaml 声明多条隧道：协议、端口、域名、TTL、资源规格、认证策略。apply 幂等创建/更新，--dry-run 预览计划，--format diff 对比变更，失败自动回滚。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>sealtun apply -f sealtun.yaml --dry-run --format diff</code></div>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-kicker">OPS</div>
+            <h3 data-i18n="f.ops.title">状态看得见，故障修得动</h3>
+            <p data-i18n="f.ops.body">inspect 看单隧道详情（--remote 远端诊断、--metrics 指标、--resources 资源清单），doctor 一键诊断并保守修复，logs 实时日志，list --watch 持续刷新。出问题时不是黑盒。</p>
+          </article>
+        </div>
       </div>
     </section>
 
-    <section class="section statement" id="capabilities">
-      <div class="statement-words reveal" aria-hidden="true">
-        <span>expose</span>
-        <span>connect</span>
-        <span>operate</span>
-      </div>
-      <div class="statement-copy reveal delay-1">
-        <p class="eyebrow" data-i18n="statement.eyebrow">What Sealtun does</p>
-        <h2 data-i18n="statement.title">一句话：Sealtun 连接本地、集群和公网。</h2>
-        <p data-i18n="statement.body">要给别人访问本地服务，用 expose；要从本机调集群内 Service、ClusterIP 或 Pod IP，用 connect；要治理入口，再加认证、临时链接、审计、诊断和资源查看。</p>
+    <!-- ══════════ QUICKSTART ══════════ -->
+    <section class="section alt" id="quickstart">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="qs.eyebrow">QUICKSTART · 快速上手</p>
+        <h2 class="section-title" data-i18n="qs.title">三步，从安装到公网。</h2>
+
+        <div class="steps">
+          <article class="step-card">
+            <span class="step-num">1</span>
+            <h3 data-i18n="qs.s1.title">安装并登录</h3>
+            <p data-i18n="qs.s1.body">npm 安装后 sealtun login，浏览器里完成设备授权，凭据保存在 ~/.sealtun。支持多 region、多 profile。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>npm i -g sealtun && sealtun login</code></div>
+          </article>
+          <article class="step-card">
+            <span class="step-num">2</span>
+            <h3 data-i18n="qs.s2.title">暴露本地服务</h3>
+            <p data-i18n="qs.s2.body">up 引导创建，或 expose 精确指定。HTTPS 出 URL，SSH/TCP 出 host:port。后台 daemon 常驻，关掉终端也不断线。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>sealtun expose 3000</code></div>
+          </article>
+          <article class="step-card">
+            <span class="step-num">3</span>
+            <h3 data-i18n="qs.s3.title">治理与分享</h3>
+            <p data-i18n="qs.s3.body">加认证、绑域名、开限流审计，或生成一小时后自动失效的临时分享链接发给同事。全部一条命令。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>sealtun share create &lt;id&gt; --ttl 1h</code></div>
+          </article>
+        </div>
       </div>
     </section>
 
-    <section class="section protocol-section">
-      <div class="section-head reveal">
-        <p class="eyebrow" data-i18n="protocol.eyebrow">Public entrances</p>
-        <h2 data-i18n="protocol.title">三类入口，按场景选择。</h2>
-        <p data-i18n="protocol.body">Web 走 HTTPS，SSH 和数据库走 TCP，集群内服务访问走 connect。边界清楚，命令也短。</p>
-      </div>
+    <!-- ══════════ DOWNLOAD ══════════ -->
+    <section class="section" id="download">
+      <div class="wrap">
+        <p class="eyebrow" data-i18n="dl.eyebrow">DOWNLOAD · 下载</p>
+        <h2 class="section-title" data-i18n="dl.title">选择你的安装方式。</h2>
+        <p class="section-lead" data-i18n="dl.lead">所有渠道始终指向最新 release。一个二进制，无运行时依赖。</p>
 
-      <div class="protocol-grid">
-        <article class="protocol-card reveal">
-          <span>01</span>
-          <h3 data-i18n="protocol.https.title">HTTPS 预览</h3>
-          <p data-i18n="protocol.https.body">本地 Web、回调、预览环境，一条命令得到公网 HTTPS URL。</p>
-          <code>sealtun expose 3000</code>
-        </article>
-        <article class="protocol-card reveal delay-1">
-          <span>02</span>
-          <h3 data-i18n="protocol.ssh.title">公网 SSH</h3>
-          <p data-i18n="protocol.ssh.body">本地 sshd 变成公网 host 和 port，适合临时远程调试。</p>
-          <code>sealtun expose 22 --protocol ssh</code>
-        </article>
-        <article class="protocol-card reveal delay-2">
-          <span>03</span>
-          <h3 data-i18n="protocol.tcp.title">通用 TCP</h3>
-          <p data-i18n="protocol.tcp.body">Postgres、Redis、MQTT 等非 HTTP 服务走四层 TCP。</p>
-          <code>sealtun expose 5432 --protocol tcp</code>
-        </article>
+        <div class="dl-grid">
+          <article class="dl-block">
+            <div class="dl-block-icon mono">npm</div>
+            <h3 data-i18n="dl.npm.title">npm（推荐）</h3>
+            <p data-i18n="dl.npm.body">自动匹配平台二进制，支持 macOS / Linux / Windows 的 x64 与 arm64。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>npm install -g sealtun</code><button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button></div>
+          </article>
+          <article class="dl-block">
+            <div class="dl-block-icon mono">bin</div>
+            <h3 data-i18n="dl.bin.title">GitHub Releases</h3>
+            <p data-i18n="dl.bin.body">下载对应平台的 tar.gz / zip 单文件。也可 npx sealtun@latest 免安装运行。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>npx sealtun@latest --version</code><button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button></div>
+          </article>
+          <article class="dl-block">
+            <div class="dl-block-icon mono">oci</div>
+            <h3 data-i18n="dl.oci.title">容器镜像</h3>
+            <p data-i18n="dl.oci.body">远端隧道 Pod 与 CLI 同源镜像，ghcr.io/gitlayzer/sealtun:latest。</p>
+            <div class="command-bar small"><span class="command-prompt">$</span><code>docker pull ghcr.io/gitlayzer/sealtun:latest</code><button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button></div>
+          </article>
+        </div>
+
+        <div class="alpha-note">
+          <span class="alpha-badge">alpha</span>
+          <p data-i18n="dl.alpha">每次 master 提交自动发布 v*-alpha-N 预发布版，可在 GitHub Releases 的 Pre-release 中抢先体验。</p>
+        </div>
       </div>
     </section>
 
-    <section class="section latest-section" id="latest">
-      <div class="section-head compact reveal">
-        <p class="eyebrow" data-i18n="latest.eyebrow">v0.0.25 capabilities</p>
-        <h2 data-i18n="latest.title">常用能力压成四件事。</h2>
-      </div>
-
-      <div class="latest-grid">
-        <article class="feature-card large reveal">
-          <span data-i18n="latest.public.kicker">Expose</span>
-          <h3 data-i18n="latest.public.title">把本地端口发到公网</h3>
-          <p data-i18n="latest.public.body">HTTPS、SSH、TCP 都能发布；HTTPS 还能绑定域名、加认证、开限流和审计。</p>
-          <div class="chip-row">
-            <code>expose 3000</code>
-            <code>expose 22 --protocol ssh</code>
-            <code>domain add --wait</code>
+    <!-- ══════════ FOOTER ══════════ -->
+    <footer class="site-footer">
+      <div class="wrap footer-grid">
+        <div class="footer-brand">
+          <img class="brand-logo" src="./assets/sealtun-icon.png" alt="" aria-hidden="true">
+          <div>
+            <strong>Sealtun</strong>
+            <p data-i18n="footer.tagline">Sealos Cloud 原生隧道 CLI</p>
           </div>
-        </article>
-
-        <article class="feature-card reveal delay-1">
-          <span data-i18n="latest.connect.kicker">Connect</span>
-          <h3 data-i18n="latest.connect.title">从本机访问集群内服务</h3>
-          <p data-i18n="latest.connect.body">Linux 上执行 connect 后，本机工具可直接访问 Service FQDN、ClusterIP 和 Pod IP。</p>
-        </article>
-
-        <article class="feature-card reveal delay-1">
-          <span data-i18n="latest.operate.kicker">Operate</span>
-          <h3 data-i18n="latest.operate.title">看状态，找问题，安全修复</h3>
-          <p data-i18n="latest.operate.body">Dashboard、watch、resources、events、logs 和 doctor 覆盖日常排障。</p>
-        </article>
-
-        <article class="feature-card reveal delay-2">
-          <span data-i18n="latest.config.kicker">Declare</span>
-          <h3 data-i18n="latest.config.title">把隧道写成 YAML</h3>
-          <p data-i18n="latest.config.body">template、apply、diff、export 和 TTL 让团队配置可复用。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section skill-section" id="skills">
-      <div class="skill-copy reveal">
-        <p class="eyebrow">Codex Skill</p>
-        <h2 data-i18n="skill.title">不用先学 Sealtun，让 AI 先学会。</h2>
-        <p data-i18n="skill.body">装上 Skill 后，直接告诉 AI 你要暴露哪个端口、访问哪个集群服务、绑定什么域名或加什么认证，它会按 Sealtun 的命令流程执行。</p>
-        <div class="command-bar skill-command" aria-label="Install Sealtun skill command">
-          <code>npx skills add https://github.com/gitlayzer/sealtun</code>
-          <button class="copy-inline" type="button" data-copy-nearest data-i18n="copy.default">复制</button>
         </div>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/gitlayzer/sealtun/releases" target="_blank" rel="noopener" data-i18n="footer.releases">发布页</a>
+          <a href="https://www.npmjs.com/package/sealtun" target="_blank" rel="noopener">npm</a>
+          <a href="https://github.com/gitlayzer/sealtun/blob/master/QuickStart.md" target="_blank" rel="noopener" data-i18n="footer.docs">文档</a>
+        </nav>
       </div>
-
-      <div class="skill-flow reveal delay-1" aria-label="Skill workflow">
-        <div><span>01</span><strong data-i18n="skill.step1">安装 Skill，让 AI 知道 Sealtun 的 CLI、YAML 和安全边界。</strong></div>
-        <div><span>02</span><strong data-i18n="skill.step2">用自然语言描述端口、协议、域名和访问规则。</strong></div>
-        <div><span>03</span><strong data-i18n="skill.step3">涉及 expose、apply、domain、cleanup 等状态变更时先确认。</strong></div>
-        <div><span>04</span><strong data-i18n="skill.step4">让 AI 处理命令细节、诊断输出和后续配置整理。</strong></div>
+      <div class="wrap footer-bottom">
+        <span>© <span id="year">2026</span> Sealtun · MIT License</span>
+        <span data-i18n="footer.built">Built for the Sealos ecosystem</span>
       </div>
-    </section>
-
-    <section class="section install-section" id="install">
-      <div class="section-head reveal">
-        <p class="eyebrow" data-i18n="install.eyebrow">Install and operate</p>
-        <h2 data-i18n="install.title">三步开始：登录、暴露或连接、再用 Dashboard 排障。</h2>
-        <p data-i18n="install.body">CLI 给人用，Skill 给 AI 用，sealtun.yaml 给团队复用。安装后先 login，再按场景选择 expose、connect 或 apply。</p>
-      </div>
-
-      <div class="install-card reveal delay-1">
-        <div class="tabs" role="tablist" aria-label="Install examples">
-          <button class="tab active" data-target="skill" type="button" data-i18n="tabs.skill">AI Skill</button>
-          <button class="tab" data-target="cli" type="button">CLI</button>
-          <button class="tab" data-target="domain" type="button" data-i18n="tabs.domain">域名</button>
-          <button class="tab" data-target="share" type="button" data-i18n="tabs.share">集群访问</button>
-          <button class="tab" data-target="dashboard" type="button" data-i18n="tabs.dashboard">工作台</button>
-          <button class="tab" data-target="diagnostics" type="button" data-i18n="tabs.diagnostics">诊断</button>
-          <button class="tab" data-target="yaml" type="button" data-i18n="tabs.yaml">YAML</button>
-        </div>
-        <div class="code-wrap">
-          <button class="copy-button" type="button" data-copy-current data-i18n="copy.default">复制</button>
-          <pre class="code-pane active" data-pane="skill"><code>npx skills add https://github.com/gitlayzer/sealtun
-
-# Then ask your AI agent:
-# Expose localhost:3000, add Basic Auth,
-# connect to a cluster Service, then export sealtun.yaml.</code></pre>
-          <pre class="code-pane" data-pane="cli"><code>npm install -g sealtun
-npx sealtun@latest --version
-npx sealtun@latest login
-
-sealtun login gzg --profile demo
-sealtun profile use demo
-
-sealtun init
-sealtun init --protocol auto --json
-sealtun init --apply
-
-sealtun expose 3000
-sealtun expose 22 --protocol ssh
-sealtun expose 5432 --protocol tcp
-
-sealtun connect --check
-sudo sealtun connect</code></pre>
-          <pre class="code-pane" data-pane="domain"><code>sealtun expose 3000 --domain app.example.com
-
-sealtun domain plan &lt;tunnel-id&gt; app.example.com
-sealtun domain add &lt;tunnel-id&gt; app.example.com --wait
-sealtun domain verify &lt;tunnel-id&gt; --wait --timeout 5m
-sealtun domain doctor &lt;tunnel-id&gt;</code></pre>
-          <pre class="code-pane" data-pane="share"><code>sealtun connect --check
-sealtun connect --check --json
-
-# Linux only. Runs in the foreground and cleans up on Ctrl-C.
-sudo sealtun connect
-
-curl http://my-service.default.svc.cluster.local:8080
-curl http://10.96.0.12:8080   # Service ClusterIP
-curl http://10.244.0.22:3000  # Pod IP
-
-sealtun connect status
-sudo sealtun disconnect</code></pre>
-          <pre class="code-pane" data-pane="dashboard"><code>sealtun discover --json --limit 20
-sealtun dashboard --open
-
-sealtun resources &lt;tunnel-id&gt; --json
-sealtun metrics &lt;tunnel-id&gt; --json
-sealtun events &lt;tunnel-id&gt; --json
-
-# Dashboard write dialogs preview the equivalent CLI command.
-export SEALTUN_DASHBOARD_PASSWORD='change-me'
-sealtun dashboard --addr 0.0.0.0 --allow-remote \
-  --basic-auth-user admin \
-  --basic-auth-password-env SEALTUN_DASHBOARD_PASSWORD</code></pre>
-          <pre class="code-pane" data-pane="diagnostics"><code>sealtun watch
-sealtun watch &lt;tunnel-id&gt;
-sealtun watch &lt;tunnel-id&gt; --json
-
-sealtun doctor &lt;tunnel-id&gt;
-sealtun doctor --fix --dry-run
-sealtun doctor --fix
-
-sealtun resources &lt;tunnel-id&gt;
-sealtun cleanup &lt;tunnel-id&gt;</code></pre>
-          <pre class="code-pane" data-pane="yaml"><code>sealtun template https --name web --port 3000
-sealtun template postgres --name db
-sealtun export --all -o sealtun.yaml
-sealtun export --all --include-secret-placeholders
-
-sealtun apply -f sealtun.yaml --dry-run
-sealtun diff -f sealtun.yaml
-sealtun apply -f sealtun.yaml
-
-# ttl in sealtun.yaml lets the daemon clean expired tunnels.</code></pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="section final-cta">
-      <div class="reveal">
-        <p class="eyebrow" data-i18n="cta.eyebrow">Open source and Sealos native</p>
-        <h2 data-i18n="cta.title">一句话：Sealtun 让本地、集群和公网互相可达，而且可治理。</h2>
-      </div>
-      <a class="button dark reveal delay-1" href="https://github.com/gitlayzer/sealtun" target="_blank" rel="noreferrer">
-        <span data-i18n="cta.button">查看源码</span><span aria-hidden="true">-&gt;</span>
-      </a>
-    </section>
+    </footer>
   </main>
-
-  <footer class="footer">
-    <div class="footer-brand">
-      <img class="brand-logo" src="./assets/sealtun-icon.png" alt="" aria-hidden="true">
-      <span>Sealtun</span>
-    </div>
-    <p data-i18n="footer.tagline">Localhost tunnels built for Sealos Cloud.</p>
-    <a href="#top" data-i18n="footer.back">Back to top</a>
-  </footer>
 
   <script src="./script.js"></script>
 </body>

@@ -2,254 +2,202 @@ document.documentElement.classList.add("js");
 
 const translations = {
   zh: {
-    metaTitle: "Sealtun | 本地服务公网入口与集群访问",
-    metaDescription: "Sealtun 用一套 CLI 把本地服务发布到公网，并让本机直接访问 Sealos/Kubernetes 集群内服务。",
+    metaTitle: "Sealtun | 一条命令，把本地服务送上公网",
+    metaDescription: "Sealtun 是 Sealos Cloud 原生的隧道 CLI：一条命令把本地 Web、SSH、数据库暴露到公网，内置认证、域名、限流、审计和声明式 YAML。",
     skip: "跳到正文",
-    "nav.capabilities": "能力",
-    "nav.latest": "最新功能",
-    "nav.skills": "Skills",
-    "nav.install": "安装",
-    "nav.cta": "开始使用",
-    "hero.eyebrow": "Sealos-native tunnel CLI",
-    "hero.title": "把本地服务发布到公网，也让本机直接访问集群内服务。",
-    "hero.lead": "Sealtun 面向 Sealos/Kubernetes：开发预览用 expose，集群联调用 connect，认证、域名、审计、诊断和 Dashboard 都在同一套命令里。",
-    "hero.primary": "安装 Skill",
-    "hero.secondary": "查看 CLI 用法",
-    "trust.public": "localhost -> public URL",
-    "trust.cluster": "local machine -> cluster Service",
-    "trust.protocols": "HTTPS / SSH / TCP",
-    "trust.policy": "Auth / rate limit / audit",
-    "trust.ops": "Dashboard / doctor / resources",
-    "trust.skill": "AI Skill ready",
-    "statement.eyebrow": "What Sealtun does",
-    "statement.title": "一句话：Sealtun 连接本地、集群和公网。",
-    "statement.body": "要给别人访问本地服务，用 expose；要从本机调集群内 Service、ClusterIP 或 Pod IP，用 connect；要治理入口，再加认证、临时链接、审计、诊断和资源查看。",
-    "protocol.eyebrow": "Public entrances",
-    "protocol.title": "三类入口，按场景选择。",
-    "protocol.body": "Web 走 HTTPS，SSH 和数据库走 TCP，集群内服务访问走 connect。边界清楚，命令也短。",
-    "protocol.https.title": "HTTPS 预览",
-    "protocol.https.body": "本地 Web、回调、预览环境，一条命令得到公网 HTTPS URL。",
-    "protocol.ssh.title": "公网 SSH",
-    "protocol.ssh.body": "本地 sshd 变成公网 host 和 port，适合临时远程调试。",
-    "protocol.tcp.title": "通用 TCP",
-    "protocol.tcp.body": "Postgres、Redis、MQTT 等非 HTTP 服务走四层 TCP。",
-    "latest.eyebrow": "v0.0.25 capabilities",
-    "latest.title": "常用能力压成四件事。",
-    "latest.public.kicker": "Expose",
-    "latest.public.title": "把本地端口发到公网",
-    "latest.public.body": "HTTPS、SSH、TCP 都能发布；HTTPS 还能绑定域名、加认证、开限流和审计。",
-    "latest.connect.kicker": "Connect",
-    "latest.connect.title": "从本机访问集群内服务",
-    "latest.connect.body": "Linux 上执行 connect 后，本机工具可直接访问 Service FQDN、ClusterIP 和 Pod IP。",
-    "latest.operate.kicker": "Operate",
-    "latest.operate.title": "看状态，找问题，安全修复",
-    "latest.operate.body": "Dashboard、watch、resources、events、logs 和 doctor 覆盖日常排障。",
-    "latest.config.kicker": "Declare",
-    "latest.config.title": "把隧道写成 YAML",
-    "latest.config.body": "template、apply、diff、export 和 TTL 让团队配置可复用。",
-    "skill.title": "不用先学 Sealtun，让 AI 先学会。",
-    "skill.body": "装上 Skill 后，直接告诉 AI 你要暴露哪个端口、访问哪个集群服务、绑定什么域名或加什么认证，它会按 Sealtun 的命令流程执行。",
-    "skill.step1": "安装 Skill，让 AI 知道 Sealtun 的 CLI、YAML 和安全边界。",
-    "skill.step2": "用自然语言描述端口、协议、域名和访问规则。",
-    "skill.step3": "涉及 expose、apply、domain、cleanup 等状态变更时先确认。",
-    "skill.step4": "让 AI 处理命令细节、诊断输出和后续配置整理。",
-    "install.eyebrow": "Install and operate",
-    "install.title": "三步开始：登录、暴露或连接、再用 Dashboard 排障。",
-    "install.body": "CLI 给人用，Skill 给 AI 用，sealtun.yaml 给团队复用。安装后先 login，再按场景选择 expose、connect 或 apply。",
-    "tabs.skill": "AI Skill",
-    "tabs.domain": "域名",
-    "tabs.share": "集群访问",
-    "tabs.dashboard": "工作台",
-    "tabs.diagnostics": "诊断",
-    "tabs.yaml": "YAML",
+    "nav.features": "核心能力",
+    "nav.quickstart": "快速上手",
+    "nav.download": "下载",
+    "nav.cta": "立即下载",
+    "hero.eyebrow": "Sealos Cloud 原生隧道 CLI",
+    "hero.title": "一条命令，<br>把本地服务送上公网。",
+    "hero.lead": "Sealtun 把本地 Web、SSH、数据库变成公网入口。认证、域名、限流、审计、声明式 YAML，全在这一个二进制里。",
+    "hero.installCmd": "npm install -g sealtun",
+    "hero.cardNpm.title": "npm 安装",
+    "hero.cardNpm.desc": "macOS / Linux / Windows",
+    "hero.cardBin.title": "独立二进制",
+    "hero.cardBin.desc": "GitHub Releases · 6 平台",
+    "hero.cardOci.title": "容器镜像",
+    "hero.cardOci.desc": "ghcr.io/gitlayzer/sealtun",
+    "hero.github": "在 GitHub 上查看",
+    "hero.license": "MIT 开源协议",
     "copy.default": "复制",
-    "copy.success": "已复制",
-    "copy.error": "复制失败",
-    "cta.eyebrow": "Open source and Sealos native",
-    "cta.title": "一句话：Sealtun 让本地、集群和公网互相可达，而且可治理。",
-    "cta.button": "查看源码",
-    "footer.tagline": "Localhost tunnels built for Sealos Cloud.",
-    "footer.back": "回到顶部"
+    "copy.done": "已复制",
+    "features.eyebrow": "FEATURES · 核心能力",
+    "features.title": "公网入口这件事，做到极致。",
+    "features.lead": "不是功能堆叠，而是把「本地服务公网化」的每一步都做成一条命令。",
+    "f.https.title": "一条命令，拿到公网 HTTPS URL",
+    "f.https.body": "expose 一个本地端口或远端 upstream，Ingress + 反向代理自动就绪。Basic Auth、Bearer Token、IP 白名单、限流、审计、自定义域名和 cert-manager 证书，全部是内置 flag，不需要你写一行 Ingress 配置。",
+    "f.tcp.title": "SSH 和数据库，NodePort 直连",
+    "f.tcp.body": "expose 22 --protocol ssh 暴露本机 sshd；expose 5432 --protocol tcp 暴露 Postgres、Redis、MQTT。四层 TCP 直通，不走 HTTP 代理。",
+    "f.up.title": "会自己找端口的 up",
+    "f.up.body": "sealtun up 自动发现本机监听端口，按协议模板引导创建：Web、SSH、MySQL、Postgres、Redis、MongoDB、MQTT。日常开发一条命令就够。",
+    "f.policy.title": "入口安全，做成开关",
+    "f.policy.body": "临时分享链接只显示一次、服务端 secret 可轮换、IP 白/黑名单、固定窗口限流、访问审计——策略在服务端代理层强制执行，不靠 Ingress 注解。",
+    "f.yaml.title": "把隧道写成 YAML",
+    "f.yaml.body": "sealtun.yaml 声明多条隧道：协议、端口、域名、TTL、资源规格、认证策略。apply 幂等创建/更新，--dry-run 预览计划，--format diff 对比变更，失败自动回滚。",
+    "f.ops.title": "状态看得见，故障修得动",
+    "f.ops.body": "inspect 看单隧道详情（--remote 远端诊断、--metrics 指标、--resources 资源清单），doctor 一键诊断并保守修复，logs 实时日志，list --watch 持续刷新。出问题时不是黑盒。",
+    "qs.eyebrow": "QUICKSTART · 快速上手",
+    "qs.title": "三步，从安装到公网。",
+    "qs.s1.title": "安装并登录",
+    "qs.s1.body": "npm 安装后 sealtun login，浏览器里完成设备授权，凭据保存在 ~/.sealtun。支持多 region、多 profile。",
+    "qs.s2.title": "暴露本地服务",
+    "qs.s2.body": "up 引导创建，或 expose 精确指定。HTTPS 出 URL，SSH/TCP 出 host:port。后台 daemon 常驻，关掉终端也不断线。",
+    "qs.s3.title": "治理与分享",
+    "qs.s3.body": "加认证、绑域名、开限流审计，或生成一小时后自动失效的临时分享链接发给同事。全部一条命令。",
+    "dl.eyebrow": "DOWNLOAD · 下载",
+    "dl.title": "选择你的安装方式。",
+    "dl.lead": "所有渠道始终指向最新 release。一个二进制，无运行时依赖。",
+    "dl.npm.title": "npm（推荐）",
+    "dl.npm.body": "自动匹配平台二进制，支持 macOS / Linux / Windows 的 x64 与 arm64。",
+    "dl.bin.title": "GitHub Releases",
+    "dl.bin.body": "下载对应平台的 tar.gz / zip 单文件。也可 npx sealtun@latest 免安装运行。",
+    "dl.oci.title": "容器镜像",
+    "dl.oci.body": "远端隧道 Pod 与 CLI 同源镜像，ghcr.io/gitlayzer/sealtun:latest。",
+    "dl.alpha": "每次 master 提交自动发布 v*-alpha-N 预发布版，可在 GitHub Releases 的 Pre-release 中抢先体验。",
+    "footer.tagline": "Sealos Cloud 原生隧道 CLI",
+    "footer.releases": "发布页",
+    "footer.docs": "文档",
+    "footer.built": "Built for the Sealos ecosystem",
   },
   en: {
-    metaTitle: "Sealtun | Public tunnels and cluster access",
-    metaDescription: "Sealtun publishes local services to the internet and lets your machine access Sealos/Kubernetes in-cluster services through one CLI.",
+    metaTitle: "Sealtun | One command, localhost goes public",
+    metaDescription: "Sealtun is a Sealos Cloud-native tunnel CLI: one command publishes local web apps, SSH, and databases to the internet, with built-in auth, domains, rate limiting, audit, and declarative YAML.",
     skip: "Skip to content",
-    "nav.capabilities": "Capabilities",
-    "nav.latest": "Latest",
-    "nav.skills": "Skills",
-    "nav.install": "Install",
-    "nav.cta": "Get started",
-    "hero.eyebrow": "Sealos-native tunnel CLI",
-    "hero.title": "Publish local services to the internet, and access cluster services from your machine.",
-    "hero.lead": "Sealtun is built for Sealos/Kubernetes: use expose for public previews, connect for cluster debugging, and one command set for auth, domains, audit, diagnostics, and Dashboard operations.",
-    "hero.primary": "Install Skill",
-    "hero.secondary": "See CLI usage",
-    "trust.public": "localhost -> public URL",
-    "trust.cluster": "local machine -> cluster Service",
-    "trust.protocols": "HTTPS / SSH / TCP",
-    "trust.policy": "Auth / rate limit / audit",
-    "trust.ops": "Dashboard / doctor / resources",
-    "trust.skill": "AI Skill ready",
-    "statement.eyebrow": "What Sealtun does",
-    "statement.title": "In one sentence: Sealtun connects your machine, cluster, and the public internet.",
-    "statement.body": "Use expose when someone needs your local service. Use connect when your machine needs a cluster Service, ClusterIP, or Pod IP. Add auth, temporary links, audit, diagnostics, and resource views when the entrance needs governance.",
-    "protocol.eyebrow": "Public entrances",
-    "protocol.title": "Three entrances, chosen by scenario.",
-    "protocol.body": "Web uses HTTPS, SSH and databases use TCP, and in-cluster access uses connect. Clear boundary, short commands.",
-    "protocol.https.title": "HTTPS previews",
-    "protocol.https.body": "Local web apps, callbacks, and previews get a public HTTPS URL with one command.",
-    "protocol.ssh.title": "Public SSH",
-    "protocol.ssh.body": "Turn local sshd into a public host and port for temporary remote debugging.",
-    "protocol.tcp.title": "Generic TCP",
-    "protocol.tcp.body": "Postgres, Redis, MQTT, and other non-HTTP services use L4 TCP.",
-    "latest.eyebrow": "v0.0.25 capabilities",
-    "latest.title": "The common workflow is now four things.",
-    "latest.public.kicker": "Expose",
-    "latest.public.title": "Publish a local port",
-    "latest.public.body": "HTTPS, SSH, and TCP are supported. HTTPS can also use domains, auth, rate limits, and audit.",
-    "latest.connect.kicker": "Connect",
-    "latest.connect.title": "Reach cluster services locally",
-    "latest.connect.body": "On Linux, connect lets local tools reach Service FQDNs, ClusterIPs, and Pod IPs directly.",
-    "latest.operate.kicker": "Operate",
-    "latest.operate.title": "See state, find issues, fix safely",
-    "latest.operate.body": "Dashboard, watch, resources, events, logs, and doctor cover daily debugging.",
-    "latest.config.kicker": "Declare",
-    "latest.config.title": "Write tunnels as YAML",
-    "latest.config.body": "template, apply, diff, export, and TTL make team configuration reusable.",
-    "skill.title": "You do not have to learn Sealtun first. Let AI learn it.",
-    "skill.body": "After installing the Skill, tell AI which port to expose, which cluster service to reach, which domain to bind, or which auth to add. It follows the Sealtun command flow.",
-    "skill.step1": "Install the Skill so AI understands Sealtun CLI, YAML, and safety boundaries.",
-    "skill.step2": "Describe the port, protocol, domain, and access rules in natural language.",
-    "skill.step3": "Confirm state-changing actions such as expose, apply, domain, and cleanup.",
-    "skill.step4": "Let AI handle command details, diagnostic output, and config recovery.",
-    "install.eyebrow": "Install and operate",
-    "install.title": "Start in three steps: login, expose or connect, then inspect in Dashboard.",
-    "install.body": "CLI is for humans, Skill is for AI, and sealtun.yaml is for teams. Install, login, then choose expose, connect, or apply.",
-    "tabs.skill": "AI Skill",
-    "tabs.domain": "Domains",
-    "tabs.share": "Connect",
-    "tabs.dashboard": "Workbench",
-    "tabs.diagnostics": "Diagnostics",
-    "tabs.yaml": "YAML",
+    "nav.features": "Features",
+    "nav.quickstart": "Quickstart",
+    "nav.download": "Download",
+    "nav.cta": "Download",
+    "hero.eyebrow": "Sealos Cloud-native tunnel CLI",
+    "hero.title": "One command,<br>localhost goes public.",
+    "hero.lead": "Sealtun turns local web apps, SSH, and databases into public endpoints. Auth, domains, rate limiting, audit, and declarative YAML — all in a single binary.",
+    "hero.installCmd": "npm install -g sealtun",
+    "hero.cardNpm.title": "Install with npm",
+    "hero.cardNpm.desc": "macOS / Linux / Windows",
+    "hero.cardBin.title": "Standalone binary",
+    "hero.cardBin.desc": "GitHub Releases · 6 platforms",
+    "hero.cardOci.title": "Container image",
+    "hero.cardOci.desc": "ghcr.io/gitlayzer/sealtun",
+    "hero.github": "View on GitHub",
+    "hero.license": "MIT License",
     "copy.default": "Copy",
-    "copy.success": "Copied",
-    "copy.error": "Copy failed",
-    "cta.eyebrow": "Open source and Sealos native",
-    "cta.title": "In one sentence: Sealtun makes local, cluster, and public network paths reachable and governable.",
-    "cta.button": "View source",
-    "footer.tagline": "Localhost tunnels built for Sealos Cloud.",
-    "footer.back": "Back to top"
-  }
+    "copy.done": "Copied",
+    "features.eyebrow": "FEATURES",
+    "features.title": "Public access, done to the extreme.",
+    "features.lead": "Not a pile of features — every step of taking a local service public is exactly one command.",
+    "f.https.title": "One command to a public HTTPS URL",
+    "f.https.body": "expose a local port or a remote upstream and the Ingress plus reverse proxy comes up automatically. Basic Auth, Bearer tokens, IP allowlists, rate limiting, audit, custom domains with cert-manager certificates — all built-in flags, no Ingress YAML required.",
+    "f.tcp.title": "SSH and databases, direct via NodePort",
+    "f.tcp.body": "expose 22 --protocol ssh publishes your local sshd; expose 5432 --protocol tcp publishes Postgres, Redis, or MQTT. Layer-4 TCP straight through, no HTTP proxy in the way.",
+    "f.up.title": "up finds the port for you",
+    "f.up.body": "sealtun up discovers local listening ports and guides creation with protocol templates: Web, SSH, MySQL, Postgres, Redis, MongoDB, MQTT. One command covers daily development.",
+    "f.policy.title": "Entrance security as switches",
+    "f.policy.body": "One-time share links, rotatable server secrets, IP allow/deny lists, fixed-window rate limits, and access audit — enforced in the server proxy layer, not Ingress annotations.",
+    "f.yaml.title": "Tunnels as YAML",
+    "f.yaml.body": "Declare many tunnels in sealtun.yaml: protocol, port, domain, TTL, pod resources, auth policies. apply creates and updates idempotently, --dry-run previews the plan, --format diff compares changes, and failures roll back automatically.",
+    "f.ops.title": "See the state, fix the fault",
+    "f.ops.body": "inspect shows one tunnel (--remote diagnostics, --metrics counters, --resources inventory), doctor runs diagnostics and conservative fixes, logs streams pod output, list --watch keeps refreshing. Never a black box when things break.",
+    "qs.eyebrow": "QUICKSTART",
+    "qs.title": "Three steps from install to public.",
+    "qs.s1.title": "Install and log in",
+    "qs.s1.body": "After npm install, run sealtun login and finish device authorization in the browser. Credentials live in ~/.sealtun, with multiple regions and named profiles.",
+    "qs.s2.title": "Expose a local service",
+    "qs.s2.body": "Let up guide you, or expose precisely. HTTPS gives a URL, SSH/TCP gives host:port. The background daemon keeps tunnels alive after you close the terminal.",
+    "qs.s3.title": "Govern and share",
+    "qs.s3.body": "Add auth, bind a domain, enable rate limits and audit, or hand a colleague a temporary share link that expires in an hour. One command each.",
+    "dl.eyebrow": "DOWNLOAD",
+    "dl.title": "Choose how you install.",
+    "dl.lead": "Every channel always points at the latest release. One binary, zero runtime dependencies.",
+    "dl.npm.title": "npm (recommended)",
+    "dl.npm.body": "Installs the matching platform binary automatically for macOS, Linux, and Windows on x64 and arm64.",
+    "dl.bin.title": "GitHub Releases",
+    "dl.bin.body": "Grab the tar.gz or zip for your platform, or run without installing via npx sealtun@latest.",
+    "dl.oci.title": "Container image",
+    "dl.oci.body": "The remote tunnel pod and the CLI ship from the same image: ghcr.io/gitlayzer/sealtun:latest.",
+    "dl.alpha": "Every master push publishes a v*-alpha-N prerelease automatically — grab them from GitHub Releases under Pre-release.",
+    "footer.tagline": "Sealos Cloud-native tunnel CLI",
+    "footer.releases": "Releases",
+    "footer.docs": "Docs",
+    "footer.built": "Built for the Sealos ecosystem",
+  },
 };
 
-const supportedLangs = Object.keys(translations);
-const storedLang = window.localStorage.getItem("sealtun-lang");
-const browserLang = navigator.language?.toLowerCase().startsWith("en") ? "en" : "zh";
-let currentLang = supportedLangs.includes(storedLang) ? storedLang : browserLang;
+let currentLang = "zh";
 
-const applyLanguage = lang => {
-  currentLang = supportedLangs.includes(lang) ? lang : "zh";
-  const dictionary = translations[currentLang];
-  document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
-  document.title = dictionary.metaTitle;
-  document.querySelector('meta[name="description"]')?.setAttribute("content", dictionary.metaDescription);
-  document.querySelector('meta[property="og:title"]')?.setAttribute("content", dictionary.metaTitle);
-  document.querySelector('meta[property="og:description"]')?.setAttribute("content", dictionary.metaDescription);
-  document.querySelectorAll("[data-i18n]").forEach(element => {
-    const key = element.dataset.i18n;
-    if (dictionary[key]) element.textContent = dictionary[key];
-  });
-  document.querySelectorAll("[data-lang]").forEach(button => {
-    const isActive = button.dataset.lang === currentLang;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  });
-  window.localStorage.setItem("sealtun-lang", currentLang);
-};
-
-document.querySelectorAll("[data-lang]").forEach(button => {
-  button.addEventListener("click", () => applyLanguage(button.dataset.lang));
-});
-
-applyLanguage(currentLang);
-
-const revealElements = document.querySelectorAll(".reveal");
-
-if ("IntersectionObserver" in window) {
-  const revealObserver = new IntersectionObserver(
-    entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("visible");
-          revealObserver.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.04 }
-  );
-
-  revealElements.forEach(element => revealObserver.observe(element));
-} else {
-  revealElements.forEach(element => element.classList.add("visible"));
+function t(key) {
+  return (translations[currentLang] && translations[currentLang][key]) || translations.zh[key] || key;
 }
 
-const tabs = document.querySelectorAll("[data-target]");
-const panes = document.querySelectorAll("[data-pane]");
-let currentPane = document.querySelector(".tab.active")?.dataset.target || "skill";
+function applyTranslations() {
+  document.documentElement.lang = currentLang === "zh" ? "zh-CN" : "en";
+  document.title = t("metaTitle");
+  const meta = document.querySelector('meta[name="description"]');
+  if (meta) meta.setAttribute("content", t("metaDescription"));
 
-tabs.forEach(tab => {
-  tab.addEventListener("click", () => {
-    currentPane = tab.dataset.target;
-    tabs.forEach(item => {
-      const isActive = item === tab;
-      item.classList.toggle("active", isActive);
-      item.setAttribute("aria-selected", String(isActive));
-    });
-    panes.forEach(pane => pane.classList.toggle("active", pane.dataset.pane === currentPane));
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    const value = t(key);
+    if (value !== key) {
+      if (/<[a-z][\s\S]*>/i.test(value)) {
+        el.innerHTML = value;
+      } else {
+        el.textContent = value;
+      }
+    }
   });
-});
 
-const writeClipboard = async text => {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
+  document.querySelectorAll(".lang-option").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-lang") === currentLang);
+  });
+}
 
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  if (!copied) throw new Error("copy failed");
-};
-
-const copyText = async (button, text) => {
-  const dictionary = translations[currentLang];
+function setLanguage(lang) {
+  if (!translations[lang]) return;
+  currentLang = lang;
+  applyTranslations();
   try {
-    await writeClipboard(text.trim());
-    button.textContent = dictionary["copy.success"];
-  } catch (_) {
-    button.textContent = dictionary["copy.error"];
-  }
-  window.setTimeout(() => {
-    button.textContent = dictionary["copy.default"];
-  }, 1400);
-};
+    localStorage.setItem("sealtun-lang", lang);
+  } catch (_) {}
+}
 
-document.querySelector("[data-copy-current]")?.addEventListener("click", event => {
-  const active = document.querySelector(`[data-pane="${currentPane}"] code`);
-  if (active) copyText(event.currentTarget, active.textContent);
+document.querySelectorAll(".lang-option").forEach((btn) => {
+  btn.addEventListener("click", () => setLanguage(btn.getAttribute("data-lang")));
 });
 
-document.querySelectorAll("[data-copy-nearest]").forEach(button => {
-  button.addEventListener("click", event => {
-    const command = event.currentTarget.closest(".command-bar")?.querySelector("code");
-    if (command) copyText(event.currentTarget, command.textContent);
+// Copy buttons: copy the text of the nearest <code> in the same command bar.
+document.querySelectorAll("[data-copy-nearest]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const bar = btn.closest(".command-bar");
+    const code = bar ? bar.querySelector("code") : null;
+    if (!code) return;
+    const text = code.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    const original = t("copy.default");
+    btn.textContent = t("copy.done");
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("copied");
+    }, 1600);
   });
 });
+
+const yearEl = document.getElementById("year");
+if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+try {
+  const saved = localStorage.getItem("sealtun-lang");
+  if (saved && translations[saved]) currentLang = saved;
+} catch (_) {}
+
+applyTranslations();
