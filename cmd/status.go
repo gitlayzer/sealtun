@@ -48,6 +48,7 @@ var statusJSON bool
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show the current Sealtun login status",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		status, err := collectStatus()
 		if err != nil {

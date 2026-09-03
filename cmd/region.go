@@ -29,6 +29,7 @@ var regionCmd = &cobra.Command{
 var regionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List known Sealos Cloud regions",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		items, err := collectRegionListItems()
 		if err != nil {
@@ -62,6 +63,7 @@ var regionListCmd = &cobra.Command{
 var regionCurrentCmd = &cobra.Command{
 	Use:   "current",
 	Short: "Show the current Sealos Cloud region",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		authData, err := loadActiveAuthDataReadOnly()
 		if err != nil {

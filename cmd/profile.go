@@ -37,6 +37,7 @@ kubeconfig used by commands such as expose, status, and region current.`,
 var profileListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List saved login profiles",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		items, err := collectProfileItems()
 		if err != nil {
@@ -55,6 +56,7 @@ var profileListCmd = &cobra.Command{
 var profileCurrentCmd = &cobra.Command{
 	Use:   "current",
 	Short: "Show the active named profile",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := auth.CurrentSealtunDir()
 		if err != nil {

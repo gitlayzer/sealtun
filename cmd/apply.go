@@ -34,6 +34,7 @@ const applyFileMaxBytes = 1 << 20
 var applyCmd = &cobra.Command{
 	Use:          "apply -f sealtun.yaml",
 	Short:        "Apply declarative Sealtun tunnel configuration",
+	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if strings.TrimSpace(applyFilePath) == "" {

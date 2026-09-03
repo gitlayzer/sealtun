@@ -17,6 +17,7 @@ var logoutForce bool
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Remove the current Sealtun login session",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, err := auth.LoadAuthData()
 		if err != nil {

@@ -48,6 +48,7 @@ const (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List local Sealtun tunnel sessions",
+	Args:  cobra.NoArgs,
 	Long: `List local Sealtun tunnel sessions tracked on this machine.
 By default this command only reads local session records. Use --check to probe
 local target ports and mark unreachable running tunnels as degraded.`,
