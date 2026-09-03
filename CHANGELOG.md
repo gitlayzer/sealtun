@@ -2,17 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v0.0.40] - 2026-09-03
 
 ### Removed
 - **Region switch duplication**: Removed `region use`; switch regions with `login <region>` (identical underlying flow).
 - **Share list duplication**: Removed `share list`; temporary link names and expiry metadata are visible in `policy show <tunnel-id>`.
 
+### Added
+- **Inline secret warnings**: `apply` now warns when YAML carries plaintext `basicAuth` passwords, bearer tokens, or temporary link tokens inline, and points to the `*Env` fields.
+- **cleanup --all confirmation**: interactive sessions must type `yes`; non-interactive use requires `--yes`.
+- **logs escape filtering**: `logs` strips terminal escape and control sequences from remote pod logs by default (attacker-influenced content cannot hijack the terminal); `--raw` restores the unfiltered stream.
+- **Rollback visibility**: failed `apply` runs now report which new tunnels were deleted and which existing tunnels were restored, and rollbacks wait for rollout readiness.
+
 ### Changed
 - **Domain diagnostics merged**: `domain doctor` is now `domain status --verbose`.
 - **Diff merged into apply**: `sealtun diff` is now `sealtun apply --dry-run --format diff`.
+- **dry-run parity**: `apply --dry-run` stays offline but now runs local scope and secret-availability checks for YAML tunnels that match existing sessions.
+- **Toolchain**: builds now require Go 1.25.13, fixing five reachable standard library CVEs (net/http, crypto/tls, net/url, encoding/asn1, x/net/idna).
+- **Docs**: README and QuickStart restructured for a shorter main path; the sealtun skill synced to the current command surface.
 
-
+### Fixed
+- **Security: kubeconfig validation**: login now rejects server-supplied kubeconfigs containing exec credential plugins (local RCE), auth-provider plugins, non-TLS non-localhost clusters (token relay), or malformed structure.
+- **Security: raw TCP resource bounds**: unauthenticated raw TCP connections are capped at 256 concurrent and expire after 10 minutes idle; temporary Accept errors no longer tear down the whole tunnel server; the `/_sealtun/tcp` WebSocket now has the same keepalive/read-limit discipline as the control channel.
+- **Security: empty IP lists rejected**: `--ip-allowlist`/`--ip-denylist` containing only empty entries (e.g. `,`) previously normalized to an unrestricted tunnel; they now fail validation.
+- **Security: log-injection hints**: error hints no longer misfire on local domain validation or local file permission errors, no longer reference the removed `resources set` command, and cluster CA failures now suggest re-login instead of `--target-insecure-skip-verify`.
+- **Security: YAML octal ports**: `localPort: 03000` (parsed as octal 1536 by YAML 1.1) is now rejected with the intended decimal port and line number.
+- **apply: duplicate temporary link names** in one tunnel are now rejected.
+- **apply: leading/trailing-whitespace tunnel names** are trimmed for both ID and display.
+- **daemon: stop-overwrite races**: all daemon session writes (connecting/connected/error) now use atomic compare-and-swap, so a concurrent `sealtun stop` can never be silently reverted.
+- **expire parsing is no longer fail-destructive**: an unparseable `expiresAt` no longer counts as expired (the daemon auto-deletes expired tunnels).
+- **expose: SIGINT during provisioning** now cancels through the rollback path instead of orphaning remote resources.
+- **rotate/share/policy: committed-error surfacing**: if the remote secret/policy was rotated but the local session save failed, the new secret or share URL is still printed instead of being silently lost.
+- **k8s: `-app`-suffixed tunnel IDs** no longer produce broken ingress backends or let another tunnel's cleanup delete their ingress.
+- **relay drain**: when one direction of a relay fails (e.g. target RST), the surviving direction gets a short drain window instead of dropping buffered tail data.
+- **Input consistency**: eight no-arg commands (`list`, `status`, `region list/current`, `profile list/current`, `apply`, `logout`) now reject extra positional arguments instead of silently ignoring them; scope checks normalize region strings before comparing; protocol values written back from remote state are normalized.
+- **doctor report redaction** now also covers URL userinfo (`https://user:pass@host`).
 
 ## [v0.0.39] - 2026-08-31
 
