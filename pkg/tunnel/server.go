@@ -719,6 +719,32 @@ func (s *Server) handleTCPConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Dead TCP-over-WebSocket connections (client powered off, network drop
+	// without RST) must not leak a goroutine and a yamux stream forever;
+	// apply the same keepalive discipline as the tunnel control channel.
+	conn.SetReadLimit(1 << 20)
+	_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	})
+	stopPing := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					_ = conn.Close()
+					return
+				}
+			case <-stopPing:
+				return
+			}
+		}
+	}()
+	defer close(stopPing)
+
 	stream, err := session.OpenStream()
 	if err != nil {
 		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "local client is not connected"))

@@ -524,7 +524,7 @@ func validateExistingApplySessionScope(existing session.TunnelSession, authData 
 	if existing.Region == "" || currentRegion == "" {
 		return fmt.Errorf("tunnel %s already exists but region metadata is incomplete; run `sealtun inspect %s` and clean it up before apply", existing.TunnelID, existing.TunnelID)
 	}
-	if existing.Region != currentRegion {
+	if !regionMatches(existing.Region, currentRegion) {
 		return fmt.Errorf("tunnel %s already belongs to region %s; current region is %s", existing.TunnelID, existing.Region, currentRegion)
 	}
 	if currentNamespace != "" {

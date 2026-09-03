@@ -737,3 +737,18 @@ func TestActionableErrorHintClusterRBACStillFires(t *testing.T) {
 		t.Fatalf("cluster RBAC error should still produce the login hint, got %q", got)
 	}
 }
+
+func TestRedactSensitiveTextCoversURLUserinfo(t *testing.T) {
+	input := "Target: https://admin:secretpass@10.0.0.1:8443/api"
+	got := redactSensitiveText(input)
+	if got == input {
+		t.Fatalf("url userinfo should be redacted, got %q", got)
+	}
+	if !strings.Contains(got, "https://admin:<redacted>@10.0.0.1:8443") {
+		t.Fatalf("unexpected redaction result: %q", got)
+	}
+	clean := redactSensitiveText("Target: https://10.0.0.1:8443/api")
+	if clean != "Target: https://10.0.0.1:8443/api" {
+		t.Fatalf("urls without userinfo must not be modified, got %q", clean)
+	}
+}

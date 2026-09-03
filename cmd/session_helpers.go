@@ -161,7 +161,7 @@ func k8sClientForSession(sess session.TunnelSession) (*k8s.Client, error) {
 	if sess.Region == "" {
 		return nil, fmt.Errorf("%w for tunnel %q and the legacy session does not record its region", errMissingSessionKubeconfig, sess.TunnelID)
 	}
-	if authData.Region == "" || sess.Region != authData.Region {
+	if authData.Region == "" || !regionMatches(sess.Region, authData.Region) {
 		return nil, fmt.Errorf("%w for tunnel %q; session region is %s but current login region is %s", errMissingSessionKubeconfig, sess.TunnelID, sess.Region, authData.Region)
 	}
 	if sess.Namespace == "" {
@@ -326,7 +326,10 @@ func sessionExpired(sess session.TunnelSession, now time.Time) bool {
 	}
 	expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(sess.ExpiresAt))
 	if err != nil {
-		return true
+		// An unparseable timestamp must never be treated as expired: the daemon
+		// uses this to auto-delete remote resources, and fail-destructive on
+		// bad input is unrecoverable. Treat unknown as not expired.
+		return false
 	}
 	return !now.Before(expiresAt)
 }
@@ -386,9 +389,15 @@ func mergeSessionRemoteState(sess *session.TunnelSession, state *k8s.TunnelRemot
 		sess.PublicPort = state.PublicPort
 		changed = true
 	}
-	if state.Protocol != "" && state.Protocol != sess.Protocol {
-		sess.Protocol = state.Protocol
-		changed = true
+	if state.Protocol != "" {
+		// Remote deployment args flow back into the session; normalize before
+		// storing so hand-edited or version-mismatched values ("HTTPS", legacy
+		// aliases) can't split the stop/start/domain comparisons.
+		normalized := tunnelprotocol.Normalize(state.Protocol)
+		if normalized != sess.Protocol {
+			sess.Protocol = normalized
+			changed = true
+		}
 	}
 	if state.LocalPort != "" && state.LocalPort != sess.LocalPort {
 		sess.LocalPort = state.LocalPort

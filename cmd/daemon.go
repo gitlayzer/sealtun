@@ -320,20 +320,19 @@ func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
 		} else {
 			wsURL := fmt.Sprintf("wss://%s/_sealtun/ws", controlHost)
 			err = tunnel.DialServerAndServeTargetWithOptions(ctx, wsURL, current.Secret, current.LocalPort, current.TargetURL, current.Protocol, targetOptionsForSession(*current), func() {
-				latest, getErr := session.Get(sess.TunnelID)
-				if getErr != nil {
-					return
-				}
-				if shouldPreserveStoppedSession(latest) {
-					return
-				}
-				latest.Mode = "daemon"
-				latest.PID = os.Getpid()
-				latest.ConnectionState = session.ConnectionStateConnected
-				latest.LastError = ""
-				latest.LastConnectedAt = time.Now().Format(time.RFC3339)
-				if saveErr := session.Update(*latest); saveErr != nil && !os.IsNotExist(saveErr) {
-					fmt.Printf("[!] failed to mark tunnel %s connected: %v\n", latest.TunnelID, saveErr)
+				_, saveErr := session.UpdateAtomic(sess.TunnelID, func(latest *session.TunnelSession) (bool, error) {
+					if shouldPreserveStoppedSession(latest) {
+						return false, nil
+					}
+					latest.Mode = "daemon"
+					latest.PID = os.Getpid()
+					latest.ConnectionState = session.ConnectionStateConnected
+					latest.LastError = ""
+					latest.LastConnectedAt = time.Now().Format(time.RFC3339)
+					return true, nil
+				})
+				if saveErr != nil && !os.IsNotExist(saveErr) {
+					fmt.Printf("[!] failed to mark tunnel %s connected: %v\n", sess.TunnelID, saveErr)
 				}
 			})
 		}
@@ -342,30 +341,30 @@ func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
 		}
 		if err != nil {
 			fmt.Printf("[!] tunnel %s disconnected: %v\n", current.TunnelID, err)
-			if latest, getErr := session.Get(sess.TunnelID); getErr == nil {
+			if _, saveErr := session.UpdateAtomic(sess.TunnelID, func(latest *session.TunnelSession) (bool, error) {
 				if shouldPreserveStoppedSession(latest) {
-					return
+					return false, nil
 				}
 				latest.Mode = "daemon"
 				latest.PID = os.Getpid()
 				latest.ConnectionState = session.ConnectionStateError
 				latest.LastError = err.Error()
-				if saveErr := session.Update(*latest); saveErr != nil && !os.IsNotExist(saveErr) {
-					fmt.Printf("[!] failed to persist tunnel %s error state: %v\n", latest.TunnelID, saveErr)
-				}
+				return true, nil
+			}); saveErr != nil && !os.IsNotExist(saveErr) {
+				fmt.Printf("[!] failed to persist tunnel %s error state: %v\n", sess.TunnelID, saveErr)
 			}
 		} else {
-			if latest, getErr := session.Get(sess.TunnelID); getErr == nil {
+			if _, saveErr := session.UpdateAtomic(sess.TunnelID, func(latest *session.TunnelSession) (bool, error) {
 				if shouldPreserveStoppedSession(latest) {
-					return
+					return false, nil
 				}
 				latest.Mode = "daemon"
 				latest.PID = os.Getpid()
 				latest.ConnectionState = session.ConnectionStateError
 				latest.LastError = "tunnel connection closed; reconnecting"
-				if saveErr := session.Update(*latest); saveErr != nil && !os.IsNotExist(saveErr) {
-					fmt.Printf("[!] failed to persist tunnel %s closed state: %v\n", latest.TunnelID, saveErr)
-				}
+				return true, nil
+			}); saveErr != nil && !os.IsNotExist(saveErr) {
+				fmt.Printf("[!] failed to persist tunnel %s closed state: %v\n", sess.TunnelID, saveErr)
 			}
 		}
 

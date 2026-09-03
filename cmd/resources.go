@@ -132,7 +132,7 @@ func activeScopedSession(ctx context.Context, tunnelID string) (*session.TunnelS
 	if err != nil {
 		return nil, err
 	}
-	if sess.Region != scope.region || sess.Namespace != scope.namespace {
+	if !regionMatches(sess.Region, scope.region) || sess.Namespace != scope.namespace {
 		return nil, fmt.Errorf("tunnel %s is outside the active scope", sess.TunnelID)
 	}
 	return sess, nil

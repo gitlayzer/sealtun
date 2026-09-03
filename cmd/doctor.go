@@ -32,6 +32,7 @@ var doctorRedactionRules = []doctorRedactionRule{
 	{pattern: regexp.MustCompile(`(?i)((?:token|secret|password|passwd|pwd)\s*[:=]\s*)[^\s&]+`), repl: `${1}<redacted>`},
 	{pattern: regexp.MustCompile(`(?i)(_sealtun_token=)[^&\s]+`), repl: `${1}<redacted>`},
 	{pattern: regexp.MustCompile(`(?i)(basic\s+)[A-Za-z0-9+/=-]+`), repl: `${1}<redacted>`},
+	{pattern: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@]+:)[^\s/@]+(@)`), repl: `${1}<redacted>${2}`},
 }
 
 type doctorPayload struct {
