@@ -1151,7 +1151,7 @@ func hostnameInList(hosts []string, want string) bool {
 func (c *Client) generateIngress(name, sealosHost, customDomain string, paths []string, pathType *netv1.PathType, ingressClass *string) *netv1.Ingress {
 	labels := map[string]string{
 		"app":                 name,
-		managedLabelKey:       strings.TrimSuffix(name, "-app"),
+		managedLabelKey:       name,
 		managedDomainLabelKey: strings.Split(sealosHost, ".")[0],
 	}
 
@@ -1174,7 +1174,7 @@ func (c *Client) generateIngress(name, sealosHost, customDomain string, paths []
 			PathType: pathType,
 			Backend: netv1.IngressBackend{
 				Service: &netv1.IngressServiceBackend{
-					Name: strings.TrimSuffix(name, "-app"),
+					Name: name,
 					Port: netv1.ServiceBackendPort{Number: 80},
 				},
 			},
@@ -1233,8 +1233,7 @@ func (c *Client) applyIngress(ctx context.Context, ingress *netv1.Ingress) (bool
 		_, err = ingClient.Create(ctx, ingress, metav1.CreateOptions{})
 		return err == nil, err
 	} else if err == nil {
-		owner := strings.TrimSuffix(ingress.Name, "-app")
-		if !managedLabelMatches(existing.Labels, owner) {
+		if !managedLabelMatches(existing.Labels, ingress.Name) {
 			return false, fmt.Errorf("ingress %s already exists but is not managed by Sealtun", ingress.Name)
 		}
 		ingress.ResourceVersion = existing.ResourceVersion
@@ -1902,8 +1901,7 @@ func (c *Client) cleanupCreated(ctx context.Context, resources []createdResource
 			owner := strings.TrimSuffix(resource.name, "-tcp")
 			_, err = c.deleteNamedServiceIfOwned(ctx, resource.name, owner)
 		case resourceIngress:
-			owner := strings.TrimSuffix(resource.name, "-app")
-			_, err = c.deleteIngressIfOwned(ctx, resource.name, owner)
+			_, err = c.deleteIngressIfOwned(ctx, resource.name, resource.name)
 		case resourceIssuer:
 			_, _, err = c.deleteManagedDynamicResourceIfExists(ctx, issuerGVR, resource.name)
 		case resourceCertificate:

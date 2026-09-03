@@ -36,6 +36,13 @@ and establishes a secure connection to forward traffic to the configured target.
 var runExpose = runExposeCommand
 
 func runExposeCommand(cmd *cobra.Command, args []string) error {
+	// Install signal handling before any remote provisioning so that Ctrl-C
+	// during resource creation, readiness waits, or domain waits cancels the
+	// operation and runs the rollback defers instead of orphaning resources.
+	provisionCtx, stopProvisionSignals := signal.NotifyContext(cmd.Context(), signalCleanupSignals()...)
+	defer stopProvisionSignals()
+	cmd.SetContext(provisionCtx)
+
 	localPort, targetURL, err := resolveExposeTarget(args, exposeTarget)
 	if err != nil {
 		return err
@@ -272,8 +279,6 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	ctx, stop := signal.NotifyContext(ctx, signalCleanupSignals()...)
-	defer stop()
 	rollback = false
 	defer cleanupTunnelForCurrentOwner(cleanupTarget, tunnelID)
 

@@ -247,7 +247,25 @@ func TestValidateAccessTokenRejectsEmptyToken(t *testing.T) {
 func TestValidateRegionLoginDataRejectsIncompleteResponses(t *testing.T) {
 	regionData := &auth.RegionTokenResponse{}
 	regionData.Data.Token = "regional-token"
-	regionData.Data.Kubeconfig = "apiVersion: v1"
+	regionData.Data.Kubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://gzg.sealos.run:6443
+    insecure-skip-tls-verify: true
+  name: sealos
+contexts:
+- context:
+    cluster: sealos
+    user: u
+    namespace: ns-x
+  name: ctx
+current-context: ctx
+users:
+- name: u
+  user:
+    token: fake
+`
 	initData := &auth.InitDataResponse{}
 	initData.Data.SealosDomain = "sealoshzh.site"
 
@@ -282,7 +300,25 @@ func TestValidateRegionLoginDataRejectsIncompleteResponses(t *testing.T) {
 func TestValidateRegionLoginDataNormalizesSealosDomain(t *testing.T) {
 	regionData := &auth.RegionTokenResponse{}
 	regionData.Data.Token = "regional-token"
-	regionData.Data.Kubeconfig = "apiVersion: v1"
+	regionData.Data.Kubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://gzg.sealos.run:6443
+    insecure-skip-tls-verify: true
+  name: sealos
+contexts:
+- context:
+    cluster: sealos
+    user: u
+    namespace: ns-x
+  name: ctx
+current-context: ctx
+users:
+- name: u
+  user:
+    token: fake
+`
 	initData := &auth.InitDataResponse{}
 	initData.Data.SealosDomain = "Sealoshzh.Site."
 

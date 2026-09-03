@@ -711,3 +711,60 @@ func TestRawTCPPolicyEnforcesIPRulesByRealPeer(t *testing.T) {
 		t.Fatal("expected non-denied peer to be allowed on the raw TCP path")
 	}
 }
+
+type temporaryAcceptError struct{}
+
+func (temporaryAcceptError) Error() string   { return "accept: too many open files" }
+func (temporaryAcceptError) Timeout() bool   { return true }
+func (temporaryAcceptError) Temporary() bool { return true }
+
+type flakyListener struct {
+	failures int
+	accepted chan net.Conn
+	closed   chan struct{}
+}
+
+func (l *flakyListener) Accept() (net.Conn, error) {
+	if l.failures > 0 {
+		l.failures--
+		return nil, temporaryAcceptError{}
+	}
+	select {
+	case c := <-l.accepted:
+		return c, nil
+	case <-l.closed:
+		return nil, fmt.Errorf("listener closed")
+	}
+}
+
+func (l *flakyListener) Close() error {
+	select {
+	case <-l.closed:
+	default:
+		close(l.closed)
+	}
+	return nil
+}
+
+func (l *flakyListener) Addr() net.Addr { return nil }
+
+func TestServeRawTCPSurvivesTemporaryAcceptErrors(t *testing.T) {
+	listener := &flakyListener{failures: 3, accepted: make(chan net.Conn), closed: make(chan struct{})}
+	server := NewServerWithOptions("secret", 0, "https", "", ServerOptions{})
+	done := make(chan error, 1)
+	go func() { done <- server.serveRawTCP(listener) }()
+
+	// The accept loop must not return after the three temporary failures.
+	select {
+	case err := <-done:
+		t.Fatalf("serveRawTCP returned early on temporary errors: %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	_ = listener.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("serveRawTCP did not return after listener close")
+	}
+}

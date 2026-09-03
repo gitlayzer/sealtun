@@ -16,6 +16,7 @@ import (
 	"github.com/labring/sealtun/pkg/auth"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // userCodePattern restricts the server-supplied device user code to a safe
@@ -391,6 +392,9 @@ func validateRegionLoginData(regionData *auth.RegionTokenResponse, initData *aut
 	if regionData == nil || strings.TrimSpace(regionData.Data.Kubeconfig) == "" {
 		return "", fmt.Errorf("region token response did not include kubeconfig")
 	}
+	if err := validateLoginKubeconfig(regionData.Data.Kubeconfig); err != nil {
+		return "", err
+	}
 	if initData == nil || strings.TrimSpace(initData.Data.SealosDomain) == "" {
 		return "", fmt.Errorf("region init data did not include SEALOS_DOMAIN")
 	}
@@ -402,6 +406,51 @@ func validateRegionLoginData(regionData *auth.RegionTokenResponse, initData *aut
 		return "", fmt.Errorf("region init data did not include SEALOS_DOMAIN")
 	}
 	return sealosDomain, nil
+}
+
+// validateLoginKubeconfig parses the server-supplied kubeconfig before it is
+// persisted. A compromised region endpoint (or an --insecure MITM) could
+// otherwise plant an exec credential plugin (local command execution on the
+// next tunnel command) or redirect the cluster server to relay the user's
+// bearer token to an attacker-controlled API server.
+func validateLoginKubeconfig(kubeconfig string) error {
+	config, err := clientcmd.Load([]byte(kubeconfig))
+	if err != nil {
+		return fmt.Errorf("region token response included an invalid kubeconfig: %w", err)
+	}
+	if len(config.Clusters) == 0 {
+		return fmt.Errorf("region token response included a kubeconfig without clusters")
+	}
+	if len(config.Contexts) == 0 || strings.TrimSpace(config.CurrentContext) == "" {
+		return fmt.Errorf("region token response included a kubeconfig without a current context")
+	}
+	for name, cluster := range config.Clusters {
+		server := strings.TrimSpace(cluster.Server)
+		if server == "" {
+			return fmt.Errorf("kubeconfig cluster %q has no server URL", name)
+		}
+		u, err := url.Parse(server)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return fmt.Errorf("kubeconfig cluster %q has an invalid server URL %q", name, server)
+		}
+		if u.Scheme != "https" && !isLocalhostHostname(u.Hostname()) {
+			return fmt.Errorf("kubeconfig cluster %q uses a non-TLS server URL %q", name, server)
+		}
+	}
+	for name, authInfo := range config.AuthInfos {
+		if authInfo.Exec != nil {
+			return fmt.Errorf("kubeconfig user %q uses an exec credential plugin, which is not allowed for downloaded login credentials", name)
+		}
+		if authInfo.AuthProvider != nil {
+			return fmt.Errorf("kubeconfig user %q uses an auth-provider plugin, which is not allowed for downloaded login credentials", name)
+		}
+	}
+	return nil
+}
+
+func isLocalhostHostname(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func verificationURL(deviceAuth *auth.DeviceAuthResponse) (string, error) {

@@ -371,7 +371,7 @@ var updateHTTPSAccessPolicy = func(ctx context.Context, sess *session.TunnelSess
 	sess.CustomDomain = hosts.CustomDomain
 	sess.PublicPort = hosts.PublicPort
 	if err := session.Update(*sess); err != nil {
-		return fmt.Errorf("save updated session: %w", err)
+		return committedAccessPolicyError{err: fmt.Errorf("access policy was updated on the remote, but saving the local session failed: %w", err)}
 	}
 	readyCtx, cancelReady := context.WithTimeout(ctx, readyTimeout)
 	defer cancelReady()

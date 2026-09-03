@@ -294,15 +294,24 @@ func runDaemonTunnel(ctx context.Context, sess session.TunnelSession) {
 			return
 		}
 
-		current.Mode = "daemon"
-		current.PID = os.Getpid()
-		current.ConnectionState = session.ConnectionStateConnecting
-		current.LastError = ""
-		if err := session.Update(*current); err != nil {
+		// Write the connecting state via CAS so a concurrent `sealtun stop`
+		// (which writes Stopped under the tunnel lock) is never overwritten by
+		// a stale read-modify-write from this worker.
+		_, err = session.UpdateAtomic(sess.TunnelID, func(latest *session.TunnelSession) (bool, error) {
+			if latest.ConnectionState == session.ConnectionStateStopped {
+				return false, nil
+			}
+			latest.Mode = "daemon"
+			latest.PID = os.Getpid()
+			latest.ConnectionState = session.ConnectionStateConnecting
+			latest.LastError = ""
+			return true, nil
+		})
+		if err != nil {
 			if os.IsNotExist(err) {
 				return
 			}
-			fmt.Printf("[!] failed to refresh session %s: %v\n", current.TunnelID, err)
+			fmt.Printf("[!] failed to refresh session %s: %v\n", sess.TunnelID, err)
 		}
 
 		controlHost, hostErr := normalizePublicHostname(sessionControlHost(*current))

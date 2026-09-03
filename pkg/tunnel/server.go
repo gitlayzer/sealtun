@@ -872,6 +872,13 @@ func (s *Server) serveRawTCP(listener net.Listener) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			// Temporary failures (fd exhaustion, EMFILE bursts) must not tear
+			// down the whole server; back off briefly and keep accepting.
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Temporary() {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
 			return err
 		}
 		go s.handleRawTCPConnection(conn)

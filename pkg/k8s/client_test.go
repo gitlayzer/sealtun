@@ -2867,3 +2867,40 @@ func warningsContain(warnings []string, want string) bool {
 	}
 	return false
 }
+
+func TestEnsureTunnelWithAppSuffixTunnelIDKeepsIngressOwnership(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	client := &Client{clientset: clientset, namespace: "default", domain: "example.com"}
+	name := "foo-app"
+	if _, err := client.EnsureTunnelWithOptions(context.Background(), name, "secret", "https", "3000", TunnelOptions{}); err != nil {
+		t.Fatalf("ensure tunnel: %v", err)
+	}
+	ingress, err := clientset.NetworkingV1().Ingresses("default").Get(context.Background(), "sealtun-"+name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get ingress: %v", err)
+	}
+	if !managedLabelMatches(ingress.Labels, "sealtun-"+name) {
+		t.Fatalf("ingress managed label must equal the full resource name, got %v", ingress.Labels)
+	}
+	backend := ingress.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name
+	if backend != "sealtun-"+name {
+		t.Fatalf("ingress backend must point at the tunnel service, got %q", backend)
+	}
+}
+
+func TestCleanupTunnelDoesNotDeleteAppSuffixIngressOwnedByAnotherTunnel(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	client := &Client{clientset: clientset, namespace: "default", domain: "example.com"}
+	if _, err := client.EnsureTunnelWithOptions(context.Background(), "foo-app", "secret", "https", "3000", TunnelOptions{}); err != nil {
+		t.Fatalf("ensure foo-app: %v", err)
+	}
+	if _, err := client.EnsureTunnelWithOptions(context.Background(), "foo", "secret", "https", "3000", TunnelOptions{}); err != nil {
+		t.Fatalf("ensure foo: %v", err)
+	}
+	if err := client.CleanupTunnel(context.Background(), "foo"); err != nil {
+		t.Fatalf("cleanup foo: %v", err)
+	}
+	if _, err := clientset.NetworkingV1().Ingresses("default").Get(context.Background(), "sealtun-foo-app", metav1.GetOptions{}); err != nil {
+		t.Fatalf("foo-app ingress must survive foo cleanup: %v", err)
+	}
+}

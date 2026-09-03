@@ -137,7 +137,7 @@ var updateTunnelServerSecret = func(ctx context.Context, sess *session.TunnelSes
 	sess.CustomDomain = hosts.CustomDomain
 	sess.PublicPort = hosts.PublicPort
 	if err := session.Update(*sess); err != nil {
-		return fmt.Errorf("save rotated session: %w", err)
+		return committedServerSecretError{err: fmt.Errorf("server secret was rotated on the remote, but saving the local session failed: %w", err)}
 	}
 	readyCtx, cancelReady := context.WithTimeout(ctx, readyTimeout)
 	defer cancelReady()
