@@ -1,0 +1,73 @@
+name: Alpha
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: alpha-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      alpha_tag: ${{ steps.version.outputs.alpha_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next alpha version
+        id: version
+        run: |
+          set -euo pipefail
+
+          # Latest stable tag (strict semver, no pre-release suffix).
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          if [ -z "$latest" ]; then
+            echo "no stable tag found; starting from v0.0.0" >&2
+            latest="v0.0.0"
+          fi
+
+          base="${latest#v}"
+          major="${base%%.*}"
+          rest="${base#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+          next="v${major}.${minor}.$((patch + 1))"
+
+          # Alpha counter: number of existing alpha tags for the next version + 1.
+          count="$(git tag -l "${next}-alpha-*" | wc -l | tr -d ' ')"
+          alpha="${next}-alpha-$((count + 1))"
+
+          echo "latest stable: $latest"
+          echo "next alpha:    $alpha"
+          echo "alpha_tag=$alpha" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push alpha tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.alpha_tag }}" -m "${{ steps.version.outputs.alpha_tag }}: automated alpha release from master"
+          git push origin "${{ steps.version.outputs.alpha_tag }}"
+
+  pipeline:
+    needs: tag
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/_release-pipeline.yml
+    with:
+      tag: ${{ needs.tag.outputs.alpha_tag }}
