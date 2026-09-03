@@ -34,7 +34,9 @@ var cleanupCmd = &cobra.Command{
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "This will delete %d tunnel(s) and their remote resources. Type 'yes' to continue: ", len(sessions))
 			var answer string
-			fmt.Fscanln(cmd.InOrStdin(), &answer)
+			if _, err := fmt.Fscanln(cmd.InOrStdin(), &answer); err != nil {
+				return fmt.Errorf("cleanup --all aborted: confirmation could not be read")
+			}
 			if strings.ToLower(strings.TrimSpace(answer)) != "yes" {
 				return fmt.Errorf("cleanup --all aborted")
 			}
