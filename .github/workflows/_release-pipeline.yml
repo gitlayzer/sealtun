@@ -163,65 +163,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  npm-publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - goreleaser
-      - docker
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Verify npm trusted publishing prerequisites
-        run: |
-          node --version
-          npm --version
-          node --check scripts/build-npm-packages.mjs
-          node --check scripts/publish-npm-packages.mjs
-
-      - name: Publish npm packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_VERSION: ${{ inputs.tag }}
-          NPM_RELEASE_TAG: ${{ inputs.tag }}
-          NPM_DIST_TAG: ${{ needs.goreleaser.outputs.npm_dist_tag }}
-          NPM_SKIP_EXISTING: "1"
-          NPM_PUBLISH_RETRIES: "3"
-          NPM_PUBLISH_REPORT: packages/publish-report.json
-          NPM_DOWNLOAD_RETRIES: "3"
-        run: |
-          export NPM_VERSION="${NPM_VERSION#v}"
-          make npm-publish
-
-      - name: Upload npm publish report
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-publish-report
-          path: packages/publish-report.json
-          if-no-files-found: ignore
-
   publish-release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
       - goreleaser
       - docker
-      - npm-publish
     outputs:
       release_published: ${{ steps.publish.outputs.release_published }}
     permissions:
@@ -267,11 +214,10 @@ jobs:
   mark-release-failed:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: ${{ always() && (needs.goreleaser.result != 'success' || needs.docker.result != 'success' || needs.npm-publish.result != 'success' || (needs.publish-release.result == 'failure' && needs.publish-release.outputs.release_published != 'true')) }}
+    if: ${{ always() && (needs.goreleaser.result != 'success' || needs.docker.result != 'success' || (needs.publish-release.result == 'failure' && needs.publish-release.outputs.release_published != 'true')) }}
     needs:
       - goreleaser
       - docker
-      - npm-publish
       - publish-release
     permissions:
       contents: write
@@ -293,7 +239,6 @@ jobs:
             echo "- tag: \`${{ inputs.tag }}\`"
             echo "- goreleaser: ${{ needs.goreleaser.result }}"
             echo "- docker: ${{ needs.docker.result }}"
-            echo "- npm-publish: ${{ needs.npm-publish.result }}"
             echo "- publish-release: ${{ needs.publish-release.result }}"
             echo "- action: $action"
           } >> "$GITHUB_STEP_SUMMARY"

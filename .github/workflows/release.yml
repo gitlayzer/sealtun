@@ -17,7 +17,67 @@ jobs:
     permissions:
       contents: write
       packages: write
-      id-token: write
     uses: ./.github/workflows/_release-pipeline.yml
     with:
       tag: ${{ github.ref_name }}
+
+  # npm publish stays inline in this workflow on purpose: npm trusted
+  # publishing (OIDC) binds to the workflow file, and moving this job into a
+  # reusable workflow would change the identity npm validates against.
+  npm-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: pipeline
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify npm trusted publishing prerequisites
+        run: |
+          node --version
+          npm --version
+          node --check scripts/build-npm-packages.mjs
+          node --check scripts/publish-npm-packages.mjs
+
+      - name: Resolve npm dist tag
+        id: channel
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo "dist_tag=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_VERSION: ${{ github.ref_name }}
+          NPM_RELEASE_TAG: ${{ github.ref_name }}
+          NPM_DIST_TAG: ${{ steps.channel.outputs.dist_tag }}
+          NPM_SKIP_EXISTING: "1"
+          NPM_PUBLISH_RETRIES: "3"
+          NPM_PUBLISH_REPORT: packages/publish-report.json
+          NPM_DOWNLOAD_RETRIES: "3"
+        run: |
+          export NPM_VERSION="${NPM_VERSION#v}"
+          make npm-publish
+
+      - name: Upload npm publish report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-publish-report
+          path: packages/publish-report.json
+          if-no-files-found: ignore
