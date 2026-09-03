@@ -678,7 +678,7 @@ func normalizeApplyTunnel(item applyTunnel) (normalizedApplyTunnel, error) {
 		return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s ttl: %w", tunnelID, err)
 	}
 	return normalizedApplyTunnel{
-		Name:          item.Name,
+		Name:          tunnelID,
 		TunnelID:      tunnelID,
 		LocalPort:     localPort,
 		TargetURL:     targetURL,
