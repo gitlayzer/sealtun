@@ -81,6 +81,29 @@ func init() {
 	applyCmd.Flags().StringVar(&applyDryRunFormat, "format", "", "Dry-run output format: plan (default) or diff")
 }
 
+// inlineSecretWarnings warns when a YAML tunnel carries plaintext secrets
+// inline instead of *Env references, matching the CLI's plaintext-password
+// warning for novices who copy examples into shared config files.
+func inlineSecretWarnings(item applyTunnel) []string {
+	var warnings []string
+	if item.BasicAuth != nil {
+		if strings.TrimSpace(item.BasicAuth.Credential) != "" || strings.TrimSpace(item.BasicAuth.Password) != "" {
+			warnings = append(warnings, "basicAuth contains an inline plaintext password; prefer passwordEnv so the secret is not stored in the YAML file")
+		}
+	}
+	if item.AccessPolicy != nil {
+		if strings.TrimSpace(item.AccessPolicy.BearerToken) != "" {
+			warnings = append(warnings, "accessPolicy contains an inline plaintext bearer token; prefer bearerTokenEnv")
+		}
+		for _, link := range item.AccessPolicy.TemporaryLinks {
+			if strings.TrimSpace(link.Token) != "" {
+				warnings = append(warnings, fmt.Sprintf("temporary link %q contains an inline plaintext token; prefer tokenEnv", link.Name))
+			}
+		}
+	}
+	return warnings
+}
+
 func runApply(ctx context.Context, path string, dryRun bool) ([]applyResult, error) {
 	config, err := loadApplyFile(path)
 	if err != nil {
@@ -116,6 +139,7 @@ func runApplyConfig(ctx context.Context, config *applyFile, dryRun bool) ([]appl
 				AccessPolicy:                normalized.AccessPolicy != nil,
 				ExpiresAt:                   normalized.ExpiresAt,
 				Status:                      "planned",
+				Warnings:                    inlineSecretWarnings(item),
 			})
 		}
 		return results, nil
@@ -247,6 +271,7 @@ func applyOneTunnel(ctx context.Context, item applyTunnel, authData *auth.AuthDa
 		Resources:                   normalized.Resources,
 		ExpiresAt:                   normalized.ExpiresAt,
 		Status:                      "planned",
+		Warnings:                    inlineSecretWarnings(item),
 	}
 	secret := uuid.New().String()
 	createdAt := ""
