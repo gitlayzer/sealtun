@@ -54,7 +54,10 @@ func TestPublicWebSocketProxyRoundTrip(t *testing.T) {
 	// Relay server with the access-policy middleware stack active; middleware
 	// must never break the Upgrade handshake.
 	relay := NewServerWithOptions("secret", 0, "https", appPort, ServerOptions{
-		AccessPolicy: &accesspolicy.Policy{RateLimit: "60/m"},
+		AccessPolicy: &accesspolicy.Policy{
+			RateLimit: "60/m",
+			Audit:     &accesspolicy.AuditConfig{Enabled: true},
+		},
 	})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -100,7 +103,6 @@ func TestPublicWebSocketProxyRoundTrip(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	defer ws.Close()
 
 	for i := 1; i <= 3; i++ {
 		payload := fmt.Sprintf("ping-%d", i)
@@ -116,6 +118,32 @@ func TestPublicWebSocketProxyRoundTrip(t *testing.T) {
 		if string(msg) != "echo:"+payload {
 			t.Fatalf("unexpected echo: got %q, want %q", msg, "echo:"+payload)
 		}
+	}
+	// Close explicitly: the proxy only returns (and audits the request) once
+	// the hijacked connection ends.
+	_ = ws.Close()
+
+	// The hijacked upgrade must be audited as 101, not misreported as 200.
+	var wsAuditStatus int
+	auditDeadline := time.Now().Add(2 * time.Second)
+	for {
+		relay.auditMu.Lock()
+		for i := range relay.auditEvents {
+			if relay.auditEvents[i].Path == "/ws-echo" {
+				wsAuditStatus = relay.auditEvents[i].Status
+			}
+		}
+		relay.auditMu.Unlock()
+		if wsAuditStatus != 0 || time.Now().After(auditDeadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if wsAuditStatus == 0 {
+		t.Fatal("expected an audit event for the WebSocket upgrade")
+	}
+	if wsAuditStatus != http.StatusSwitchingProtocols {
+		t.Fatalf("WebSocket upgrade audited with status %d, want %d", wsAuditStatus, http.StatusSwitchingProtocols)
 	}
 
 	// Ordinary HTTP traffic keeps flowing over the same tunnel.

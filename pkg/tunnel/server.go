@@ -614,6 +614,11 @@ func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if !ok {
 		return nil, nil, fmt.Errorf("underlying response writer does not support hijacking")
 	}
+	// httputil.ReverseProxy only hijacks after the upstream answered 101, and
+	// the status line is then written straight to the hijacked connection,
+	// bypassing WriteHeader. Record it here so metrics and audit do not
+	// misreport every upgraded connection as 200.
+	r.status = http.StatusSwitchingProtocols
 	return hijacker.Hijack()
 }
 
