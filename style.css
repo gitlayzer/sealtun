@@ -1,7 +1,7 @@
 /* ═══════════ Sealtun landing — dark developer minimalism ═══════════ */
 :root {
   color-scheme: dark;
-  --bg: #0a0e18;
+  --bg: #0b0d12;
   --panel: #0e1220;
   --panel-2: #111527;
   --ink: #f2f5fa;
@@ -25,7 +25,10 @@ body {
   font-size: 15px;
   line-height: 1.65;
   color: var(--text);
-  background: var(--bg);
+  background:
+    radial-gradient(1800px 800px at 24% 12%, rgba(70, 100, 200, 0.30), transparent 68%),
+    var(--bg);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   display: flex;
@@ -78,12 +81,6 @@ main { flex: 1; display: flex; flex-direction: column; }
   display: flex; align-items: center;
   overflow: hidden;
   position: relative;
-}
-.hero::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(700px 420px at 12% 20%, rgba(15, 111, 255, 0.07), transparent 60%),
-    radial-gradient(600px 400px at 85% 80%, rgba(15, 111, 255, 0.05), transparent 60%);
 }
 .hero-grid {
   position: relative;
