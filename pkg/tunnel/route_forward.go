@@ -8,11 +8,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/labring/sealtun/pkg/routes"
 )
+
+// routePrefixContextKey carries the matched route prefix from Director to
+// ModifyResponse so redirect locations can be re-prefixed.
+type routePrefixContextKey struct{}
 
 // handleRoutedForwarding serves HTTP over a single tunnel stream and forwards
 // each request to the local port matched by path prefix, falling back to the
@@ -39,6 +44,7 @@ func handleRoutedForwarding(stream net.Conn, target Target) {
 				// The local service owns its root: forward "/api/users" via
 				// route "/api" as "/users". RawPath is dropped so it cannot
 				// contradict the rewritten Path.
+				*req = *req.WithContext(context.WithValue(req.Context(), routePrefixContextKey{}, route.Path))
 				req.URL.Path = routes.StripPrefix(route.Path, req.URL.Path)
 				req.URL.RawPath = ""
 				req.URL.Host = net.JoinHostPort("localhost", strconv.Itoa(route.Port))
@@ -46,6 +52,11 @@ func handleRoutedForwarding(stream net.Conn, target Target) {
 				req.URL.Host = target.Address
 			}
 			req.Host = req.URL.Host
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			prefix, _ := resp.Request.Context().Value(routePrefixContextKey{}).(string)
+			rewriteRedirectLocation(resp, prefix)
+			return nil
 		},
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -114,4 +125,23 @@ func (c *closeNotifyConn) Close() error {
 	err := c.Conn.Close()
 	c.once.Do(c.onClose)
 	return err
+}
+
+// rewriteRedirectLocation re-prefixes absolute-path redirect locations for
+// prefix-stripped routes: a local service answering "Location: /login" must
+// send the browser to "/<prefix>/login", not to the tunnel root (which belongs
+// to another service). Locations that are relative, protocol-relative,
+// absolute URLs, or already carry the prefix are left untouched.
+func rewriteRedirectLocation(resp *http.Response, prefix string) {
+	if prefix == "" || prefix == "/" {
+		return
+	}
+	location := resp.Header.Get("Location")
+	if !strings.HasPrefix(location, "/") || strings.HasPrefix(location, "//") {
+		return
+	}
+	if location == prefix || strings.HasPrefix(location, prefix+"/") {
+		return
+	}
+	resp.Header.Set("Location", prefix+location)
 }

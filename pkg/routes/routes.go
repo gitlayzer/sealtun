@@ -169,3 +169,14 @@ func Equal(a, b []Route) bool {
 	}
 	return true
 }
+
+// HasRootRoute reports whether any route uses the "/" prefix, which matches
+// every request and therefore shadows the tunnel's primary target entirely.
+func HasRootRoute(routes []Route) bool {
+	for _, route := range routes {
+		if NormalizePath(route.Path) == "/" {
+			return true
+		}
+	}
+	return false
+}

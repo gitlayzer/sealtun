@@ -103,6 +103,9 @@ func inlineSecretWarnings(item applyTunnel) []string {
 			}
 		}
 	}
+	if routes.HasRootRoute(item.Routes) {
+		warnings = append(warnings, "route / matches every path; the tunnel's localPort will not receive traffic")
+	}
 	return warnings
 }
 

@@ -27,6 +27,22 @@ func TestRoutedForwardingThroughTunnel(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		_, _ = w.Write([]byte("api:" + r.URL.Path + ":" + string(body)))
 	})
+	apiMux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/new")
+		w.WriteHeader(http.StatusFound)
+	})
+	apiMux.HandleFunc("/selfprefix", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/api/already")
+		w.WriteHeader(http.StatusFound)
+	})
+	apiMux.HandleFunc("/protorel", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "//cdn.example/x")
+		w.WriteHeader(http.StatusFound)
+	})
+	apiMux.HandleFunc("/absurl", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://external.example/x")
+		w.WriteHeader(http.StatusFound)
+	})
 	apiMux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := apiUpgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -125,6 +141,33 @@ func TestRoutedForwardingThroughTunnel(t *testing.T) {
 	for path, want := range cases {
 		if got := get(path); got != want {
 			t.Fatalf("GET %s = %q, want %q", path, got, want)
+		}
+	}
+
+	// Redirect locations must be re-prefixed so the browser stays on the
+	// routed service; already-prefixed, protocol-relative, and absolute URLs
+	// pass through untouched.
+	redirectCases := map[string]string{
+		"/api/old":        "/api/new",
+		"/api/selfprefix": "/api/already",
+		"/api/protorel":   "//cdn.example/x",
+		"/api/absurl":     "https://external.example/x",
+	}
+	noFollow := &http.Client{
+		Timeout: 3 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	for path, wantLocation := range redirectCases {
+		resp, err := noFollow.Get(base + path)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		gotLocation := resp.Header.Get("Location")
+		_ = resp.Body.Close()
+		if gotLocation != wantLocation {
+			t.Fatalf("GET %s Location = %q, want %q", path, gotLocation, wantLocation)
 		}
 	}
 

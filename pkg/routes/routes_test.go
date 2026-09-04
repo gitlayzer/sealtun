@@ -119,3 +119,15 @@ func TestStripPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestHasRootRoute(t *testing.T) {
+	if HasRootRoute([]Route{{Path: "/api", Port: 8080}}) {
+		t.Fatal("no root route present")
+	}
+	if !HasRootRoute([]Route{{Path: "/api", Port: 8080}, {Path: "/", Port: 3000}}) {
+		t.Fatal("root route should be detected")
+	}
+	if !HasRootRoute([]Route{{Path: "//", Port: 3000}}) {
+		t.Fatal("normalized double-slash root should be detected")
+	}
+}

@@ -218,6 +218,9 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 	for _, route := range parsedRoutes {
 		fmt.Fprintf(out, "[+] Route: %s -> localhost:%d (prefix stripped)\n", routes.NormalizePath(route.Path), route.Port)
 	}
+	if routes.HasRootRoute(parsedRoutes) {
+		fmt.Fprintf(out, "[!] Route / matches every path; the primary target %s will not receive traffic.\n", targetURL)
+	}
 	if basicAuthConfig != nil && basicAuthConfig.Enabled {
 		fmt.Fprintf(out, "[+] Basic Auth enabled for public traffic as user %q.\n", basicAuthConfig.Username)
 	}
