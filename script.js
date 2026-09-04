@@ -88,38 +88,94 @@ function formatCompact(n) {
   return String(n);
 }
 
-async function loadStats() {
-  // GitHub stars
-  try {
-    const res = await fetch("https://api.github.com/repos/gitlayzer/sealtun");
-    if (res.ok) {
-      const data = await res.json();
-      const stars = data.stargazers_count;
-      const text = formatCompact(stars);
-      const starBtn = document.getElementById("ghStars");
-      if (starBtn) starBtn.textContent = text;
-      const starStat = document.getElementById("ghStarsStat");
-      if (starStat) starStat.textContent = stars.toLocaleString("en-US");
-    }
-  } catch (_) {}
+const STATS_CACHE_KEY = "sealtun-stats-v1";
+const STATS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+// Last-known values so the counters never render as "—" when every remote
+// source is unavailable (api.github.com allows only 60 unauthenticated
+// requests/hour per IP, easily exhausted on shared egress IPs).
+const FALLBACK_STATS = { stars: 76, downloads: 724 };
 
-  // Total installer downloads across all GitHub release assets
+function readStatsCache() {
   try {
-    const res = await fetch("https://api.github.com/repos/gitlayzer/sealtun/releases?per_page=100");
-    if (res.ok) {
-      const releases = await res.json();
-      let total = 0;
-      for (const rel of releases) {
-        for (const asset of rel.assets || []) {
-          total += asset.download_count || 0;
-        }
-      }
-      const el = document.getElementById("npmDownloads");
-      if (el && total > 0) {
-        el.textContent = total.toLocaleString("en-US");
-      }
-    }
+    const parsed = JSON.parse(localStorage.getItem(STATS_CACHE_KEY) || "null");
+    if (!parsed || typeof parsed.stars !== "number" || typeof parsed.downloads !== "number") return null;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeStatsCache(stats) {
+  try {
+    localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ stars: stats.stars, downloads: stats.downloads, at: Date.now() }));
   } catch (_) {}
+}
+
+function renderStats(stats) {
+  const starBtn = document.getElementById("ghStars");
+  if (starBtn) starBtn.textContent = formatCompact(stats.stars);
+  const starStat = document.getElementById("ghStarsStat");
+  if (starStat) starStat.textContent = stats.stars.toLocaleString("en-US");
+  const downloads = document.getElementById("npmDownloads");
+  if (downloads) downloads.textContent = stats.downloads.toLocaleString("en-US");
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(url + " -> " + res.status);
+  return res.json();
+}
+
+async function fetchGitHubStats() {
+  const [repo, releases] = await Promise.all([
+    fetchJson("https://api.github.com/repos/gitlayzer/sealtun"),
+    fetchJson("https://api.github.com/repos/gitlayzer/sealtun/releases?per_page=100"),
+  ]);
+  let downloads = 0;
+  for (const rel of releases) {
+    for (const asset of rel.assets || []) {
+      downloads += asset.download_count || 0;
+    }
+  }
+  return { stars: repo.stargazers_count, downloads };
+}
+
+function parseShieldsNumber(value) {
+  const m = String(value == null ? "" : value).trim().match(/^([\d.]+)\s*([kKmM])?$/);
+  if (!m) return NaN;
+  const mult = m[2] ? (m[2].toLowerCase() === "k" ? 1000 : 1000000) : 1;
+  return Math.round(parseFloat(m[1]) * mult);
+}
+
+// shields.io caches GitHub data server-side, so it keeps working for visitors
+// whose IP has already burned through the api.github.com rate limit.
+async function fetchShieldsStats() {
+  const [stars, downloads] = await Promise.all([
+    fetchJson("https://img.shields.io/github/stars/gitlayzer/sealtun.json"),
+    fetchJson("https://img.shields.io/github/downloads/gitlayzer/sealtun/total.json"),
+  ]);
+  return {
+    stars: parseShieldsNumber(stars.value != null ? stars.value : stars.message),
+    downloads: parseShieldsNumber(downloads.value != null ? downloads.value : downloads.message),
+  };
+}
+
+async function loadStats() {
+  const cached = readStatsCache();
+  renderStats(cached || FALLBACK_STATS);
+  if (cached && Date.now() - cached.at < STATS_CACHE_TTL) return;
+  let fresh = null;
+  try {
+    fresh = await fetchGitHubStats();
+  } catch (_) {
+    try {
+      fresh = await fetchShieldsStats();
+    } catch (_) {}
+  }
+  if (fresh && Number.isFinite(fresh.stars) && Number.isFinite(fresh.downloads) && fresh.downloads > 0) {
+    renderStats(fresh);
+    writeStatsCache(fresh);
+  }
 }
 
 const yearEl = document.getElementById("year");
@@ -131,4 +187,3 @@ try {
 } catch (_) {}
 
 applyTranslations();
-loadStats();
