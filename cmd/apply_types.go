@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/labring/sealtun/pkg/routes"
 	"github.com/labring/sealtun/pkg/session"
 )
 
@@ -27,6 +28,9 @@ type applyTunnel struct {
 	Resources     *applyResources    `json:"resources,omitempty" yaml:"resources,omitempty"`
 	BasicAuth     *applyBasicAuth    `json:"basicAuth,omitempty" yaml:"basicAuth,omitempty"`
 	AccessPolicy  *applyAccessPolicy `json:"accessPolicy,omitempty" yaml:"accessPolicy,omitempty"`
+	// Routes optionally forwards path prefixes to other local ports on this
+	// tunnel (https only); unmatched traffic uses localPort.
+	Routes []routes.Route `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 type applyResources struct {
@@ -106,6 +110,7 @@ type normalizedApplyTunnel struct {
 	TargetTLS     *session.TargetTLSConfig
 	Resources     *session.ResourceConfig
 	AccessPolicy  *session.AccessPolicy
+	Routes        []routes.Route
 	TTL           string
 	ExpiresAt     string
 	WaitDomain    bool

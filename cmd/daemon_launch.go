@@ -16,7 +16,15 @@ var ensureDaemonRunningFn = ensureDaemonRunning
 
 func ensureDaemonRunning() error {
 	if daemonstate.Alive() {
-		return nil
+		if !daemonstate.StaleExecutable() {
+			return nil
+		}
+		// The daemon outlives CLI upgrades but its struct may predate session
+		// fields written by the newer CLI; restart it rather than let it
+		// silently strip those fields on its next state write.
+		if err := daemonstate.Stop(5 * time.Second); err != nil {
+			return fmt.Errorf("restart daemon running an older binary: %w", err)
+		}
 	}
 
 	release, err := daemonstate.AcquireLaunchLock()

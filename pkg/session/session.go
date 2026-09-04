@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labring/sealtun/pkg/auth"
+	"github.com/labring/sealtun/pkg/routes"
 )
 
 const sessionsDirName = "sessions"
@@ -29,17 +30,21 @@ const (
 )
 
 type TunnelSession struct {
-	TunnelID       string           `json:"tunnelId"`
-	Region         string           `json:"region"`
-	Namespace      string           `json:"namespace"`
-	Kubeconfig     string           `json:"kubeconfig,omitempty"`
-	Protocol       string           `json:"protocol"`
-	Host           string           `json:"host"`
-	SealosHost     string           `json:"sealosHost,omitempty"`
-	CustomDomain   string           `json:"customDomain,omitempty"`
-	PublicPort     int32            `json:"publicPort,omitempty"`
-	LocalPort      string           `json:"localPort"`
-	TargetURL      string           `json:"targetUrl,omitempty"`
+	TunnelID     string `json:"tunnelId"`
+	Region       string `json:"region"`
+	Namespace    string `json:"namespace"`
+	Kubeconfig   string `json:"kubeconfig,omitempty"`
+	Protocol     string `json:"protocol"`
+	Host         string `json:"host"`
+	SealosHost   string `json:"sealosHost,omitempty"`
+	CustomDomain string `json:"customDomain,omitempty"`
+	PublicPort   int32  `json:"publicPort,omitempty"`
+	LocalPort    string `json:"localPort"`
+	TargetURL    string `json:"targetUrl,omitempty"`
+	// Routes holds optional path-prefix rules for multi-service HTTPS tunnels.
+	// Matched prefixes are forwarded to the route's local port; unmatched
+	// traffic falls back to LocalPort. Empty for ordinary single-service tunnels.
+	Routes         []routes.Route   `json:"routes,omitempty"`
 	TargetTLS      *TargetTLSConfig `json:"targetTls,omitempty"`
 	Secret         string           `json:"secret,omitempty"`
 	BasicAuth      *BasicAuthConfig `json:"basicAuth,omitempty"`

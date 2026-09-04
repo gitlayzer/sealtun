@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labring/sealtun/pkg/k8s"
+	"github.com/labring/sealtun/pkg/routes"
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,7 @@ type inspectPayload struct {
 	PublicPort                  int32                   `json:"publicPort,omitempty"`
 	LocalPort                   string                  `json:"localPort,omitempty"`
 	TargetURL                   string                  `json:"targetUrl,omitempty"`
+	Routes                      []routes.Route          `json:"routes,omitempty"`
 	TargetTLSInsecureSkipVerify bool                    `json:"targetTlsInsecureSkipVerify,omitempty"`
 	BasicAuth                   *inspectBasicAuth       `json:"basicAuth,omitempty"`
 	AccessPolicy                *inspectAccessPolicy    `json:"accessPolicy,omitempty"`
@@ -170,6 +172,7 @@ func collectInspectPayloadWithContext(ctx context.Context, tunnelID string) (*in
 		CustomDomain:                sess.CustomDomain,
 		PublicPort:                  sess.PublicPort,
 		LocalPort:                   sess.LocalPort,
+		Routes:                      sess.Routes,
 		TargetURL:                   sessionTargetLabel(*sess),
 		TargetTLSInsecureSkipVerify: targetTLSInsecureSkipVerifyEnabled(sess.TargetTLS),
 		BasicAuth:                   inspectBasicAuthFromSession(sess.BasicAuth),
@@ -305,6 +308,9 @@ func printInspect(cmd *cobra.Command, payload *inspectPayload) {
 	fmt.Fprintf(out, "  Target: %s\n", valueOr(payload.TargetURL, sessionTargetLabel(session.TunnelSession{Protocol: payload.Protocol, LocalPort: payload.LocalPort})))
 	if payload.TargetTLSInsecureSkipVerify {
 		fmt.Fprintln(out, "  Target TLS: certificate verification disabled")
+	}
+	for _, route := range payload.Routes {
+		fmt.Fprintf(out, "  Route: %s -> localhost:%d (prefix stripped)\n", routes.NormalizePath(route.Path), route.Port)
 	}
 	if payload.BasicAuth != nil && payload.BasicAuth.Enabled {
 		fmt.Fprintf(out, "  Basic Auth: enabled")

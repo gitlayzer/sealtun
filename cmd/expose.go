@@ -15,6 +15,7 @@ import (
 	"github.com/labring/sealtun/pkg/auth"
 	"github.com/labring/sealtun/pkg/k8s"
 	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
+	"github.com/labring/sealtun/pkg/routes"
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/labring/sealtun/pkg/tunnel"
 	"github.com/spf13/cobra"
@@ -64,6 +65,10 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 	}
 	protocol = tunnelprotocol.Normalize(protocol)
 	if err := validateExposeQRFlag(protocol); err != nil {
+		return err
+	}
+	parsedRoutes, err := validateExposeRoutesFlag(protocol)
+	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(exposeTarget) != "" && !tunnelprotocol.IsHTTP(protocol) {
@@ -175,6 +180,7 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		LocalPort:       localPort,
 		TargetURL:       targetURL,
 		TargetTLS:       sessionTargetTLSConfig(targetTLSInsecureSkipVerify),
+		Routes:          parsedRoutes,
 		Secret:          secret,
 		BasicAuth:       basicAuthConfig,
 		AccessPolicy:    accessPolicyConfig,
@@ -208,6 +214,9 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		if targetTLSInsecureSkipVerify {
 			fmt.Fprintf(out, "[!] Target TLS certificate verification is disabled for this upstream.\n")
 		}
+	}
+	for _, route := range parsedRoutes {
+		fmt.Fprintf(out, "[+] Route: %s -> localhost:%d (prefix stripped)\n", routes.NormalizePath(route.Path), route.Port)
 	}
 	if basicAuthConfig != nil && basicAuthConfig.Enabled {
 		fmt.Fprintf(out, "[+] Basic Auth enabled for public traffic as user %q.\n", basicAuthConfig.Username)
@@ -341,6 +350,7 @@ var accessAuditEnabled bool
 var exposeTarget string
 var targetTLSInsecureSkipVerify bool
 var exposeQR bool
+var exposeRoutes []string
 
 const daemonConnectTimeout = 60 * time.Second
 const daemonConnectionStability = 2 * time.Second
@@ -381,6 +391,7 @@ func registerExposeFlags(cmd *cobra.Command, includeInsecureAlias bool) {
 	cmd.Flags().StringVar(&accessRateLimit, "rate-limit", "", "Rate limit HTTPS public traffic, e.g. 60/m or 1000/h")
 	cmd.Flags().BoolVar(&accessAuditEnabled, "audit", false, "Enable HTTPS access audit for allow/deny decisions")
 	cmd.Flags().BoolVar(&exposeQR, "qr", false, "Print a terminal QR code for the public URL; only for https tunnels")
+	cmd.Flags().StringArrayVar(&exposeRoutes, "route", nil, "Forward a path prefix to a local port, e.g. --route /api=8080; repeatable, https tunnels only; the prefix is stripped before forwarding")
 }
 
 func resolveExposeTarget(args []string, explicitTarget string) (string, string, error) {
@@ -493,6 +504,22 @@ func validateExposeQRFlag(protocol string) error {
 		return fmt.Errorf("--qr is only supported for https tunnels")
 	}
 	return nil
+}
+
+// validateExposeRoutesFlag parses --route values and confines them to HTTPS
+// local-port tunnels: SSH/TCP carry no HTTP path to match, and a --target
+// upstream is a single service with nothing to multiplex.
+func validateExposeRoutesFlag(protocol string) ([]routes.Route, error) {
+	if len(exposeRoutes) == 0 {
+		return nil, nil
+	}
+	if !tunnelprotocol.IsHTTP(protocol) {
+		return nil, fmt.Errorf("--route is only supported for https tunnels")
+	}
+	if strings.TrimSpace(exposeTarget) != "" {
+		return nil, fmt.Errorf("--route cannot be combined with --target; a target upstream is a single service")
+	}
+	return routes.Parse(exposeRoutes)
 }
 
 func recoverStaleSessions(ctx context.Context, out io.Writer) error {

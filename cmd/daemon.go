@@ -11,6 +11,7 @@ import (
 	"time"
 
 	daemonstate "github.com/labring/sealtun/pkg/daemon"
+	"github.com/labring/sealtun/pkg/routes"
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/labring/sealtun/pkg/tunnel"
 	"github.com/spf13/cobra"
@@ -215,6 +216,7 @@ func daemonTunnelFingerprint(sess session.TunnelSession) string {
 		fmt.Sprint(targetTLSInsecureSkipVerifyEnabled(sess.TargetTLS)),
 		sess.Protocol,
 		sess.Secret,
+		routes.Label(sess.Routes),
 		basicAuthEnabled,
 		basicAuthUsername,
 		basicAuthHash,

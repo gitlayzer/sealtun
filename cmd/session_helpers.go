@@ -85,7 +85,10 @@ func sessionTargetTLSConfig(insecureSkipVerify bool) *session.TargetTLSConfig {
 }
 
 func targetOptionsForSession(sess session.TunnelSession) tunnel.TargetOptions {
-	return tunnel.TargetOptions{TLSInsecureSkipVerify: targetTLSInsecureSkipVerifyEnabled(sess.TargetTLS)}
+	return tunnel.TargetOptions{
+		TLSInsecureSkipVerify: targetTLSInsecureSkipVerifyEnabled(sess.TargetTLS),
+		Routes:                sess.Routes,
+	}
 }
 
 func targetTLSInsecureSkipVerifyEnabled(config *session.TargetTLSConfig) bool {

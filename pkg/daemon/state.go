@@ -25,6 +25,12 @@ type State struct {
 	PIDStartToken string `json:"pidStartToken,omitempty"`
 	StartedAt     string `json:"startedAt"`
 	UpdatedAt     string `json:"updatedAt"`
+	// ExecutablePath/ModTime/Size fingerprint the binary the daemon runs.
+	// The CLI restarts a daemon whose binary no longer matches its own so a
+	// stale daemon cannot silently drop session fields written by a newer CLI.
+	ExecutablePath    string `json:"executablePath,omitempty"`
+	ExecutableModTime int64  `json:"executableModTime,omitempty"`
+	ExecutableSize    int64  `json:"executableSize,omitempty"`
 }
 
 func statePath() (string, error) {
@@ -49,12 +55,64 @@ func SaveState(pid int) error {
 		return err
 	}
 
+	exePath, exeModTime, exeSize := currentExecutableFingerprint()
 	return writeState(path, State{
-		PID:           pid,
-		PIDStartToken: session.ProcessStartToken(pid),
-		StartedAt:     time.Now().Format(time.RFC3339),
-		UpdatedAt:     time.Now().Format(time.RFC3339),
+		PID:               pid,
+		PIDStartToken:     session.ProcessStartToken(pid),
+		StartedAt:         time.Now().Format(time.RFC3339),
+		UpdatedAt:         time.Now().Format(time.RFC3339),
+		ExecutablePath:    exePath,
+		ExecutableModTime: exeModTime,
+		ExecutableSize:    exeSize,
 	})
+}
+
+func currentExecutableFingerprint() (string, int64, int64) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", 0, 0
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	info, err := os.Stat(exe)
+	if err != nil {
+		return "", 0, 0
+	}
+	return exe, info.ModTime().Unix(), info.Size()
+}
+
+// StaleExecutable reports whether the recorded daemon binary provably differs
+// from the current CLI binary (path, modification time, or size). It returns
+// false whenever the comparison cannot be made, so the daemon is only ever
+// restarted on positive proof of a mismatch. Daemons started before this
+// fingerprint existed have no recorded path and count as stale once.
+func StaleExecutable() bool {
+	state, err := LoadState()
+	if err != nil || state == nil {
+		return false
+	}
+	if state.ExecutablePath == "" || state.ExecutableModTime == 0 {
+		return true
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	info, err := os.Stat(exe)
+	if err != nil {
+		return false
+	}
+	return executableFingerprintStale(*state, exe, info)
+}
+
+func executableFingerprintStale(state State, exePath string, info os.FileInfo) bool {
+	return state.ExecutablePath != exePath ||
+		state.ExecutableModTime != info.ModTime().Unix() ||
+		state.ExecutableSize != info.Size()
 }
 
 func TouchState() error {

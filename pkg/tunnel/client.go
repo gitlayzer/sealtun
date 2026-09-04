@@ -129,6 +129,11 @@ func handleLocalForwarding(stream net.Conn, localPort, protocol string) {
 func handleTargetForwarding(stream net.Conn, target Target, protocol string) {
 	defer stream.Close()
 
+	if len(target.Routes) > 0 && tunnelprotocol.IsHTTP(protocol) {
+		handleRoutedForwarding(stream, target)
+		return
+	}
+
 	targetConn, err := dialTarget(target)
 	if err != nil {
 		warningMu.Lock()

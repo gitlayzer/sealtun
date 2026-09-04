@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/labring/sealtun/pkg/routes"
 )
 
 type Target struct {
@@ -13,6 +15,10 @@ type Target struct {
 	Address               string
 	Port                  string
 	TLSInsecureSkipVerify bool
+	// Routes holds optional path-prefix rules for multi-service HTTPS
+	// tunnels. Matched prefixes are forwarded to the route's local port;
+	// everything else falls back to this target.
+	Routes []routes.Route
 }
 
 func LocalhostTarget(localPort string) (Target, error) {
@@ -25,6 +31,7 @@ func LocalhostTarget(localPort string) (Target, error) {
 
 type TargetOptions struct {
 	TLSInsecureSkipVerify bool
+	Routes                []routes.Route
 }
 
 func ParseTarget(raw string) (Target, error) {
@@ -87,11 +94,27 @@ func TargetFor(localPort, targetURL string) (Target, error) {
 }
 
 func TargetForWithOptions(localPort, targetURL string, opts TargetOptions) (Target, error) {
+	var target Target
 	if strings.TrimSpace(targetURL) != "" {
-		return ParseTargetWithOptions(targetURL, opts)
+		parsed, err := ParseTargetWithOptions(targetURL, opts)
+		if err != nil {
+			return Target{}, err
+		}
+		target = parsed
+	} else {
+		if opts.TLSInsecureSkipVerify {
+			return Target{}, fmt.Errorf("target TLS insecure skip verify requires --target with an https URL")
+		}
+		local, err := LocalhostTarget(localPort)
+		if err != nil {
+			return Target{}, err
+		}
+		target = local
 	}
-	if opts.TLSInsecureSkipVerify {
-		return Target{}, fmt.Errorf("target TLS insecure skip verify requires --target with an https URL")
-	}
-	return LocalhostTarget(localPort)
+	// Routes are attached verbatim. Restricting them to local-port tunnels is
+	// the CLI/config layer's job: sessions always carry a targetURL (local
+	// tunnels default it to http://localhost:<port>), so this function cannot
+	// distinguish a user-supplied upstream from the default local one.
+	target.Routes = opts.Routes
+	return target, nil
 }

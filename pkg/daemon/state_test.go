@@ -279,3 +279,36 @@ func TestStateAliveRejectsReusedPID(t *testing.T) {
 		t.Fatal("expected mismatched process start token to be considered not alive")
 	}
 }
+
+func TestExecutableFingerprintStale(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	exe := filepath.Join(tmp, "sealtun")
+	if err := os.WriteFile(exe, []byte("binary-v1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matching := State{ExecutablePath: exe, ExecutableModTime: info.ModTime().Unix(), ExecutableSize: info.Size()}
+	if executableFingerprintStale(matching, exe, info) {
+		t.Fatal("identical fingerprint must not be stale")
+	}
+	other := matching
+	other.ExecutableModTime++
+	if !executableFingerprintStale(other, exe, info) {
+		t.Fatal("mtime change must be stale")
+	}
+	other = matching
+	other.ExecutablePath = filepath.Join(tmp, "other")
+	if !executableFingerprintStale(other, exe, info) {
+		t.Fatal("path change must be stale")
+	}
+	other = matching
+	other.ExecutableSize++
+	if !executableFingerprintStale(other, exe, info) {
+		t.Fatal("size change must be stale")
+	}
+}

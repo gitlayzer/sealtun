@@ -40,6 +40,7 @@ sealtun status                         # 当前登录状态
 sealtun expose 3000                              # 本地端口
 sealtun expose --target http://10.0.0.12:8080    # 远端 HTTP upstream
 sealtun expose 3000 --qr                         # 终端打印公网 URL 二维码，手机扫码即开
+sealtun expose 3000 --route /api=8080           # 多服务路由：/api 前缀转发到 8080，其余走 3000
 sealtun up                                        # 交互引导（推荐日常使用）
 ```
 
@@ -120,6 +121,8 @@ tunnels:
   - name: web
     localPort: 3000
     protocol: https
+    routes:                          # 可选：多服务路由，前缀会被剥离
+      - { path: /api, port: 8080 }   # /api/users -> localhost:8080/users
     domain: app.example.com
     ttl: 2h
     basicAuth:

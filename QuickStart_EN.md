@@ -40,6 +40,7 @@ Built-in regions: `gzg` (Guangzhou), `hzh` (Hangzhou), `bja` (Beijing), `cloud` 
 sealtun expose 3000                              # local port
 sealtun expose --target http://10.0.0.12:8080    # remote HTTP upstream
 sealtun expose 3000 --qr                         # terminal QR of the public URL; scan with a phone to open
+sealtun expose 3000 --route /api=8080           # multi-service routing: /api prefix goes to 8080, the rest to 3000
 sealtun up                                        # interactive guide (recommended for daily use)
 ```
 
@@ -120,6 +121,8 @@ tunnels:
   - name: web
     localPort: 3000
     protocol: https
+    routes:                          # optional multi-service routing; the prefix is stripped
+      - { path: /api, port: 8080 }   # /api/users -> localhost:8080/users
     domain: app.example.com
     ttl: 2h
     basicAuth:

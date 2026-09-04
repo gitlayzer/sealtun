@@ -19,6 +19,7 @@ import (
 	"github.com/labring/sealtun/pkg/k8s"
 	tunnelprotocol "github.com/labring/sealtun/pkg/protocol"
 	"github.com/labring/sealtun/pkg/publicauth"
+	"github.com/labring/sealtun/pkg/routes"
 	"github.com/labring/sealtun/pkg/session"
 	"github.com/labring/sealtun/pkg/tunnel"
 	"github.com/spf13/cobra"
@@ -525,6 +526,7 @@ func buildApplySessionRecord(normalized normalizedApplyTunnel, authData *auth.Au
 		Secret:          secret,
 		BasicAuth:       normalized.BasicAuth,
 		AccessPolicy:    normalized.AccessPolicy,
+		Routes:          normalized.Routes,
 		ResourceConfig:  normalized.Resources,
 		TTL:             normalized.TTL,
 		ExpiresAt:       normalized.ExpiresAt,
@@ -699,9 +701,22 @@ func normalizeApplyTunnel(item applyTunnel) (normalizedApplyTunnel, error) {
 	if err != nil {
 		return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s resources: %w", tunnelID, err)
 	}
+	var parsedRoutes []routes.Route
+	if len(item.Routes) > 0 {
+		if err := routes.Validate(item.Routes); err != nil {
+			return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s routes: %w", tunnelID, err)
+		}
+		parsedRoutes = item.Routes
+	}
+	if len(parsedRoutes) > 0 && strings.TrimSpace(item.Target) != "" {
+		return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s: routes cannot be combined with target; a target upstream is a single service", tunnelID)
+	}
 	if !tunnelprotocol.IsHTTP(protocol) {
 		if strings.TrimSpace(item.Target) != "" {
 			return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s: target is only supported for https tunnels", tunnelID)
+		}
+		if len(parsedRoutes) > 0 {
+			return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s: routes are only supported for https tunnels", tunnelID)
 		}
 		if targetTLS != nil {
 			return normalizedApplyTunnel{}, fmt.Errorf("tunnel %s: targetTls is only supported for https target tunnels", tunnelID)
@@ -733,6 +748,7 @@ func normalizeApplyTunnel(item applyTunnel) (normalizedApplyTunnel, error) {
 		TargetTLS:     targetTLS,
 		Resources:     resourceConfig,
 		AccessPolicy:  accessPolicy,
+		Routes:        parsedRoutes,
 		TTL:           ttl,
 		ExpiresAt:     expiresAt,
 		WaitDomain:    item.WaitDomain,
@@ -1075,6 +1091,9 @@ func runDiffConfigWithSessionLookup(config *applyFile, lookup func(string) (*ses
 			}
 			if valueOr(existing.Protocol, "https") != normalized.Protocol {
 				result.Changes = append(result.Changes, fmt.Sprintf("protocol: %s -> %s", valueOr(existing.Protocol, "-"), normalized.Protocol))
+			}
+			if !routes.Equal(existing.Routes, normalized.Routes) {
+				result.Changes = append(result.Changes, fmt.Sprintf("routes: %s -> %s", valueOr(routes.Label(existing.Routes), "-"), valueOr(routes.Label(normalized.Routes), "-")))
 			}
 			if existing.CustomDomain != normalized.CustomDomain {
 				result.Changes = append(result.Changes, fmt.Sprintf("domain: %s -> %s", valueOr(existing.CustomDomain, "-"), valueOr(normalized.CustomDomain, "-")))
