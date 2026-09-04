@@ -63,6 +63,9 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	protocol = tunnelprotocol.Normalize(protocol)
+	if err := validateExposeQRFlag(protocol); err != nil {
+		return err
+	}
 	if strings.TrimSpace(exposeTarget) != "" && !tunnelprotocol.IsHTTP(protocol) {
 		return fmt.Errorf("--target is only supported for https tunnels")
 	}
@@ -209,12 +212,14 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 	if basicAuthConfig != nil && basicAuthConfig.Enabled {
 		fmt.Fprintf(out, "[+] Basic Auth enabled for public traffic as user %q.\n", basicAuthConfig.Username)
 	}
+	temporaryURL := ""
 	if accessPolicyConfig != nil {
 		printAccessPolicySummary(out, accessPolicyConfig)
 		if temporaryAccessToken != "" || temporaryAccessTokenEnv != "" {
 			token, tokenErr := resolveSecretValue(temporaryAccessToken, temporaryAccessTokenEnv, "temporary access token", getenv)
 			if tokenErr == nil {
-				fmt.Fprintf(out, "[+] Temporary access URL: %s\n", temporaryAccessURL(hosts.PublicHost, token))
+				temporaryURL = temporaryAccessURL(hosts.PublicHost, token)
+				fmt.Fprintf(out, "[+] Temporary access URL: %s\n", temporaryURL)
 			}
 		}
 	}
@@ -225,6 +230,14 @@ func runExposeCommand(cmd *cobra.Command, args []string) error {
 		if !waitDomain {
 			fmt.Fprintf(out, "[+] After DNS is ready, attach it with: sealtun domain add %s %s\n", tunnelID, normalizedCustomDomain)
 		}
+	}
+	if exposeQR && tunnelprotocol.IsHTTP(protocol) {
+		qrTarget := endpointLabel(protocol, hosts.PublicHost, hosts.SealosHost, hosts.PublicPort)
+		if temporaryURL != "" {
+			qrTarget = temporaryURL
+		}
+		fmt.Fprintf(out, "[+] Scan this code to open the tunnel on another device:\n")
+		printTerminalQR(out, qrTarget)
 	}
 	fmt.Fprintf(out, "[+] Waiting for tunnel server pod to be ready...\n")
 
@@ -327,6 +340,7 @@ var accessRateLimit string
 var accessAuditEnabled bool
 var exposeTarget string
 var targetTLSInsecureSkipVerify bool
+var exposeQR bool
 
 const daemonConnectTimeout = 60 * time.Second
 const daemonConnectionStability = 2 * time.Second
@@ -366,6 +380,7 @@ func registerExposeFlags(cmd *cobra.Command, includeInsecureAlias bool) {
 	cmd.Flags().DurationVar(&temporaryAccessTTL, "temporary-access-ttl", time.Hour, "Temporary access URL lifetime")
 	cmd.Flags().StringVar(&accessRateLimit, "rate-limit", "", "Rate limit HTTPS public traffic, e.g. 60/m or 1000/h")
 	cmd.Flags().BoolVar(&accessAuditEnabled, "audit", false, "Enable HTTPS access audit for allow/deny decisions")
+	cmd.Flags().BoolVar(&exposeQR, "qr", false, "Print a terminal QR code for the public URL; only for https tunnels")
 }
 
 func resolveExposeTarget(args []string, explicitTarget string) (string, string, error) {
@@ -468,6 +483,16 @@ func validateLocalPort(port string) error {
 
 func validateProtocol(protocol string) error {
 	return tunnelprotocol.ValidateExpose(protocol)
+}
+
+// validateExposeQRFlag rejects --qr on raw-TCP tunnels: a phone cannot open
+// an ssh or generic TCP endpoint from a scanned code, so the flag only makes
+// sense for https URLs.
+func validateExposeQRFlag(protocol string) error {
+	if exposeQR && !tunnelprotocol.IsHTTP(protocol) {
+		return fmt.Errorf("--qr is only supported for https tunnels")
+	}
+	return nil
 }
 
 func recoverStaleSessions(ctx context.Context, out io.Writer) error {

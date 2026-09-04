@@ -120,6 +120,19 @@ curl -vk https://10.0.0.12:8443/
 
 For private/self-signed HTTPS upstreams, use `--target-insecure-skip-verify` or YAML `targetTls.insecureSkipVerify: true` only when skipping upstream certificate verification is acceptable. This does not weaken the public Sealtun HTTPS URL; it only changes the local client to upstream TLS check.
 
+## WebSocket And HMR Problems
+
+Symptoms:
+
+- A tunneled frontend dev server loads, but hot reload never triggers.
+- Browser console shows `WebSocket connection to 'wss://<public-host>/...' failed` or repeated reconnects.
+
+Sealtun proxies WebSocket upgrades end to end (public Ingress, relay reverse proxy, yamux stream, local client); no extra flags are needed. If the page works but the socket does not, check the local app first:
+
+1. The local app sees `Host: localhost:<port>` while the browser sends `Origin: https://<public-host>`. Apps that enforce same-origin on upgrade (the gorilla/websocket default, some Socket.IO configs) reject this mismatch with 403. Behind the tunnel the app must treat the proxy as trusted: allow the public origin or disable the check for dev, for example `CheckOrigin: func(*http.Request) bool { return true }`.
+2. Confirm the socket path is reachable through the tunnel: `curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" https://<public-host>/<ws-path>` should return `101 Switching Protocols`, not the Sealtun offline page or a 4xx from the access policy.
+3. If an access policy is enabled, the upgrade request must satisfy it like any other request (temporary token query parameter, bearer header, or allowed IP); check `policy audit <id>` for deny reasons.
+
 ## Remote Kubernetes Or Pod Problems
 
 Symptoms:

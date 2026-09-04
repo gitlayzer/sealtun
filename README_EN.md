@@ -16,7 +16,7 @@ sealtun expose 3000
 
 ## Features
 
-- **HTTPS tunnels**: Ingress + reverse proxy with Basic Auth, Bearer tokens, temporary share links, IP rules, rate limits, audit, and custom domains
+- **HTTPS tunnels**: Ingress + reverse proxy with Basic Auth, Bearer tokens, temporary share links, IP rules, rate limits, audit, and custom domains; `--qr` prints a terminal QR code for instant mobile access
 - **SSH/TCP tunnels**: `expose 22 --protocol ssh`, `expose 5432 --protocol tcp` via direct NodePort
 - **Smart entry**: `up` discovers local ports, guides configuration, and reuses project tunnels
 - **Declarative management**: `apply -f sealtun.yaml` creates/updates tunnels idempotently, with dry-run and diff previews

@@ -16,7 +16,7 @@ sealtun expose 3000
 
 ## 特性
 
-- **HTTPS 隧道**：Ingress + 反向代理，支持 Basic Auth、Bearer Token、临时分享链接、IP 规则、限流、审计和自定义域名
+- **HTTPS 隧道**：Ingress + 反向代理，支持 Basic Auth、Bearer Token、临时分享链接、IP 规则、限流、审计和自定义域名；`--qr` 终端打印二维码，手机扫码即开
 - **SSH/TCP 隧道**：`expose 22 --protocol ssh`、`expose 5432 --protocol tcp`，NodePort 直连
 - **智能入口**：`up` 自动发现本地端口、引导配置、复用项目隧道
 - **声明式管理**：`apply -f sealtun.yaml` 幂等创建/更新多隧道，支持 dry-run 和 diff 预览

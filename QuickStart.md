@@ -39,6 +39,7 @@ sealtun status                         # 当前登录状态
 ```bash
 sealtun expose 3000                              # 本地端口
 sealtun expose --target http://10.0.0.12:8080    # 远端 HTTP upstream
+sealtun expose 3000 --qr                         # 终端打印公网 URL 二维码，手机扫码即开
 sealtun up                                        # 交互引导（推荐日常使用）
 ```
 

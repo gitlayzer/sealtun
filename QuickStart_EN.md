@@ -39,6 +39,7 @@ Built-in regions: `gzg` (Guangzhou), `hzh` (Hangzhou), `bja` (Beijing), `cloud` 
 ```bash
 sealtun expose 3000                              # local port
 sealtun expose --target http://10.0.0.12:8080    # remote HTTP upstream
+sealtun expose 3000 --qr                         # terminal QR of the public URL; scan with a phone to open
 sealtun up                                        # interactive guide (recommended for daily use)
 ```
 

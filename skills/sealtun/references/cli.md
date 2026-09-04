@@ -40,6 +40,7 @@ sealtun expose 3000
 sealtun expose --target http://10.0.0.12:8080
 sealtun expose --target https://10.0.0.12:8443 --target-insecure-skip-verify
 sealtun expose 3000 --foreground
+sealtun expose 3000 --qr          # terminal QR of the public URL (or temporary access URL) for mobile scanning; https only
 ```
 
 `up` reuses the current project's tunnel state; without state in an interactive terminal it guides through login check, port selection (with local port discovery), protocol choice (templates for `https/ssh/tcp/mysql/postgres/redis/mongodb/mqtt`), optional Basic Auth / rate limit / audit / custom domain / YAML save, and creation. `expose` is for exact scripted creation and defaults to `https` + daemon mode; the daemon keeps the local side running in the background. Use `--foreground` when the current terminal should own the tunnel lifecycle.
