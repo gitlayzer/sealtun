@@ -118,3 +118,55 @@ func TestDiffNoChangeWhenRoutesMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffRoutesReorderedIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	config := &applyFile{Tunnels: []applyTunnel{{
+		Name:      "app",
+		LocalPort: 3000,
+		Routes:    []routes.Route{{Path: "/api", Port: 8080}, {Path: "/admin", Port: 9090}},
+	}}}
+	lookup := func(string) (*session.TunnelSession, error) {
+		return &session.TunnelSession{
+			TunnelID:  "app",
+			LocalPort: "3000",
+			Protocol:  "https",
+			Routes:    []routes.Route{{Path: "/admin", Port: 9090}, {Path: "/api", Port: 8080}},
+		}, nil
+	}
+	results, err := runDiffConfigWithSessionLookup(config, lookup)
+	if err != nil {
+		t.Fatalf("diff failed: %v", err)
+	}
+	for _, change := range results[0].Changes {
+		if strings.HasPrefix(change, "routes:") {
+			t.Fatalf("reordered routes must be a no-op, got %q", change)
+		}
+	}
+}
+
+func TestDiffRoutesPortChangeIsUpdate(t *testing.T) {
+	t.Parallel()
+
+	config := &applyFile{Tunnels: []applyTunnel{{
+		Name:      "app",
+		LocalPort: 3000,
+		Routes:    []routes.Route{{Path: "/api", Port: 9090}},
+	}}}
+	lookup := func(string) (*session.TunnelSession, error) {
+		return &session.TunnelSession{
+			TunnelID:  "app",
+			LocalPort: "3000",
+			Protocol:  "https",
+			Routes:    []routes.Route{{Path: "/api", Port: 8080}},
+		}, nil
+	}
+	results, err := runDiffConfigWithSessionLookup(config, lookup)
+	if err != nil {
+		t.Fatalf("diff failed: %v", err)
+	}
+	if results[0].Action != "update" {
+		t.Fatalf("route port change must trigger update, got %q", results[0].Action)
+	}
+}

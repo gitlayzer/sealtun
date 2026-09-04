@@ -61,6 +61,7 @@ type diffResult struct {
 	Changes                            []string                `json:"changes,omitempty"`
 	Warnings                           []string                `json:"warnings,omitempty"`
 	DesiredPort                        string                  `json:"desiredPort,omitempty"`
+	DesiredRoutes                      []routes.Route          `json:"desiredRoutes,omitempty"`
 	CurrentPort                        string                  `json:"currentPort,omitempty"`
 	DesiredTarget                      string                  `json:"desiredTarget,omitempty"`
 	CurrentTarget                      string                  `json:"currentTarget,omitempty"`
@@ -85,6 +86,7 @@ type applyResult struct {
 	PublicPort                  int32                   `json:"publicPort,omitempty"`
 	LocalPort                   string                  `json:"localPort"`
 	TargetURL                   string                  `json:"targetUrl,omitempty"`
+	Routes                      []routes.Route          `json:"routes,omitempty"`
 	TargetTLSInsecureSkipVerify bool                    `json:"targetTlsInsecureSkipVerify,omitempty"`
 	Resources                   *session.ResourceConfig `json:"resources,omitempty"`
 	BasicAuth                   bool                    `json:"basicAuth"`

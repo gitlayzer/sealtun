@@ -154,6 +154,7 @@ func runApplyConfig(ctx context.Context, config *applyFile, dryRun bool) ([]appl
 				Protocol:                    normalized.Protocol,
 				LocalPort:                   normalized.LocalPort,
 				TargetURL:                   normalized.TargetURL,
+				Routes:                      normalized.Routes,
 				TargetTLSInsecureSkipVerify: targetTLSInsecureSkipVerifyEnabled(normalized.TargetTLS),
 				Resources:                   normalized.Resources,
 				BasicAuth:                   normalized.BasicAuth != nil && normalized.BasicAuth.Enabled,
@@ -970,6 +971,9 @@ func printApplyResults(cmd *cobra.Command, results []applyResult, dryRun bool) {
 		if result.TargetURL != "" {
 			fmt.Fprintf(out, "    Target: %s\n", result.TargetURL)
 		}
+		for _, route := range result.Routes {
+			fmt.Fprintf(out, "    Route: %s -> localhost:%d (prefix stripped)\n", routes.NormalizePath(route.Path), route.Port)
+		}
 		if result.SealosHost != "" {
 			fmt.Fprintf(out, "    Sealos host: %s\n", result.SealosHost)
 		}
@@ -1067,6 +1071,7 @@ func runDiffConfigWithSessionLookup(config *applyFile, lookup func(string) (*ses
 			DesiredTarget:               normalized.TargetURL,
 			DesiredHost:                 normalized.CustomDomain,
 			ExpiresAt:                   normalized.ExpiresAt,
+			DesiredRoutes:               normalized.Routes,
 			TargetTLSInsecureSkipVerify: targetTLSInsecureSkipVerifyEnabled(normalized.TargetTLS),
 			DesiredResources:            normalized.Resources,
 			AccessPolicy:                normalized.AccessPolicy != nil,

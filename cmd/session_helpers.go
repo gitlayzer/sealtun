@@ -316,6 +316,13 @@ func sessionNeedsAutomaticRecovery(sess session.TunnelSession, gracePeriod time.
 	if sess.ConnectionState == session.ConnectionStateStopped {
 		return false
 	}
+	// Daemon-mode tunnels are built to survive daemon restarts: the next
+	// daemon process re-adopts and re-dials every session it finds. A crashed
+	// or replaced daemon must not condemn them to deletion — only foreground
+	// tunnels are true orphans once their single owning process dies.
+	if sess.Mode == "daemon" {
+		return false
+	}
 	return session.IsStaleWithOwner(sess, gracePeriod, sessionOwnerAlive(sess))
 }
 

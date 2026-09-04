@@ -54,6 +54,9 @@ func Validate(routes []Route) error {
 		if strings.ContainsAny(normalized, "?# \t") {
 			return fmt.Errorf("route path %q must be a plain path prefix without query, fragment, or whitespace", route.Path)
 		}
+		if strings.Contains(normalized, "%") || strings.Contains(normalized, "..") {
+			return fmt.Errorf("route path %q must not contain %% escapes or dot segments; request paths arrive decoded and cleaned, so such a prefix can never match", route.Path)
+		}
 		if route.Port < 1 || route.Port > 65535 {
 			return fmt.Errorf("route %q has invalid port %d; must be between 1 and 65535", route.Path, route.Port)
 		}
