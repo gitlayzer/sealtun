@@ -52,7 +52,16 @@ func handleRoutedForwarding(stream net.Conn, target Target) {
 			WriteUnavailablePage(w, r.URL.Host, fmt.Sprintf("The local service for this path is not reachable yet: %v", err))
 		},
 	}
-	_ = http.Serve(newSingleConnListener(stream), proxy)
+	server := &http.Server{
+		Handler: proxy,
+		// Headers must arrive promptly; IdleTimeout recycles keep-alive
+		// streams as a backstop to the relay's own idle connection timeout.
+		// Read/WriteTimeout stay unset on purpose: they would kill
+		// long-lived hijacked WebSocket connections.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	_ = server.Serve(newSingleConnListener(stream))
 }
 
 var errSingleConnExhausted = errors.New("single-conn listener exhausted")
